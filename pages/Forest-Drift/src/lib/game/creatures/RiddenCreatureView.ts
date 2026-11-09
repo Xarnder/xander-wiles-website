@@ -16,6 +16,11 @@ import type { CreatureDefinition, CreatureIntent } from './CreatureTypes';
 const MOVING_SPEED = 0.3;
 /** How quickly the drawn heading follows the direction of travel, 1/s. */
 const HEADING_EASE = 8;
+/**
+ * The rider's pose more than this far above the seat as drawn here means the mount is jumping
+ * (`rideJump.ts`), metres: well over the gap a step's bob or sway can make.
+ */
+const JUMP_SLACK = 0.15;
 
 /** Where the rider sits this frame, in world space. */
 export interface RiddenSeat {
@@ -141,6 +146,13 @@ export class RiddenCreatureView {
 		const out = this.seatWorld;
 		out.kind = seat.kind;
 		anchorToWorld(creature, anchors.pelvis, out.anchor);
+		// Jumping: the room only has the rider's pose, so lift the whole mount (pose and all) to it.
+		const lift = riderAnchor.y - out.anchor.y - JUMP_SLACK;
+		if (lift > 0) {
+			creature.object.position.y += lift;
+			creature.object.updateMatrixWorld(true);
+			anchorToWorld(creature, anchors.pelvis, out.anchor);
+		}
 		out.heading = heading;
 		const { left, right } = anchors.hands;
 		out.hands.left = left ? anchorToWorld(creature, left, this.handScratch[0]) : null;

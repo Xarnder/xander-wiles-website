@@ -987,6 +987,10 @@
 						creatureAnnouncement = "Can't go that way.";
 						return;
 					}
+					if (event.type === 'jump' || event.type === 'land') {
+						playCreatureSound(event.type === 'jump' ? 'rideJump' : 'rideLand');
+						return;
+					}
 					playCreatureSound(event.type);
 					creatureAnnouncement =
 						event.type === 'mount'

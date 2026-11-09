@@ -12,7 +12,7 @@ import { PillarTool } from './building/PillarTool';
 import { skyBackgroundBlend } from './sky/skyBackgroundBlend';
 import { CreatureRuntimeManager } from './creatures/CreatureRuntimeManager';
 import { HeldCreatureView } from './creatures/HeldCreatureView';
-import { RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
+import { CARRY_REACH, RANGED_WEAPONS_ENABLED } from './creatures/creatureAbilities';
 import { CarryController, type CarryState } from './player/CarryController';
 import { RideController, type RideHost, type RideState } from './player/RideController';
 import {
@@ -23,7 +23,7 @@ import {
 } from './player/creatureKeyRouting';
 import { chooseDismountSpot } from './player/rideDismount';
 import { projectileWorldHit, type ProjectileWorld } from './player/projectileWorld';
-import { CREATURE_RIDING_ENABLED, type RideSeatKind } from './creatures/creatureRiding';
+import { CREATURE_RIDING_ENABLED, RIDE_REACH, type RideSeatKind } from './creatures/creatureRiding';
 import type { MountSeat } from './player/FirstPersonController';
 import type { CameraBody } from './player/ThirdPersonCamera';
 import type { LocalRidePose } from './player/PlayerInteractionView';
@@ -470,6 +470,9 @@ export type RideFeedbackEvent =
 	| { type: 'mount' | 'dismount'; species: string }
 	/** Steered into something the mount can't cross (at most every few seconds). */
 	| { type: 'blocked' }
+	/** The mount took off / landed from a jump. */
+	| { type: 'jump' }
+	| { type: 'land' }
 	/** Online: the room said no to climbing on. */
 	| { type: 'refused'; reason: string };
 
@@ -1866,7 +1869,9 @@ export class ThreeScene implements WorldRuntime {
 			mounted: (species) => options.onRideEvent?.({ type: 'mount', species }),
 			dismounted: (species) => options.onRideEvent?.({ type: 'dismount', species }),
 			refused: (reason) => options.onRideEvent?.({ type: 'refused', reason }),
-			blocked: () => options.onRideEvent?.({ type: 'blocked' })
+			blocked: () => options.onRideEvent?.({ type: 'blocked' }),
+			jumped: () => options.onRideEvent?.({ type: 'jump' }),
+			landed: () => options.onRideEvent?.({ type: 'land' })
 		});
 		this.onCreaturePrompt = options.onCreaturePrompt;
 		this.waypoints = new WaypointSystem(
@@ -3639,9 +3644,28 @@ export class ThreeScene implements WorldRuntime {
 				if (!this.playInputAllowed()) return false;
 				this.ride.dismount();
 				return true;
+			case 'none':
+				// Nothing under the crosshair: quietly ease the creatures in reach to a stop for a few
+				// seconds, so they're easy to aim at (no prompt or toast; `creatureCalm.ts`).
+				if (this.playInputAllowed()) this.calmCreaturesInReach();
+				return false;
 			default:
 				return false;
 		}
+	}
+
+	/**
+	 * Holds still every creature `K` could act on within its reach of the eye. `K` only does nothing
+	 * on foot with empty hands, so that's anything that can be picked up or ridden.
+	 */
+	private calmCreaturesInReach(): void {
+		// The player's eye, as picking uses (not the camera, which trails behind in third person).
+		const { x, y, z } = this.controller.worldPosition;
+		this.creatures.calmInReach({ x, y, z }, (id) => {
+			const ride = CREATURE_RIDING_ENABLED && this.creatures.isRideable(id);
+			const carry = RANGED_WEAPONS_ENABLED && this.creatures.isCarryable(id);
+			return ride ? RIDE_REACH : carry ? CARRY_REACH : null;
+		});
 	}
 
 	private creatureKeyState(): CreatureKeyState {

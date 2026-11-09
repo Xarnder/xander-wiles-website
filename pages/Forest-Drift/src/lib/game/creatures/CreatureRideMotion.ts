@@ -1,13 +1,12 @@
 /**
  * How a ridden creature moves: the rider steers (camera-relative, Q2 A), it follows the terrain and
- * the same walkability rules as a wild creature (slope, deep water, buildings; Q18 A), slides around
+ * the same walkability rules as a wild creature (any slope; not deep water or buildings; Q18 A), slides around
  * other creatures (Q24) and, unlike a wild one, isn't leashed to its herd's home. Pure: no Three.js.
  *
  * Plan: docs/2026/11-07/bipedal-speed-creature/feature-plan/02-technical-plan.md §4.2.
  */
 import type { CreatureRuntimeDefinition, CreatureWorldAccess } from './CreatureTypes';
 import { creatureDimensions, creatureSurface } from './CreaturePopulationSystem';
-import { resolveTerrainLocomotion } from './CreatureTerrainProfile';
 import { rideTopSpeed, type RideProfile } from './creatureRiding';
 
 /** Camera-space steering: `x` right, `z` forward, each in [-1, 1]. */
@@ -15,6 +14,8 @@ export interface RideInput {
 	x: number;
 	z: number;
 	sprint: boolean;
+	/** Jump (Space or the touch Jump button); see `rideJump.ts`. */
+	jump?: boolean;
 }
 
 export const NO_RIDE_INPUT: RideInput = Object.freeze({ x: 0, z: 0, sprint: false });
@@ -29,6 +30,9 @@ export interface RideObstacle {
 export interface RideStepResult {
 	/** The rider asked to move but nothing in that direction was walkable. */
 	blocked: boolean;
+	/** The mount took off or landed this frame (`rideJump.ts`). */
+	jumped?: boolean;
+	landed?: boolean;
 }
 
 /** Speeding up and slowing down, m/s². */
@@ -121,13 +125,12 @@ function move(
 	obstacles: readonly RideObstacle[]
 ): boolean {
 	const dims = creatureDimensions(state.spawn.species, state.spawn.individual.sizeFactor);
-	const slope = Math.tan(resolveTerrainLocomotion(state.spawn.species).maxWalkSlope);
 	const distance = speed * elapsed;
 	const steps = Math.max(1, Math.ceil(distance / Math.max(0.1, dims.radius * 0.35)));
 	const stepLength = distance / steps;
 	let moved = false;
 	for (let i = 0; i < steps; i++) {
-		const next = stepFrom(state, stepLength, dims, slope, access, obstacles);
+		const next = stepFrom(state, stepLength, dims, access, obstacles);
 		if (!next) break;
 		state.position = next;
 		moved = true;
@@ -139,7 +142,6 @@ function stepFrom(
 	state: CreatureRuntimeDefinition,
 	length: number,
 	dims: { radius: number; height: number },
-	slope: number,
 	access: CreatureWorldAccess,
 	obstacles: readonly RideObstacle[]
 ): { x: number; y: number; z: number } | null {
@@ -149,7 +151,7 @@ function stepFrom(
 		const reach = length * Math.cos(offset);
 		const x = state.position.x + Math.sin(heading) * reach,
 			z = state.position.z + Math.cos(heading) * reach;
-		const y = walkableSurface(state, x, z, dims, slope, access, obstacles);
+		const y = walkableSurface(state, x, z, dims, access, obstacles);
 		if (y !== undefined) return { x, y, z };
 	}
 	return null;
@@ -161,7 +163,6 @@ function walkableSurface(
 	x: number,
 	z: number,
 	dims: { radius: number; height: number },
-	slope: number,
 	access: CreatureWorldAccess,
 	obstacles: readonly RideObstacle[]
 ): number | undefined {
@@ -173,5 +174,5 @@ function walkableSurface(
 		if (after < clearance && after < Math.hypot(state.position.x - o.x, state.position.z - o.z))
 			return undefined;
 	}
-	return creatureSurface(access, x, z, dims.radius, dims.height, slope);
+	return creatureSurface(access, x, z, dims.radius, dims.height);
 }

@@ -168,6 +168,7 @@ describe('creature settings', () => {
 				showSkeleton: false,
 				showBehaviourState: false,
 				showTarget: false,
+				showHitboxes: false,
 				showSpeciesId: false,
 				showIndividualId: false,
 				showLOD: false
@@ -187,7 +188,8 @@ describe('creature settings', () => {
 			'population density',
 			'show skeleton',
 			'individual id',
-			'show lod'
+			'show lod',
+			'hitbox'
 		]) {
 			expect(firstMatchingCategoryId(catalog, query)).toBe('creatures');
 		}

@@ -330,3 +330,19 @@ Some players were told they couldn't pick up a small creature, or found that `K`
 3. **The `far` check refused valid pick-ups.** The room checked distance from the creature's home cell, or from a put-down it remembered. Those remembered put-downs were lost when the room slept, so a creature carried away and dropped became "too far" for everyone. The check is gone for carrying and riding. The room still checks the state (alive, not seated, not already carrying), that the creature is eligible (small enough, rideable), that the rule is on, and that the creature isn't taken. The removed code: `CARRY_CLAIM_RADIUS`, `PLACED_CLAIM_RADIUS`, the released-spot memory and `rideClaimRadius`. `CarryRefusal` is now `taken | ineligible | rule | state`, and `RideRefusal` is `taken | ineligible | role | state`. Riding a Lab-placed creature still needs edit rights.
 
 Verified with 2,784 unit tests and the carrying, online carrying and riding e2e suites (9 tests). In the browser, from Build Mode: the creature under the crosshair was offered, `K` picked it up and switched to normal mode, and a pellet fired.
+
+## Bigger K hitboxes, and a debug view of them (2026-11-09)
+
+Creatures were hard to target with `K`, especially fast ones. The look ray was tested against each creature's thin collision cylinder (about its body width) in 5 cm steps. Now `creatures/creatureHitbox.ts` (pure, unit-tested) gives each creature a simple cuboid. It's the body's bounding box (legs, arms, tail and head included), turned with the creature and padded by 0.3 m plus a quarter of its size (at most 0.8 m) on every side, and at least 1.1 m across and 1 m tall. The ray is tested exactly against the box, and the nearest entry wins. When the eye is already inside a creature's padded box (standing right beside it, or just after getting off it), the ray has to meet its core body instead (the old collision size, as a box). So a creature beside you isn't picked whichever way you look, and getting off doesn't climb straight back on. `CreatureRuntimeManager.pickCarryable` and `pickRideable` use it for both picking up and riding, and never pick the creature being ridden.
+
+**Settings → Creatures → Debug overlays → Show K hitboxes (pick up / ride)** draws every nearby creature's box: green if it can be picked up, blue if it can be ridden, grey if neither. The boxes show through walls, and all of them share one geometry and three materials.
+
+## K holds nearby creatures still (2026-11-09)
+
+A quiet helper, with no prompt or toast. Pressing `K` (or the touch creature button) on foot with empty hands and nothing under the crosshair eases every creature that could be picked up or ridden to a stop, if it's within reach of the eye in any direction. Reach is measured to its hitbox: 2 m for picking up, 3 m for riding. It slows over 0.8 s, stands still for 5 s, then eases back to its own pace over 1.2 s. That makes it easy to turn and aim at the creature. Pressing again carries on smoothly from the current speed and restarts the 5 s.
+
+- `creatures/creatureCalm.ts` (pure, unit-tested) is the timing, as a speed factor.
+- `CreatureRuntimeManager.calmInReach` starts it. Each frame, `applyCalm` scales the creature's own chosen pace, and its legs slow with it. Its decisions carry on underneath, so it resumes doing whatever it last chose, and below 5% speed it stands idle. Mounting a creature, carrying it off or unloading it ends the calm.
+- `ThreeScene.useCreatureKey` triggers it on the `none` route.
+
+The calm is local to each player's own view of the herd.

@@ -223,6 +223,12 @@ function creatureCategories(host: GameSettingsHost): SettingsCategory[] {
 						creatures.debug,
 						'showTarget'
 					),
+					boolField(
+						'creatures.debug.hitboxes',
+						'Show K hitboxes (pick up / ride)',
+						creatures.debug,
+						'showHitboxes'
+					),
 					boolField('creatures.debug.species', 'Show species ID', creatures.debug, 'showSpeciesId'),
 					boolField(
 						'creatures.debug.individual',

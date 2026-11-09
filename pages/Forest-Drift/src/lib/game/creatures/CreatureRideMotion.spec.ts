@@ -143,7 +143,7 @@ describe('ridden movement', () => {
 		expect(state.position.x).toBeGreaterThan(5);
 	});
 
-	it('won’t walk into deep water or up ground too steep for its species (Q18 A)', () => {
+	it('won’t walk into deep water, but climbs any slope (Q18 A)', () => {
 		const { state, profile } = biped(1.2, 3.4);
 		state.heading = Math.PI;
 		const lake: CreatureWorldAccess = { ...flat, standable: (_x, z) => z > -8 };
@@ -156,8 +156,10 @@ describe('ridden movement', () => {
 			surface: (_x, z) => (z < -6 ? -z * 5 : 0),
 			blocked: () => false
 		};
+		// About 79°: still walked straight up, following the ground.
 		ride(cliff.state, cliff.profile, SPRINT, 4, steep);
-		expect(cliff.state.position.z).toBeGreaterThan(-6.5);
+		expect(cliff.state.position.z).toBeLessThan(-7);
+		expect(cliff.state.position.y).toBeCloseTo(-cliff.state.position.z * 5, 5);
 	});
 
 	it('slides round another creature rather than through it (Q24)', () => {

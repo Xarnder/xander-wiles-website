@@ -117,6 +117,7 @@ export interface CreatureSettingsPort {
 		showSkeleton: boolean;
 		showBehaviourState: boolean;
 		showTarget: boolean;
+		showHitboxes: boolean;
 		showSpeciesId: boolean;
 		showIndividualId: boolean;
 		showLOD: boolean;

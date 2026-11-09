@@ -17,15 +17,22 @@ export const creatureCellAt = (x: number, z: number) => ({
 	z: Math.floor(z / CREATURE_CELL_SIZE)
 });
 export { creatureDimensions };
-/** Four support samples keep roots off water/void, steep ledges and building footprints. */
+/**
+ * Herds spawn on gentler ground than this (tan of the slope), so they don't appear on a cliff face.
+ * Only spawning uses it: once alive, a creature walks up any slope, ridden or not.
+ */
+export const CREATURE_SPAWN_MAX_SLOPE = 0.65;
+/**
+ * The ground height a creature can stand at (x, z), or undefined. Four support samples keep roots
+ * off the void and building footprints, and, when `maxSlope` (tan) is given, off steeper ground.
+ */
 export function creatureSurface(
 	access: CreatureWorldAccess,
 	x: number,
 	z: number,
 	radius: number,
 	height: number,
-	/** tan(max walkable slope); species pass their own (agile animals climb steeper ground). */
-	maxSlope = 0.65
+	maxSlope = Infinity
 ): number | undefined {
 	const y = access.surface(x, z);
 	if (!Number.isFinite(y) || access.blocked(x, z, radius, height)) return;
@@ -278,7 +285,14 @@ export function generatePopulationCell(
 		const index = tiers[slot];
 		const species = speciesList[index];
 		const dimensions = creatureDimensions(species, 1.1);
-		const y = creatureSurface(access, cx, cz, dimensions.radius, dimensions.height);
+		const y = creatureSurface(
+			access,
+			cx,
+			cz,
+			dimensions.radius,
+			dimensions.height,
+			CREATURE_SPAWN_MAX_SLOPE
+		);
 		if (y === undefined) continue;
 		const groupId = creatureGroupId(worldSeed, cellX, cellZ, slot);
 		const groupCentre = { x: cx, y, z: cz };
@@ -295,7 +309,14 @@ export function generatePopulationCell(
 							: (dimensions.radius * 2 + 0.6) * Math.sqrt(member + 1) * (1 + local());
 				const x = cx + Math.sin(angle) * distance,
 					z = cz + Math.cos(angle) * distance;
-				const sy = creatureSurface(access, x, z, dimensions.radius, dimensions.height);
+				const sy = creatureSurface(
+					access,
+					x,
+					z,
+					dimensions.radius,
+					dimensions.height,
+					CREATURE_SPAWN_MAX_SLOPE
+				);
 				if (
 					sy === undefined ||
 					result.some(
@@ -354,7 +375,14 @@ export function generateCreatureDemo(
 		for (let member = 0; member < count; member++) {
 			const x = centre.x + member * (radius * 2 + 1),
 				z = centre.z;
-			const y = creatureSurface(access, x, z, radius, heights[index] * 1.1);
+			const y = creatureSurface(
+				access,
+				x,
+				z,
+				radius,
+				heights[index] * 1.1,
+				CREATURE_SPAWN_MAX_SLOPE
+			);
 			if (y === undefined) continue;
 			result.push({
 				id: `demo:${index}:${member}`,

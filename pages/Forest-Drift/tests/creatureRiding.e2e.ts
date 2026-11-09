@@ -88,6 +88,63 @@ async function aimAt(page: Page, kind: 'ride' | 'carry'): Promise<void> {
 		.not.toBeNull();
 }
 
+/**
+ * Taps Space while riding and watches, frame by frame for two seconds, the mount's lift above where
+ * it stood and how far the rider's eye strays from where it sits on the mount.
+ */
+async function jumpAndWatch(page: Page) {
+	// Drawn and logical heights differ by the body's own stance; this is the stance at rest.
+	const sampleSource = (s: SceneLike) => {
+		const id = s.ride.riddenId!;
+		const drawn = s.creatures.live.get(id)!.compiled.object.position.y;
+		return {
+			lift: drawn - s.creatures.logical.get(id)!.position.y,
+			seat: s.controller.worldPosition.y - drawn
+		};
+	};
+	const rest = await scene(page, sampleSource);
+	const watching = page.evaluate(
+		async ({ rest, source }) => {
+			const s = (window as unknown as TestWindow).forestScene;
+			const sample = new Function('s', `return (${source})(s)`) as (s: SceneLike) => {
+				lift: number;
+				seat: number;
+			};
+			let highest = 0,
+				strayed = 0,
+				leftAt = NaN,
+				topAt = NaN,
+				downAt = NaN;
+			const start = performance.now();
+			while (performance.now() - start < 2000) {
+				await new Promise(requestAnimationFrame);
+				const now = (performance.now() - start) / 1000;
+				const { lift: drawnLift, seat } = sample(s);
+				const lift = drawnLift - rest.lift;
+				if (Number.isNaN(leftAt) && lift > 0.15) leftAt = now;
+				if (lift > highest) {
+					highest = lift;
+					topAt = now;
+				}
+				if (!Number.isNaN(topAt) && Number.isNaN(downAt) && lift < 0.15) downAt = now;
+				strayed = Math.max(strayed, Math.abs(seat - rest.seat));
+			}
+			return {
+				highest,
+				strayed,
+				rising: topAt - leftAt,
+				falling: downAt - topAt,
+				settled: sample(s).lift - rest.lift
+			};
+		},
+		{ rest, source: sampleSource.toString() }
+	);
+	await page.keyboard.down('Space');
+	await page.waitForTimeout(120);
+	await page.keyboard.up('Space');
+	return watching;
+}
+
 const scene = <T>(page: Page, fn: (s: SceneLike) => T) =>
 	page.evaluate((source) => {
 		const s = (window as unknown as TestWindow).forestScene;
@@ -169,6 +226,20 @@ test.describe('riding a two-legged creature (single player)', () => {
 			s.controller.setTouchMovement(0, 0);
 			s.controller.setTouchRunning(false);
 		});
+
+		// Space: the mount jumps in one smooth arc and lands; the rider stays in the seat throughout.
+		// First let it settle from the sprint (a running body sits a little lower).
+		await page.waitForTimeout(1500);
+		const jumped = await jumpAndWatch(page);
+		expect(jumped.highest).toBeGreaterThan(0.85);
+		expect(Math.abs(jumped.settled)).toBeLessThan(0.1);
+		// Smooth: rising and falling each take about √(2h/g) (g = 20), not a frame's snap.
+		const arc = Math.sqrt((2 * jumped.highest) / 20);
+		expect(jumped.rising).toBeGreaterThan(arc * 0.6);
+		expect(jumped.falling).toBeGreaterThan(arc * 0.6);
+		// The seat's own bob and sway only.
+		expect(jumped.strayed).toBeLessThan(0.35);
+		expect(await scene(page, (s) => s.getRideState().riding)).toBe(true);
 
 		const ridden = await scene(page, (s) => s.ride.riddenId);
 		await page.keyboard.press('k');

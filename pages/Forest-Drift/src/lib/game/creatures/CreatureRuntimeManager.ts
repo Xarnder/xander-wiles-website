@@ -48,6 +48,15 @@ import {
 } from './RideSeat';
 import { anchorToWorld, boneToWorld } from './boneAnchors';
 import { creatureDimensions } from './creatureDimensions';
+import { creatureHitbox, creatureRayHit, hitboxDistance } from './creatureHitbox';
+import { restingRideJump, stepRideJump, type RideJumpState } from './rideJump';
+import {
+	CALM_STILL_FACTOR,
+	calmEnded,
+	calmFactor,
+	startCalm,
+	type CalmTimeline
+} from './creatureCalm';
 
 interface LiveCreature {
 	compiled: CompiledCreature;
@@ -57,7 +66,26 @@ interface LiveCreature {
 	debug?: THREE.SkeletonHelper;
 	label?: THREE.Sprite;
 	targetLine?: THREE.Line;
+	/** Debug: the box `K` aims at (`creatureHitbox.ts`). */
+	hitbox?: THREE.LineSegments;
 }
+
+/** Debug hitbox outlines: one box edge set (half-size 1, scaled per creature) and a colour per use. */
+const HITBOX_EDGES = new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2));
+const hitboxMaterial = (color: number) =>
+	new THREE.LineBasicMaterial({
+		color,
+		depthTest: false,
+		transparent: true,
+		opacity: 0.9,
+		fog: false,
+		toneMapped: false
+	});
+const HITBOX_MATERIALS = {
+	carry: hitboxMaterial(0x7dff7a),
+	ride: hitboxMaterial(0x5ad7ff),
+	none: hitboxMaterial(0x9a9a9a)
+};
 /** A creature taken out of the herd and held by a player: this one, or (online) another's slot. */
 export interface CarriedCreature {
 	by: 'local' | number;
@@ -77,6 +105,13 @@ export interface CarryCandidate {
 	distance: number;
 }
 
+/** A creature eased to a stop by `K` (`creatureCalm.ts`), and the pace it chose for itself. */
+interface CalmedCreature {
+	timeline: CalmTimeline;
+	velocity: Vec3;
+	gait: CreatureRuntimeDefinition['intent']['gait'];
+}
+
 /** The creature this player is riding: still in the herd's maps, but steered, not simulated. */
 interface LocalRide {
 	id: string;
@@ -91,6 +126,8 @@ interface LocalRide {
 	 * (picking a creature up mid-ride moves the seat out from the neck).
 	 */
 	pelvisOffset: THREE.Vector3;
+	/** Height above the ground while jumping (`rideJump.ts`). */
+	jump: RideJumpState;
 }
 
 /** Where the rider is this frame, in world space (riding plan §4.4). */
@@ -172,10 +209,13 @@ export class CreatureRuntimeManager {
 	private placedIndex = 0;
 	private demo = false;
 	private materialRegistered = new WeakSet<THREE.Material>();
+	/** Creatures `K` is holding still (`calmInReach`). */
+	private readonly calmed = new Map<string, CalmedCreature>();
 	readonly debug = {
 		showSkeleton: false,
 		showBehaviourState: false,
 		showTarget: false,
+		showHitboxes: false,
 		showSpeciesId: false,
 		showIndividualId: false,
 		showLOD: false
@@ -242,6 +282,7 @@ export class CreatureRuntimeManager {
 	private reset() {
 		for (const id of [...this.live.keys()]) this.unload(id);
 		this.grounding.clear();
+		this.calmed.clear();
 		this.logical.clear();
 		// A new seed or new creature settings: whatever was carried or ridden no longer belongs here.
 		this.carried.clear();
@@ -264,6 +305,7 @@ export class CreatureRuntimeManager {
 			(r.targetLine.material as THREE.Material).dispose();
 			r.targetLine.removeFromParent();
 		}
+		r?.hitbox?.removeFromParent();
 		r?.compiled.dispose();
 		this.live.delete(id);
 		this.spatial.remove(id);
@@ -334,6 +376,8 @@ export class CreatureRuntimeManager {
 					? 1
 					: 2;
 		const rideId = this.ride && this.logical.has(this.ride.id) ? this.ride.id : null;
+		// Carried off, unloaded or removed: nothing left to calm.
+		for (const id of this.calmed.keys()) if (!this.logical.has(id)) this.calmed.delete(id);
 		for (const [id, r] of this.logical) {
 			if (id === rideId) continue;
 			const p = r.spawn.species.proportions,
@@ -417,7 +461,8 @@ export class CreatureRuntimeManager {
 				continue;
 			}
 			const behaviourStart = performance.now();
-			if (this.time >= r.nextDecision) {
+			const decided = this.time >= r.nextDecision;
+			if (decided) {
 				const oldState = r.state;
 				decideCreature(
 					r,
@@ -431,6 +476,8 @@ export class CreatureRuntimeManager {
 				r.nextDecision = Math.max(r.nextDecision, this.time + (item.distance > 160 ? 1.5 : 0.3));
 				this.stats.behaviourUpdates++;
 			}
+			const calm = this.calmed.get(item.id);
+			if (calm) this.applyCalm(item.id, r, calm, decided);
 			// Position stays on the physics tick. Facing is integrated every rendered frame so a
 			// correction is not a single 50 ms snap.
 			if (moving) advanceCreature(r, step, this.access, false);
@@ -591,11 +638,99 @@ export class CreatureRuntimeManager {
 			live.targetLine.removeFromParent();
 			live.targetLine = undefined;
 		}
+		this.updateHitboxDebug(r.spawn.id, live);
 	}
 
 	/**
-	 * The nearest carryable creature the look ray passes through, within `reach` metres of `eye`
-	 * (ray against each live creature's coarse collision cylinder). `dir` must be unit length.
+	 * Debug: outlines the box `K` aims at, green for creatures that can be picked up, blue for ones
+	 * that can be ridden, grey for the rest. Shares geometry and materials, so it's cheap to leave on.
+	 */
+	private updateHitboxDebug(id: string, live: LiveCreature) {
+		if (!this.debug.showHitboxes || id === this.ride?.id) {
+			live.hitbox?.removeFromParent();
+			live.hitbox = undefined;
+			return;
+		}
+		const use = this.isCarryable(id) ? 'carry' : this.isRideable(id) ? 'ride' : 'none';
+		if (!live.hitbox) {
+			live.hitbox = new THREE.LineSegments(HITBOX_EDGES, HITBOX_MATERIALS[use]);
+			live.hitbox.renderOrder = 10;
+			live.hitbox.frustumCulled = false;
+			this.group.add(live.hitbox);
+		}
+		const o = live.compiled.object;
+		const box = creatureHitbox(live.compiled.compilation.bounds, o.position, o.rotation.y);
+		live.hitbox.material = HITBOX_MATERIALS[use];
+		live.hitbox.position.set(box.centre.x, box.centre.y, box.centre.z);
+		live.hitbox.rotation.set(0, box.yaw, 0);
+		live.hitbox.scale.set(box.half.x, box.half.y, box.half.z);
+	}
+
+	/**
+	 * Eases every creature `reachOf` gives a reach for to a stop, when it's within that reach of
+	 * `eye` (measured to its hitbox, in any direction), holds it still, then lets it go
+	 * (`creatureCalm.ts`). Pressing again restarts the hold. Returns the creatures calmed.
+	 */
+	calmInReach(eye: Vec3, reachOf: (id: string) => number | null): string[] {
+		const calmed: string[] = [];
+		for (const [id, live] of this.live) {
+			const r = this.logical.get(id);
+			const reach = id === this.ride?.id ? null : reachOf(id);
+			if (!r || reach === null) continue;
+			const o = live.compiled.object;
+			const box = creatureHitbox(live.compiled.compilation.bounds, o.position, o.rotation.y);
+			if (hitboxDistance(eye, box) > reach) continue;
+			const previous = this.calmed.get(id);
+			this.calmed.set(id, {
+				timeline: startCalm(previous?.timeline, this.time),
+				velocity: previous?.velocity ?? { ...r.intent.velocity },
+				gait: previous?.gait ?? r.intent.gait
+			});
+			calmed.push(id);
+		}
+		return calmed;
+	}
+
+	/** Whether `K` is holding this creature still (or easing it back up). */
+	isCalmed(id: string): boolean {
+		return this.calmed.has(id);
+	}
+
+	/**
+	 * Scales a calmed creature's own pace by the calm's factor. Its choices go on as usual (a new
+	 * decision becomes the pace it resumes at); at the end it simply has its own pace back.
+	 */
+	private applyCalm(
+		id: string,
+		r: CreatureRuntimeDefinition,
+		calm: CalmedCreature,
+		decided: boolean
+	) {
+		if (decided) {
+			calm.velocity = { ...r.intent.velocity };
+			calm.gait = r.intent.gait;
+		}
+		if (calmEnded(calm.timeline, this.time)) {
+			r.intent.velocity = { ...calm.velocity };
+			r.intent.gait = calm.gait;
+			this.calmed.delete(id);
+			return;
+		}
+		const factor = calmFactor(calm.timeline, this.time);
+		const v = calm.velocity;
+		r.intent.velocity = { x: v.x * factor, y: v.y * factor, z: v.z * factor };
+		r.intent.gait =
+			factor < CALM_STILL_FACTOR
+				? 'idle'
+				: calm.gait === 'run' && factor < 0.5
+					? 'walk'
+					: calm.gait;
+	}
+
+	/**
+	 * The nearest carryable creature the look ray reaches, within `reach` metres of `eye`: the ray
+	 * against each live creature's large padded box (`creatureHitbox.ts`, shown by the "Show K
+	 * hitboxes" debug overlay). `dir` must be unit length.
 	 */
 	pickCarryable(eye: Vec3, dir: Vec3, reach: number): CarryCandidate | null {
 		return this.pickAlongRay(eye, dir, reach, (id) => this.isCarryable(id));
@@ -603,7 +738,7 @@ export class CreatureRuntimeManager {
 
 	/** The nearest rideable creature (a biped nobody rides) the look ray reaches; see `pickCarryable`. */
 	pickRideable(eye: Vec3, dir: Vec3, reach: number): CarryCandidate | null {
-		return this.pickAlongRay(eye, dir, reach, (id) => id !== this.ride?.id && this.isRideable(id));
+		return this.pickAlongRay(eye, dir, reach, (id) => this.isRideable(id));
 	}
 
 	private pickAlongRay(
@@ -614,27 +749,19 @@ export class CreatureRuntimeManager {
 	): CarryCandidate | null {
 		let best: CarryCandidate | null = null;
 		for (const [id, live] of this.live) {
+			// Never the creature being ridden (the rider's eye is inside its box).
+			if (id === this.ride?.id) continue;
 			const r = this.logical.get(id);
 			if (!r) continue;
-			const p = live.compiled.object.position;
-			const radius = live.compiled.compilation.collision.radius + 0.1;
-			const height = live.compiled.compilation.collision.height;
-			// Cheap reject: the cylinder's closest point is beyond reach.
-			if (Math.hypot(p.x - eye.x, p.z - eye.z) - radius > reach) continue;
-			for (let t = 0; t <= reach; t += 0.05) {
-				const x = eye.x + dir.x * t,
-					y = eye.y + dir.y * t,
-					z = eye.z + dir.z * t;
-				if (y < p.y - 0.05 || y > p.y + height + 0.05) continue;
-				if (Math.hypot(x - p.x, z - p.z) > radius) continue;
-				if ((!best || t < best.distance) && accept(id))
-					best = {
-						id,
-						definition: { species: r.spawn.species, individual: r.spawn.individual },
-						distance: t
-					};
-				break;
-			}
+			const o = live.compiled.object;
+			const { bounds, collision } = live.compiled.compilation;
+			const t = creatureRayHit(bounds, collision, o.position, o.rotation.y, eye, dir, reach);
+			if (t === null || (best && t >= best.distance) || !accept(id)) continue;
+			best = {
+				id,
+				definition: { species: r.spawn.species, individual: r.spawn.individual },
+				distance: t
+			};
 		}
 		return best;
 	}
@@ -864,6 +991,8 @@ export class CreatureRuntimeManager {
 		const definition = { species: r.spawn.species, individual: r.spawn.individual };
 		const profile = rideFor(definition);
 		if (!profile) return null;
+		// The rider steers it now.
+		this.calmed.delete(id);
 		const seat = rideSeatLayout(live.compiled.compilation, profile.seat, carryClearance);
 		const anchors = rideSeatAnchors(live.compiled.compilation, seat);
 		const { x, y, z } = anchors.pelvis.offset;
@@ -873,7 +1002,8 @@ export class CreatureRuntimeManager {
 			seat,
 			anchors,
 			carryClearance,
-			pelvisOffset: new THREE.Vector3(x, y, z)
+			pelvisOffset: new THREE.Vector3(x, y, z),
+			jump: restingRideJump()
 		};
 		r.state = 'IDLE';
 		r.intent = { ...r.intent, velocity: { x: 0, y: 0, z: 0 }, gait: 'idle', lookTarget: undefined };
@@ -921,15 +1051,21 @@ export class CreatureRuntimeManager {
 			this.rideObstacles(r, ride.profile)
 		);
 		r.intent.lookTarget = look ? { ...look } : undefined;
+		const { jumped, landed } = stepRideJump(ride.jump, !!input.jump, ride.profile, dt);
 		const live = this.live.get(ride.id);
 		if (live) {
 			live.compiled.object.position.copy(r.position);
 			this.animateLive(ride.id, r, live, live.lod, ride.profile.maxCadence);
+			// Lifted whole, pose and all, after the feet were planted: the rider's seat rises with it.
+			if (ride.jump.height > 0) {
+				live.compiled.object.position.y += ride.jump.height;
+				live.compiled.object.updateMatrixWorld(true);
+			}
 			const ease = 1 - Math.exp(-SEAT_EASE_RATE * Math.max(0, dt));
 			const p = ride.anchors.pelvis.offset;
 			ride.pelvisOffset.lerp(this.seatScratch.set(p.x, p.y, p.z), ease);
 		}
-		return result;
+		return { ...result, jumped, landed };
 	}
 	private readonly seatScratch = new THREE.Vector3();
 

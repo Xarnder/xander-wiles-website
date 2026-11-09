@@ -7,7 +7,13 @@ import {
 	regionSpecies,
 	selectVisibleCreatures
 } from './CreaturePopulationSystem';
-import { advanceCreature, createCreatureState, decideCreature, maxYawRate, turnCreature } from './CreatureBehaviourSystem';
+import {
+	advanceCreature,
+	createCreatureState,
+	decideCreature,
+	maxYawRate,
+	turnCreature
+} from './CreatureBehaviourSystem';
 import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import type { CreatureWorldAccess } from './CreatureTypes';
@@ -190,6 +196,20 @@ describe('autonomous intent and safe movement', () => {
 		advanceCreature(s, 0.1, { surface: () => NaN, blocked: () => false });
 		expect(Number.isFinite(s.position.y)).toBe(true);
 		expect(s.intent.gait).toBe('idle');
+	});
+	it('walks up any slope, however steep', () => {
+		const s = state();
+		const initial = { ...s.position };
+		s.heading = Math.PI / 2;
+		s.intent.velocity = { x: 1, y: 0, z: 0 };
+		// About 76° up along +x.
+		const steep: CreatureWorldAccess = {
+			surface: (x) => Math.max(0, x - initial.x) * 4,
+			blocked: () => false
+		};
+		advanceCreature(s, 0.25, steep, false);
+		expect(s.position.x).toBeGreaterThan(initial.x + 0.2);
+		expect(s.position.y).toBeCloseTo((s.position.x - initial.x) * 4, 5);
 	});
 	it('separates neighboring individuals while keeping group wander bounded', () => {
 		const a = state(),

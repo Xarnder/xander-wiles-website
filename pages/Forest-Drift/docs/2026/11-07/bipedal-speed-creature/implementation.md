@@ -22,7 +22,7 @@ You can carry a small creature while riding, and fire from the seat (Q12 C). `K`
 | Piece | File | Notes |
 | --- | --- | --- |
 | Rules | `creatures/creatureRiding.ts` | Pure, shared with the room: `rideFor`, seat kind, speeds, turn rate, cadence cap, and the `CREATURE_RIDING_ENABLED` kill switch. |
-| Motion | `creatures/CreatureRideMotion.ts` | Pure. Camera-relative steering, turn-rate arcs, acceleration and braking, slowing through sharp turns, and substeps. Obeys `creatureSurface` (slope, buildings) and `standable` (deep water), and slides round creatures at least 25% of its own height (smaller ones are stepped over). No herd leash. |
+| Motion | `creatures/CreatureRideMotion.ts` | Pure. Camera-relative steering, turn-rate arcs, acceleration and braking, slowing through sharp turns, and substeps. Obeys `creatureSurface` (buildings, the void; any slope) and `standable` (deep water), and slides round creatures at least 25% of its own height (smaller ones are stepped over). No herd leash. |
 | Seat | `creatures/RideSeat.ts` | Pure, run once at mount. Reads the skin points: the column above the seat must be clear for the rider, the walk never steps off the skin or slides more than 12% of the height down, and the fallback is on top of the head. `rideSeatAnchors` pins the seat and hand holds to the bones that carry them. |
 | Bone anchors | `creatures/boneAnchors.ts` | Bone-space points to world space. The rider rides the chest's bob and sway (the rider was fixed over the feet before). |
 | Runtime | `creatures/CreatureRuntimeManager.ts` | `mountRide` / `steerRide` / `rideFrame` / `rideFootprint` / `dismountRide`. The mount stays in `logical` and `live`, always drawn at the best LOD, never culled or unloaded, and the player isn't pushed out of it. A shared `settle()` serves both carry release and dismount. A placed creature's home now moves with its saved spot. |
@@ -57,6 +57,21 @@ Q1–Q28 and F1–F2 as locked, with these notes:
 - A live two-browser session against the deployed Worker. Online behaviour is covered by `RoomCoreRide.spec.ts` and the protocol tests only.
 - WebKit and Firefox, and a real phone or tablet. Touch is unit-level only.
 - Performance runs: frame pacing while riding, and the 4-rider soak.
+
+## Any slope (2026-11-07)
+
+Creatures got stuck on steep ground, ridden or wild. Movement rejected any step steeper than the species' `maxWalkSlope` (about 22–50°), and the wander detour then found nothing either, so the creature stood still. Now there is no slope limit on movement: `creatureSurface` takes an optional `maxSlope` (default none). Wandering (`CreatureBehaviourSystem`) and riding (`CreatureRideMotion`) don't pass one, so creatures walk up any slope. Deep water, the void and buildings still stop them. Only spawning keeps a limit (`CREATURE_SPAWN_MAX_SLOPE`, the old 0.65), so herds still appear on gentle ground and existing worlds keep the same creatures in the same places. `maxWalkSlope` now only sets how the body and legs tilt (grounding and the Lab's "can stand" readout). Tests: `CreatureRideMotion.spec.ts` (a ridden biped climbs a 79° slope) and `CreatureEcology.spec.ts` (a wild creature climbs a 76° slope).
+
+## Jumping while riding (2026-11-09)
+
+Space (or the touch Jump button, now shown while riding) makes the mount jump. It's a smooth arc above the ground under it, with gravity 20 m/s². Its height is 30% of the creature's height, between 0.9 and 3 m, so bigger creatures jump higher. The cap keeps a giant's leap within the room's shot-origin slack. The creature keeps moving and steering in the air, and holding Space jumps again on landing, as on foot. A soft whoosh plays on take-off and a thud on landing.
+
+- `creatures/rideJump.ts` (pure, unit-tested) is the arc. It's integrated exactly, so it's the same at any frame rate.
+- `CreatureRuntimeManager.steerRide` steps it. It lifts the whole posed creature after its feet are planted, then updates its matrices. The rider's seat is pinned to its bones, so the rider rises and falls with it, and nothing else about riding changes.
+- `FirstPersonController.rideInput` adds `jump` once seated, and takes a pending touch jump.
+- Online, other players see it too. `RiddenCreatureView` lifts the mount it draws whenever the rider's pose is more than 0.15 m above its seat.
+
+This replaces the earlier decision to hide Jump while riding. Tests: `rideJump.spec.ts`, plus a step in `tests/creatureRiding.e2e.ts` where Space lifts the mount by at least 0.85 m. Rising and falling each take about √(2h/g), so it isn't a snap. The rider stays in the seat, and the mount lands back where it stood.
 
 ## Rollback
 

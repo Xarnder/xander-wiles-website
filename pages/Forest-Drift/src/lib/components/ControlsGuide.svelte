@@ -26,7 +26,7 @@
 				],
 				[
 					'K on a two-legged creature',
-					'Ride it (the ones with a teal saddle badge): astride its neck if it is small, on its right shoulder if it is large. W/A/S/D steer where you look, Shift sprints, and bigger creatures run faster. K gets off onto the ground beside it. You can climb on while carrying a creature, and fire from the seat.'
+					'Ride it (the ones with a teal saddle badge): astride its neck if it is small, on its right shoulder if it is large. W/A/S/D steer where you look, Shift sprints, and bigger creatures run faster. Space makes it jump (bigger creatures jump higher). K gets off onto the ground beside it. You can climb on while carrying a creature, and fire from the seat.'
 				],
 				[
 					'Left click while carrying',

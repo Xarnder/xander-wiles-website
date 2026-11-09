@@ -279,8 +279,18 @@ export class FirstPersonController {
 		this.mount.to.set(groundEye.x, groundEye.y, groundEye.z);
 	}
 
-	/** Camera-relative steering for the mount: WASD or the joystick, Shift or the run toggle. */
+	/**
+	 * Camera-relative steering for the mount: WASD or the joystick, Shift or the run toggle, and
+	 * Space or the touch Jump button (once seated). Reading it takes a pending touch jump.
+	 */
 	rideInput(): RideInput {
+		const input = this.rideSteering();
+		const jump = this.mount?.phase === 'riding' && (this.keys.has('Space') || this.touchJump);
+		this.touchJump = false;
+		return jump ? { ...input, jump } : input;
+	}
+
+	private rideSteering(): RideInput {
 		if (this.manualInputBlocked || this.exampleMovement || !this.mounted)
 			return { x: 0, z: 0, sprint: false };
 		const clamp = (v: number) => Math.max(-1, Math.min(1, v));
@@ -305,15 +315,17 @@ export class FirstPersonController {
 			this.mountWeight = mount.phase === 'mounting' ? t : 1;
 			if (mount.phase === 'mounting' && t >= 1) mount.phase = 'riding';
 		}
-		const input = this.rideInput();
+		const input = this.rideSteering();
 		this.running = input.sprint && Math.hypot(input.x, input.z) > 0.05;
 		this.grounded = true;
 		this.verticalVelocity = 0;
-		this.touchJump = false;
+		// A touch jump is the mount's (`rideInput`) only once seated; never carried to the feet.
+		if (mount.phase !== 'riding') this.touchJump = false;
 		if (mount.phase === 'dismounting' && t >= 1) {
 			this.mount = null;
 			this.mountWeight = 0;
 			this.running = false;
+			this.touchJump = false;
 			this.resetFallTracking(true);
 		}
 		this.syncCamera();

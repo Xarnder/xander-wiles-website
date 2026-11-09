@@ -44,7 +44,7 @@
 		creaturePrompt?: CreaturePrompt | null;
 		/** Carrying a creature: Fire replaces Punch. */
 		carrying?: boolean;
-		/** Riding a creature: no jumping, and its button wins over doors. */
+		/** Riding a creature: its button wins over doors (Jump makes the mount jump). */
 		riding?: boolean;
 	}
 
@@ -749,18 +749,17 @@
 					<span>Punch</span>
 				</button>
 			{/if}
-			{#if !riding}
-				<button
-					type="button"
-					class="touch-action-btn jump-btn"
-					use:touchButton={triggerJump}
-					data-testid="touch-jump-btn"
-					aria-label="Jump"
-				>
-					<img class="touch-icon" src={jumpIcon} alt="" />
-					<span>Jump</span>
-				</button>
-			{/if}
+			<!-- Riding, Jump makes the mount jump. -->
+			<button
+				type="button"
+				class="touch-action-btn jump-btn"
+				use:touchButton={triggerJump}
+				data-testid="touch-jump-btn"
+				aria-label="Jump"
+			>
+				<img class="touch-icon" src={jumpIcon} alt="" />
+				<span>Jump</span>
+			</button>
 		</div>
 	</div>
 </div>

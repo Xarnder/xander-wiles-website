@@ -7,7 +7,15 @@ import { audioOutput } from './AudioPreferences';
  * and a pellet hitting a player are recorded sounds (`soundEffects.ts`).
  */
 export type CreatureSound =
-	'dryFire' | 'impact' | 'pickUp' | 'putDown' | 'mount' | 'dismount' | 'rideBlocked';
+	| 'dryFire'
+	| 'impact'
+	| 'pickUp'
+	| 'putDown'
+	| 'mount'
+	| 'dismount'
+	| 'rideBlocked'
+	| 'rideJump'
+	| 'rideLand';
 
 function context(): AudioContext | null {
 	try {
@@ -91,6 +99,15 @@ export function playCreatureSound(sound: CreatureSound): void {
 			break;
 		case 'rideBlocked':
 			chirp(ctx, 300, 240, 0.07, 0.12);
+			break;
+		case 'rideJump':
+			// A push off: a short whoosh.
+			puff(ctx, 700, 0.14, 0.2);
+			break;
+		case 'rideLand':
+			// Feet back down: a soft thud with a scuff.
+			thump(ctx, 95, 0.26, 0.2);
+			puff(ctx, 500, 0.08, 0.14);
 			break;
 	}
 }

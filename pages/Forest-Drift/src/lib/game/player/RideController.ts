@@ -52,8 +52,11 @@ export interface RideHost {
 	isRidden(id: string): boolean;
 	/** Camera-relative steering this frame. */
 	input(): RideInput;
-	/** Moves the mount for this frame; `blocked` when it couldn't go where it was steered. */
-	steer(input: RideInput, dt: number): { blocked: boolean };
+	/**
+	 * Moves the mount for this frame; `blocked` when it couldn't go where it was steered, `jumped`
+	 * and `landed` when it took off or touched down.
+	 */
+	steer(input: RideInput, dt: number): { blocked: boolean; jumped?: boolean; landed?: boolean };
 	/** Climbs off onto safe ground (`instant`: no blend, e.g. knocked out) and lets the mount go. */
 	dismount(id: string, instant: boolean): void;
 	/** The ride ended without climbing off (teleported, world replaced): let the mount go as it is. */
@@ -75,6 +78,9 @@ export interface RideEvents {
 	refused?(reason: string): void;
 	/** Steered into something the mount can't cross (said at most every few seconds). */
 	blocked?(): void;
+	/** The mount took off / landed from a jump. */
+	jumped?(): void;
+	landed?(): void;
 }
 
 const NOT_RIDING: RideState = { riding: false, species: null, seat: null };
@@ -196,7 +202,9 @@ export class RideController {
 				this.events.dismounted(ridden.definition.species.name);
 			} else {
 				const input = this.host.inputAllowed() ? this.host.input() : NO_RIDE_INPUT;
-				const { blocked } = this.host.steer(input, dt);
+				const { blocked, jumped, landed } = this.host.steer(input, dt);
+				if (jumped) this.events.jumped?.();
+				if (landed) this.events.landed?.();
 				if (blocked && this.time - this.lastBlockedNotice >= BLOCKED_NOTICE_INTERVAL) {
 					this.lastBlockedNotice = this.time;
 					this.events.blocked?.();
