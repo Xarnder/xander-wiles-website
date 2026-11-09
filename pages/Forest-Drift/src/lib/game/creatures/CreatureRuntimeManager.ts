@@ -34,12 +34,7 @@ import type {
 import { CREATURE_GRAPHICS_BUDGETS, type GraphicsQuality } from '../graphics/GraphicsTypes';
 import { abilityFor } from './creatureAbilities';
 import { rideFor, type RideProfile, type RideSeatKind } from './creatureRiding';
-import {
-	advanceRiddenCreature,
-	type RideInput,
-	type RideObstacle,
-	type RideStepResult
-} from './CreatureRideMotion';
+import { advanceRiddenCreature, type RideInput, type RideStepResult } from './CreatureRideMotion';
 import {
 	rideSeatAnchors,
 	rideSeatLayout,
@@ -167,8 +162,6 @@ export interface NearestCreature {
 	z: number;
 }
 
-/** Other creatures shorter than this fraction of the ridden one are stepped over, not avoided. */
-const RIDE_OBSTACLE_HEIGHT_FRACTION = 0.25;
 /** How quickly the seat eases to a new layout (picking a creature up mid-ride), 1/s. */
 const SEAT_EASE_RATE = 6;
 
@@ -241,6 +234,13 @@ export class CreatureRuntimeManager {
 		surfaceSamples: 0,
 		failures: 0
 	};
+	/**
+	 * The world as a creature a player rides it sees it, when that differs from a wild one's: it
+	 * wades into and across rivers, however deep, where a wild creature turns back. Defaults to the
+	 * wild rules.
+	 */
+	rideAccess: CreatureWorldAccess | null = null;
+
 	constructor(
 		private worldSeed: string,
 		private access: CreatureWorldAccess,
@@ -414,7 +414,10 @@ export class CreatureRuntimeManager {
 			step = Math.min(0.15, this.time - this.movementAt);
 		if (moving) this.movementAt = this.time;
 		this.spatial.clear();
-		for (const item of selected) this.spatial.set(item.id, this.logical.get(item.id)!);
+		// A creature a player rides is out of the herd's way: other creatures neither steer around
+		// it nor gather to it (and it passes through them, see `steerRide`) until the rider gets off.
+		for (const item of selected)
+			if (item.id !== rideId) this.spatial.set(item.id, this.logical.get(item.id)!);
 		for (const item of selected) {
 			const r = this.logical.get(item.id)!;
 			let live = this.live.get(item.id);
@@ -1047,8 +1050,8 @@ export class CreatureRuntimeManager {
 			cameraYaw,
 			runSpeed,
 			dt,
-			this.access,
-			this.rideObstacles(r, ride.profile)
+			// No other creatures in its way while a player rides it: it passes through them.
+			this.rideAccess ?? this.access
 		);
 		r.intent.lookTarget = look ? { ...look } : undefined;
 		const { jumped, landed } = stepRideJump(ride.jump, !!input.jump, ride.profile, dt);
@@ -1068,19 +1071,6 @@ export class CreatureRuntimeManager {
 		return { ...result, jumped, landed };
 	}
 	private readonly seatScratch = new THREE.Vector3();
-
-	/** Creatures the mount slides around: not itself, and nothing small enough to step over. */
-	private rideObstacles(r: CreatureRuntimeDefinition, profile: RideProfile): RideObstacle[] {
-		const out: RideObstacle[] = [];
-		const minHeight = profile.height * RIDE_OBSTACLE_HEIGHT_FRACTION;
-		for (const other of this.spatial.query(r.position, 32)) {
-			if (other === r) continue;
-			const dims = creatureDimensions(other.spawn.species, other.spawn.individual.sizeFactor);
-			if (dims.height < minHeight) continue;
-			out.push({ x: other.position.x, z: other.position.z, radius: dims.radius });
-		}
-		return out;
-	}
 
 	/**
 	 * Where the rider sits this frame (world space), or null when there's no drawn mount. The same
@@ -1286,23 +1276,18 @@ export class CreatureRuntimeManager {
 		this.demo = false;
 		this.reset();
 	}
-	resolvePlayer(x: number, z: number, feetY: number, headY: number) {
+	/**
+	 * Whether a creature's body (other than the one being ridden) takes up this spot at this height.
+	 * Players walk through creatures, so this is only to keep a getting-off spot clear of them.
+	 */
+	bodyAt(x: number, z: number, feetY: number, headY: number): boolean {
 		for (const [id, { compiled: c }] of this.live) {
-			// Never shove the rider off their own mount.
 			if (id === this.ride?.id) continue;
 			const p = c.object.position;
-			const radius = c.compilation.collision.radius + 0.3;
 			if (headY < p.y || feetY > p.y + c.compilation.collision.height) continue;
-			const dx = x - p.x,
-				dz = z - p.z,
-				d = Math.hypot(dx, dz);
-			if (d < radius) {
-				const k = (radius - d) / Math.max(d, 1e-5);
-				x += d < 1e-5 ? radius : dx * k;
-				z += dz * k;
-			}
+			if (Math.hypot(x - p.x, z - p.z) < c.compilation.collision.radius + 0.3) return true;
 		}
-		return { x, z };
+		return false;
 	}
 	dispose() {
 		for (const id of [...this.live.keys()]) this.unload(id);

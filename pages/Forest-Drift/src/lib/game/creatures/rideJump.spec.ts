@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	RIDE_JUMP_MAX_HEIGHT,
 	RIDE_JUMP_MIN_HEIGHT,
 	restingRideJump,
 	rideJumpAirborne,
@@ -23,10 +22,14 @@ function fly(height: number, fps: number) {
 }
 
 describe('jumping while riding', () => {
-	it('jumps higher on bigger creatures, within limits', () => {
-		expect(rideJumpApex({ height: 1.2 })).toBe(RIDE_JUMP_MIN_HEIGHT);
-		expect(rideJumpApex({ height: 6 })).toBeCloseTo(1.8, 5);
-		expect(rideJumpApex({ height: 26 })).toBe(RIDE_JUMP_MAX_HEIGHT);
+	it('jumps half the creature’s own height, so bigger creatures jump higher', () => {
+		expect(rideJumpApex({ height: 3 })).toBeCloseTo(1.5, 9);
+		expect(rideJumpApex({ height: 11 })).toBeCloseTo(5.5, 9);
+		expect(rideJumpApex({ height: 26 })).toBeCloseTo(13, 9);
+		for (const height of [1.2, 2, 5, 9, 17, 26])
+			expect(rideJumpApex({ height })).toBeGreaterThanOrEqual(height / 2);
+		// Never a hop too small to notice.
+		expect(rideJumpApex({ height: 1 })).toBe(RIDE_JUMP_MIN_HEIGHT);
 	});
 
 	it('rises and falls in one smooth arc, reaches its apex and lands back on the ground', () => {

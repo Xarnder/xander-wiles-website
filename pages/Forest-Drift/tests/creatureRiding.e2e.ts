@@ -44,6 +44,8 @@ interface SceneLike {
 		logical: Map<string, { position: Vec; state: string; intent: { velocity: Vec; gait: string } }>;
 		isRideable(id: string): boolean;
 		isCarryable(id: string): boolean;
+		nearestCarryable(from: Vec): { x: number; z: number } | null;
+		nearestRideable(from: Vec): { x: number; z: number } | null;
 	};
 }
 type TestWindow = { forestScene: SceneLike };
@@ -68,7 +70,16 @@ async function aimAt(page: Page, kind: 'ride' | 'carry'): Promise<void> {
 						const d = Math.hypot(p.x - me.x, p.z - me.z);
 						if (!best || d < best.d) best = { d, id };
 					}
-					if (!best) return null;
+					if (!best) {
+						// None drawn nearby (the herds near spawn differ by seed): go to the nearest one.
+						const far =
+							kind === 'ride' ? s.creatures.nearestRideable(me) : s.creatures.nearestCarryable(me);
+						if (far) {
+							const y = s.worldSurfaceSampler.getSupportingSurfaceY(far.x + 3, far.z, Infinity);
+							s.controller.restoreState({ x: far.x + 3, y: y + 1.7, z: far.z }, 0, 0);
+						}
+						return null;
+					}
 					const live = s.creatures.live.get(best.id)!;
 					const p = live.compiled.object.position;
 					const { height, radius } = live.compiled.compilation.collision;
@@ -116,7 +127,8 @@ async function jumpAndWatch(page: Page) {
 				topAt = NaN,
 				downAt = NaN;
 			const start = performance.now();
-			while (performance.now() - start < 2000) {
+			// Long enough for a giant's leap (half its height) to come back down.
+			while (performance.now() - start < 3500) {
 				await new Promise(requestAnimationFrame);
 				const now = (performance.now() - start) / 1000;
 				const { lift: drawnLift, seat } = sample(s);
@@ -239,7 +251,13 @@ test.describe('riding a two-legged creature (single player)', () => {
 		// First let it settle from the sprint (a running body sits a little lower).
 		await page.waitForTimeout(1500);
 		const jumped = await jumpAndWatch(page);
-		expect(jumped.highest).toBeGreaterThan(0.85);
+		// At least half the ridden creature's own height.
+		const mountHeight = await scene(
+			page,
+			(s) =>
+				(s.ride as unknown as { ridden: { profile: { height: number } } }).ridden.profile.height
+		);
+		expect(jumped.highest).toBeGreaterThan(Math.max(0.85, mountHeight / 2 - 0.15));
 		expect(Math.abs(jumped.settled)).toBeLessThan(0.1);
 		// Smooth: rising and falling each take about √(2h/g) (g = 20), not a frame's snap.
 		const arc = Math.sqrt((2 * jumped.highest) / 20);

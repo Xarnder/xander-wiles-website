@@ -49,8 +49,8 @@ describe('carrying creatures', () => {
 		expect(c.isCarried(id)).toBe(true);
 		expect(c.logical.has(id)).toBe(false);
 		expect(c.live.has(id)).toBe(false);
-		// Standing where it stood no longer pushes the player.
-		expect(c.resolvePlayer(live.x, live.z, live.y, live.y + 1.8)).toEqual({ x: live.x, z: live.z });
+		// Nothing's body is where it stood any more.
+		expect(c.bodyAt(live.x, live.z, live.y, live.y + 1.8)).toBe(false);
 		// Its cell rescans and reloads without spawning a second copy.
 		for (let i = 0; i < 20; i++) c.update({ x: 0, y: 0, z: 0 }, 0.1, 'high');
 		c.update({ x: 5000, y: 0, z: 5000 }, 0.1, 'high');

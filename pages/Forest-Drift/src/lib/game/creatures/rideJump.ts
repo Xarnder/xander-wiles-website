@@ -1,17 +1,19 @@
 /**
- * Jumping on a ridden creature: a smooth arc above the ground under it, higher for bigger
- * creatures. The rider sits on the creature, so they rise and fall with it; the creature keeps
- * moving and steering as it flies. Pure (no Three.js), so it's unit-tested.
+ * Jumping on a ridden creature: a smooth arc above the ground under it, half the creature's own
+ * height, so bigger creatures jump higher. The rider sits on the creature, so they rise and fall
+ * with it; the creature keeps moving and steering as it flies. Pure (no Three.js), so it's
+ * unit-tested.
  */
 import type { RideProfile } from './creatureRiding';
 
 /** Pull back down, m/s². A little lighter than a player's, so a ridden jump floats a touch. */
 export const RIDE_JUMP_GRAVITY = 20;
-/** Apex height: this share of the creature's height, between the limits below (metres). */
-export const RIDE_JUMP_HEIGHT_FRACTION = 0.3;
+/**
+ * Apex height: half the creature's own height, so a jump is in proportion to whatever is being
+ * ridden (a 3 m creature jumps 1.5 m, a 20 m giant 10 m), and never less than the minimum (metres).
+ */
+export const RIDE_JUMP_HEIGHT_FRACTION = 0.5;
 export const RIDE_JUMP_MIN_HEIGHT = 0.9;
-/** Capped so a giant's leap stays readable (and within the room's shot-origin slack). */
-export const RIDE_JUMP_MAX_HEIGHT = 3;
 
 export interface RideJumpState {
 	/** Height above the ground under the creature, metres (0 standing). */
@@ -30,8 +32,7 @@ export const restingRideJump = (): RideJumpState => ({ height: 0, velocity: 0 })
 
 /** How high `profile`'s creature jumps, metres. */
 export function rideJumpApex(profile: Pick<RideProfile, 'height'>): number {
-	const apex = profile.height * RIDE_JUMP_HEIGHT_FRACTION;
-	return Math.min(RIDE_JUMP_MAX_HEIGHT, Math.max(RIDE_JUMP_MIN_HEIGHT, apex));
+	return Math.max(RIDE_JUMP_MIN_HEIGHT, profile.height * RIDE_JUMP_HEIGHT_FRACTION);
 }
 
 export function rideJumpAirborne(jump: RideJumpState): boolean {

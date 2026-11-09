@@ -1318,25 +1318,18 @@ export class ThreeScene implements WorldRuntime {
 			onFlightChange: options.onFlightChange,
 			onLanded: (event) => this.handleLanding(event),
 			isMoveBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
-			resolveHorizontalCollision: (x, z, feetY, headY) => {
-				const creaturePosition = this.creatures?.resolvePlayer(x, z, feetY, headY) ?? { x, z };
-				return resolvePlayerPositionAgainstWalls(
-					creaturePosition.x,
-					creaturePosition.z,
-					feetY,
-					headY,
-					PLAYER_COLLISION_RADIUS,
-					[
-						...this.wallManager.getAllCollisionRects(),
-						...this.wallPathManager.getAllCollisionRects(),
-						...this.stairManager.getAllCollisionRects(),
-						...(this.doorInteraction?.getCollisionRects() ?? []),
-						...this.furnitureManager.getCollisionRects(),
-						...this.barrierManager.getCollisionRects(),
-						...this.miniBuilds.instances.getNearbyCollisionRects()
-					]
-				);
-			}
+			// Creatures never block the player: walk straight through them (they're still picked by
+			// their hitboxes for K).
+			resolveHorizontalCollision: (x, z, feetY, headY) =>
+				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
+					...this.wallManager.getAllCollisionRects(),
+					...this.wallPathManager.getAllCollisionRects(),
+					...this.stairManager.getAllCollisionRects(),
+					...(this.doorInteraction?.getCollisionRects() ?? []),
+					...this.furnitureManager.getCollisionRects(),
+					...this.barrierManager.getCollisionRects(),
+					...this.miniBuilds.instances.getNearbyCollisionRects()
+				])
 		});
 
 		this.health = this.createLocalHealth(undefined);
@@ -1638,8 +1631,24 @@ export class ThreeScene implements WorldRuntime {
 		this.sustainSettings = createDefaultSustainSettings();
 		let musicObstacleRevision = '';
 		let musicObstacles: THREE.Box3[] = [];
-		const naturalGroundBlocked = (x: number, z: number, radius = 0.2, height = 2) => {
-			if (this.hydrology.waterColumnDepth(x, z) > DEEP_WATER_DEPTH) return true;
+		/**
+		 * Ground a creature (or a dismounting rider) can't stand on: buildings, and deep water. With
+		 * `rivers` (a ridden creature, a rider getting off), only a deep lake counts as deep water:
+		 * any river can be waded into and crossed.
+		 */
+		const naturalGroundBlocked = (
+			x: number,
+			z: number,
+			radius = 0.2,
+			height = 2,
+			rivers = false
+		) => {
+			if (
+				rivers
+					? this.hydrology.walkBlockedByWater(x, z)
+					: this.hydrology.waterColumnDepth(x, z) > DEEP_WATER_DEPTH
+			)
+				return true;
 			if (this.foundationManager.getTopYAt(x, z) !== null) return true;
 			const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity);
 			if (this.worldSurfaceSampler.getCeilingBlockY(x, z, y, y + 2) !== null) return true;
@@ -1684,6 +1693,12 @@ export class ThreeScene implements WorldRuntime {
 			options.world?.creatures,
 			(m) => this.graphicsPipeline.registerMaterial(m)
 		);
+		// Ridden, a creature goes wherever its rider can: into and across any river.
+		this.creatures.rideAccess = {
+			surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
+			blocked: (x, z, radius, height) => naturalGroundBlocked(x, z, radius, height, true),
+			standable: (x, z) => !this.hydrology.walkBlockedByWater(x, z)
+		};
 		this.scene.add(this.creatures.group);
 		this.removeTool = new RemoveTool({
 			trees: this.treeManager,
@@ -3733,7 +3748,8 @@ export class ThreeScene implements WorldRuntime {
 		x: number,
 		z: number,
 		radius?: number,
-		height?: number
+		height?: number,
+		rivers?: boolean
 	) => boolean;
 	/** Where the player stood before climbing on: always a safe place to get off. */
 	private readonly rideStart = new THREE.Vector3();
@@ -3846,13 +3862,15 @@ export class ThreeScene implements WorldRuntime {
 	}
 
 	private dismountSafe(x: number, z: number, feetY: number): boolean {
-		if (this.hydrology.walkBlockedByWater(x, z)) return false;
-		if (this.naturalGroundBlocked(x, z, PLAYER_BODY.collisionRadius, PLAYER_BODY.standingHeight))
+		// A river is fine to step down into (it can be waded); a deep lake isn't.
+		if (
+			this.naturalGroundBlocked(x, z, PLAYER_BODY.collisionRadius, PLAYER_BODY.standingHeight, true)
+		)
 			return false;
 		const y = this.worldSurfaceSampler.getSupportingSurfaceY(x, z, feetY + 1);
 		if (!Number.isFinite(y) || Math.abs(y - feetY) > RIDE_DISMOUNT_MAX_DROP) return false;
-		const pushed = this.creatures.resolvePlayer(x, z, y, y + PLAYER_BODY.standingHeight);
-		return pushed.x === x && pushed.z === z;
+		// Not inside another creature (players walk through them, but shouldn't land in one).
+		return !this.creatures.bodyAt(x, z, y, y + PLAYER_BODY.standingHeight);
 	}
 
 	/** Climbs off onto safe ground, and the mount goes back to its own life (Q9 A, Q19 A). */

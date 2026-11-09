@@ -69,7 +69,7 @@ describe('riding in the creature runtime', () => {
 		expect(r.intent.gait).toBe('run');
 	});
 
-	it('keeps the mount drawn and in the world however far it goes, and never pushes the rider', () => {
+	it('keeps the mount drawn and in the world however far it goes, and never counts it in the rider’s way', () => {
 		const c = world();
 		const { id } = biped(c);
 		c.mountRide(id);
@@ -78,13 +78,9 @@ describe('riding in the creature runtime', () => {
 		expect(c.logical.has(id)).toBe(true);
 		const seat = c.rideFrame()!;
 		expect(Math.hypot(seat.anchor.x, seat.anchor.z)).toBeGreaterThan(400);
-		const pushed = c.resolvePlayer(
-			seat.anchor.x,
-			seat.anchor.z,
-			seat.anchor.y - 1,
-			seat.anchor.y + 1
+		expect(c.bodyAt(seat.anchor.x, seat.anchor.z, seat.anchor.y - 1, seat.anchor.y + 1)).toBe(
+			false
 		);
-		expect(pushed).toEqual({ x: seat.anchor.x, z: seat.anchor.z });
 	});
 
 	it('puts the seat on top of the creature, following it', () => {
@@ -118,6 +114,55 @@ describe('riding in the creature runtime', () => {
 			offsets.push(seat.anchor.y - seat.steadyY);
 		}
 		expect(Math.max(...offsets) - Math.min(...offsets)).toBeGreaterThan(0.005);
+	});
+
+	it('passes through other creatures while ridden, and is a neighbour again once the rider gets off', () => {
+		const c = world();
+		const { id } = biped(c);
+		const spatial = (c as unknown as { spatial: { query(p: unknown, r: number): unknown[] } })
+			.spatial;
+		const r = c.logical.get(id)!;
+		c.mountRide(id);
+		frame(c);
+		// Wild creatures don't see it: nothing steers around it or gathers to it.
+		expect(spatial.query(r.position, 64)).not.toContain(r);
+		// Running straight along −Z (camera yaw 0) first, then another creature right in its path.
+		for (let i = 0; i < 60; i++) c.steerRide(FORWARD, 0, RUN, 1 / 30);
+		const other = [...c.logical.values()].find((o) => o !== r)!;
+		other.position = { x: r.position.x, y: r.position.y, z: r.position.z - 6 };
+		const startX = r.position.x;
+		for (let i = 0; i < 30; i++) {
+			c.steerRide(FORWARD, 0, RUN, 1 / 30);
+			other.position = { x: startX, y: other.position.y, z: other.position.z };
+		}
+		// Straight through it, not slid round it.
+		expect(Math.abs(r.position.x - startX)).toBeLessThan(0.01);
+		expect(r.position.z).toBeLessThan(other.position.z);
+		c.dismountRide();
+		c.update({ x: r.position.x, y: 0, z: r.position.z }, 0.1, 'high');
+		expect(spatial.query(r.position, 64)).toContain(r);
+	});
+
+	it('wades straight across a deep river with its rider, where a wild creature would turn back', () => {
+		const c = world();
+		const { id } = biped(c);
+		const r = c.logical.get(id)!;
+		c.mountRide(id);
+		for (let i = 0; i < 60; i++) c.steerRide(FORWARD, 0, RUN, 1 / 30);
+		// A deep river 10 m wide right across its path (it runs along −Z).
+		const near = r.position.z - 8;
+		const deep = (z: number) => z < near && z > near - 10;
+		const wild = { ...access, blocked: (_x: number, z: number) => deep(z) };
+		(c as unknown as { access: typeof access }).access = wild;
+		const stopped = { ...r.position };
+		for (let i = 0; i < 30; i++) c.steerRide(FORWARD, 0, RUN, 1 / 30);
+		// Without the rider's rules it can't go in.
+		expect(r.position.z).toBeGreaterThan(near - 0.01);
+		expect(r.position.z).toBeLessThan(stopped.z);
+		// With them (a river is never in the way when ridden), it carries on across and out.
+		c.rideAccess = { ...access, blocked: () => false, standable: () => true };
+		for (let i = 0; i < 60; i++) c.steerRide(FORWARD, 0, RUN, 1 / 30);
+		expect(r.position.z).toBeLessThan(near - 10);
 	});
 
 	it('gives the mount back to its herd where it was left (Q19 A)', () => {

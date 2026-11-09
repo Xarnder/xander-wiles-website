@@ -100,20 +100,41 @@ async function aimAtCreature(page: Page, big = false): Promise<void> {
 				page.evaluate((big) => {
 					const s = (window as unknown as TestWindow).forestScene;
 					const me = s.controller.worldPosition;
-					let best: { d: number; id: string } | null = null;
-					for (const [id] of s.creatures.live) {
+					const wanted = (id: string) => {
 						const r = s.creatures.logical.get(id);
-						if (!r) continue;
+						if (!r) return false;
 						const p = r.spawn.species.proportions;
 						const h =
 							(p.legLength + p.bodyDepth + p.neckLength + p.headSize) *
 							r.spawn.individual.sizeFactor;
 						const small = h <= 0.9 && r.spawn.species.bodyPlan.id === 'quadruped';
-						if (small === big || (big && h > 3)) continue;
-						const d = Math.hypot(r.position.x - me.x, r.position.z - me.z);
-						if (!best || d < best.d) best = { d, id };
+						return small !== big && !(big && h > 3);
+					};
+					const nearest = (ids: Iterable<string>) => {
+						let best: { d: number; id: string } | null = null;
+						for (const id of ids) {
+							const r = s.creatures.logical.get(id);
+							if (!r || !wanted(id)) continue;
+							const d = Math.hypot(r.position.x - me.x, r.position.z - me.z);
+							if (!best || d < best.d) best = { d, id };
+						}
+						return best;
+					};
+					const best = nearest(s.creatures.live.keys());
+					if (!best) {
+						// None drawn nearby (the herds near spawn differ by seed): go to the nearest one.
+						const far = nearest(s.creatures.logical.keys());
+						const r = far && s.creatures.logical.get(far.id);
+						if (r) {
+							const y = s.worldSurfaceSampler.getSupportingSurfaceY(
+								r.position.x + 3,
+								r.position.z,
+								Infinity
+							);
+							s.controller.restoreState({ x: r.position.x + 3, y: y + 1.7, z: r.position.z }, 0, 0);
+						}
+						return null;
 					}
-					if (!best) return null;
 					const live = s.creatures.live.get(best.id)!;
 					const p = live.compiled.object.position;
 					const mid = p.y + live.compiled.compilation.collision.height / 2;
