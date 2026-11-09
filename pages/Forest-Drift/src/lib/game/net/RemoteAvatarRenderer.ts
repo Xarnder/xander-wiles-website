@@ -38,6 +38,8 @@ interface Avatar {
 	colour: string;
 	walkPhase: number;
 	seenThisFrame: boolean;
+	/** The player's room slot (for finding the shooter of a pellet). */
+	slot: number;
 	/** Ranged weapons: the creature under this player's arm, drawn from its recipe. */
 	held: HeldCreatureView | null;
 	heldId: string | null;
@@ -116,6 +118,7 @@ export class RemoteAvatarRenderer {
 				this.applyIdentity(avatar, info.name, info.colour);
 			}
 			avatar.seenThisFrame = true;
+			avatar.slot = info.slot;
 			if (this.template && !avatar.character && !created) {
 				avatar.character = new CharacterInstance(this.template, info.colour, this.registerMaterial);
 				avatar.root.add(avatar.character.object);
@@ -276,6 +279,17 @@ export class RemoteAvatarRenderer {
 		this.template = null;
 	}
 
+	/**
+	 * Where pellets leave the mouth of the creature `slot` is holding, as drawn here (world space),
+	 * or null when they hold none or it isn't drawn.
+	 */
+	muzzleOf(slot: number, out: THREE.Vector3): THREE.Vector3 | null {
+		for (const avatar of this.avatars.values())
+			if (avatar.slot === slot && avatar.heldId !== null)
+				return avatar.held?.muzzleWorld(out) ?? null;
+		return null;
+	}
+
 	private createAvatar(name: string, colour: string): Avatar {
 		const root = new THREE.Group();
 		root.name = `remote-player:${name}`;
@@ -339,6 +353,7 @@ export class RemoteAvatarRenderer {
 			colour: '',
 			walkPhase: 0,
 			seenThisFrame: true,
+			slot: -1,
 			held: null,
 			heldId: null,
 			mount: null,

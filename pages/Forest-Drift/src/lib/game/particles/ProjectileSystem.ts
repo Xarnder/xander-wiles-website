@@ -1,16 +1,39 @@
 import * as THREE from 'three';
 import {
+	PROJECTILE_GRAVITY,
 	PROJECTILE_RADIUS,
+	PROJECTILE_SPEED,
 	projectileLifetimeMs,
 	sweepBody,
 	projectilePositionAt,
 	type Vec3Like
 } from '../player/creatureProjectile';
+import { remoteFlightMs, remoteOffsetWeight } from '../player/remotePellet';
 import { createParticleBurst, type ParticleEffectManager } from './ParticleEffectManager';
 import { CREATURE_PELLET_PUFF, CREATURE_PELLET_PUFF_ID } from './effects/creaturePellet';
 
 /** Most pellets in flight at once; more are refused (never allocated). */
 export const MAX_PROJECTILES = 64;
+/** The pellet as drawn, metres. */
+const DRAWN_RADIUS = PROJECTILE_RADIUS * 0.75;
+/** A pellet is never drawn smaller than this on screen, pixels (radius), so it reads at range. */
+const MIN_PIXEL_RADIUS = 3;
+/** …but never more than this many times its real size. */
+const MAX_SIZE_BOOST = 4;
+/** The streak trailing each pellet: its longest, metres (about 40 ms of flight), and opacity. */
+const STREAK_LENGTH = 1.4;
+const STREAK_OPACITY = 0.7;
+/** Further than this from where it's drawn starting, a remote pellet ignores the drawn mouth, m. */
+const MAX_MOUTH_GAP = 6;
+
+/** Where the camera is and how big a pixel is, for a pellet's minimum on-screen size. */
+export interface ProjectileView {
+	x: number;
+	y: number;
+	z: number;
+	/** Metres covered by one pixel at 1 m from the camera (2·tan(fov/2) / viewport height). */
+	metresPerPixel: number;
+}
 
 /** What a pellet ran into: the world, another player (local shots only), or nothing. */
 export type ProjectileImpact =
@@ -52,6 +75,11 @@ interface Pellet {
 	shooter: number | null;
 	/** Drawn on at least one frame (for `remoteDrawn`). */
 	drawn: boolean;
+	/** Remote pellets: when the message arrived (local clock) and how old it was then, ms. */
+	arrivedAt: number;
+	ageOnArrival: number;
+	/** Remote pellets: drawn mouth − true start point, faded out while catching up. */
+	offset: THREE.Vector3;
 }
 
 /**
@@ -62,12 +90,18 @@ interface Pellet {
 export class ProjectileSystem {
 	readonly group = new THREE.Group();
 	private readonly mesh: THREE.InstancedMesh;
+	/** A short tapered streak behind each pellet, same index, same colour. */
+	private readonly streaks: THREE.InstancedMesh;
 	private readonly pellets: Pellet[];
 	private readonly burst = createParticleBurst();
 	private readonly from = new THREE.Vector3();
 	private readonly to = new THREE.Vector3();
 	private readonly matrix = new THREE.Matrix4();
 	private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+	private readonly velocity = new THREE.Vector3();
+	private readonly turn = new THREE.Quaternion();
+	private readonly size = new THREE.Vector3();
+	private static readonly FORWARD = new THREE.Vector3(0, 0, 1);
 	private seed = 1;
 	/** Pellets launched since the scene started (diagnostics and tests). */
 	launched = 0;
@@ -92,13 +126,13 @@ export class ProjectileSystem {
 		registerMaterial: (m: THREE.Material) => void
 	) {
 		this.group.name = 'creature-pellets';
-		const geometry = new THREE.IcosahedronGeometry(PROJECTILE_RADIUS * 0.75, 1);
+		const geometry = new THREE.IcosahedronGeometry(DRAWN_RADIUS, 1);
 		const material = new THREE.MeshStandardMaterial({
 			roughness: 0.45,
 			metalness: 0,
 			// A light rim keeps pellets readable against any ground (accessibility).
 			emissive: new THREE.Color(0xffffff),
-			emissiveIntensity: 0.18
+			emissiveIntensity: 0.3
 		});
 		registerMaterial(material);
 		this.mesh = new THREE.InstancedMesh(geometry, material, MAX_PROJECTILES);
@@ -117,11 +151,33 @@ export class ProjectileSystem {
 				colour: new THREE.Color(),
 				shot: null,
 				shooter: null,
-				drawn: false
+				drawn: false,
+				arrivedAt: 0,
+				ageOnArrival: 0,
+				offset: new THREE.Vector3()
 			};
 		});
 		this.mesh.count = MAX_PROJECTILES;
 		this.group.add(this.mesh);
+		// Unit streak along +Z: thick at the pellet (z = 0), thin at the tail (z = −1).
+		const streakGeometry = new THREE.CylinderGeometry(1, 0.15, 1, 6, 1, true)
+			.rotateX(Math.PI / 2)
+			.translate(0, 0, -0.5);
+		const streakMaterial = new THREE.MeshBasicMaterial({
+			transparent: true,
+			opacity: STREAK_OPACITY,
+			depthWrite: false
+		});
+		registerMaterial(streakMaterial);
+		this.streaks = new THREE.InstancedMesh(streakGeometry, streakMaterial, MAX_PROJECTILES);
+		this.streaks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+		this.streaks.frustumCulled = false;
+		this.streaks.castShadow = false;
+		for (let i = 0; i < MAX_PROJECTILES; i++) {
+			this.streaks.setMatrixAt(i, this.hidden);
+			this.streaks.setColorAt(i, new THREE.Color(1, 1, 1));
+		}
+		this.group.add(this.streaks);
 		particles?.register(CREATURE_PELLET_PUFF);
 	}
 
@@ -132,17 +188,32 @@ export class ProjectileSystem {
 	}
 
 	/**
-	 * Draws another player's pellet, fired by `shooter` (online). Visual only: it stops at any body
-	 * but its shooter's, and never reports a hit. Returns false when the pool is full.
+	 * Draws another player's pellet, fired by `shooter` (online) and already `ageMs` old when its
+	 * message arrived at `nowMs`. It starts at `drawnMouth` (their creature's mouth as drawn here,
+	 * when known) and catches up with the true arc (`remotePellet.ts`), so the whole flight shows
+	 * and it still lands where and when it really does. Visual only: it stops at any body but its
+	 * shooter's, and never reports a hit. Returns false when the pool is full.
 	 */
 	spawnRemote(
 		origin: Vec3Like,
 		dir: Vec3Like,
 		colour: string,
 		nowMs: number,
-		shooter: number
+		ageMs: number,
+		shooter: number,
+		drawnMouth: Vec3Like | null = null
 	): boolean {
-		return this.launch(origin, dir, colour, nowMs, null, shooter);
+		const age = Number.isFinite(ageMs) ? Math.max(0, ageMs) : 0;
+		const index = this.launch(origin, dir, colour, nowMs - age, null, shooter, drawnMouth);
+		if (index < 0) return false;
+		const p = this.pellets[index];
+		p.arrivedAt = nowMs;
+		p.ageOnArrival = age;
+		if (drawnMouth) {
+			p.offset.set(drawnMouth.x - origin.x, drawnMouth.y - origin.y, drawnMouth.z - origin.z);
+			if (p.offset.length() > MAX_MOUTH_GAP) p.offset.set(0, 0, 0);
+		}
+		return true;
 	}
 
 	/**
@@ -156,17 +227,19 @@ export class ProjectileSystem {
 		nowMs: number,
 		shot: number | null = null
 	): boolean {
-		return this.launch(origin, dir, colour, nowMs, shot, null);
+		return this.launch(origin, dir, colour, nowMs, shot, null) >= 0;
 	}
 
+	/** Takes a pellet from the pool; its index, or −1 when the pool is full. */
 	private launch(
 		origin: Vec3Like,
 		dir: Vec3Like,
 		colour: string,
 		nowMs: number,
 		shot: number | null,
-		shooter: number | null
-	): boolean {
+		shooter: number | null,
+		puffAt: Vec3Like | null = null
+	): number {
 		let index = this.pellets.findIndex((p) => !p.active);
 		// Full: this player's own shot takes the slot of the oldest pellet someone else fired, so a
 		// busy room can't stop it from being drawn (and from hitting anyone).
@@ -178,7 +251,7 @@ export class ProjectileSystem {
 			}
 			index = oldest;
 		}
-		if (index < 0) return false;
+		if (index < 0) return -1;
 		const p = this.pellets[index];
 		p.active = true;
 		p.origin.set(origin.x, origin.y, origin.z);
@@ -188,15 +261,24 @@ export class ProjectileSystem {
 		p.shot = shot;
 		p.shooter = shooter;
 		p.drawn = false;
+		p.arrivedAt = nowMs;
+		p.ageOnArrival = 0;
+		p.offset.set(0, 0, 0);
 		p.colour.set(colour);
 		this.mesh.setColorAt(index, p.colour);
+		this.streaks.setColorAt(index, p.colour);
 		if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-		this.puff(origin, p.dir, 0.35);
+		if (this.streaks.instanceColor) this.streaks.instanceColor.needsUpdate = true;
+		this.puff(puffAt ?? origin, p.dir, 0.35);
 		this.launched++;
-		return true;
+		return index;
 	}
 
-	update(nowMs: number): void {
+	/**
+	 * Moves every pellet to `nowMs`. With `view`, pellets far from the camera are drawn a little
+	 * bigger so they never shrink below a couple of pixels.
+	 */
+	update(nowMs: number, view: ProjectileView | null = null): void {
 		const lifetime = projectileLifetimeMs();
 		let dirty = false;
 		let targets: ProjectileTarget[] | null = null;
@@ -205,7 +287,13 @@ export class ProjectileSystem {
 			const p = this.pellets[i];
 			if (!p.active) continue;
 			dirty = true;
-			const age = Math.min(lifetime, nowMs - p.firedAt);
+			// Remote pellets fly on their own clock while they catch up with the true arc.
+			const remote = p.shooter !== null;
+			const since = nowMs - p.arrivedAt;
+			const age = Math.min(
+				lifetime,
+				remote ? remoteFlightMs(p.ageOnArrival, since) : nowMs - p.firedAt
+			);
 			projectilePositionAt(p.origin, p.dir, p.checkedMs, this.from);
 			// Local shots: the first player the pellet meets this step, if any (Q13: the shooter's
 			// browser decides, the room checks).
@@ -247,12 +335,42 @@ export class ProjectileSystem {
 				this.stop(i, { point: { x: this.to.x, y: this.to.y, z: this.to.z }, kind: 'expired' });
 				continue;
 			}
-			this.matrix.makeTranslation(this.to.x, this.to.y, this.to.z);
-			this.mesh.setMatrixAt(i, this.matrix);
-			if (!p.drawn && p.shooter !== null) this.remoteDrawn++;
+			// Drawn from the shooter's creature as seen here, easing onto the true arc.
+			if (remote) this.to.addScaledVector(p.offset, remoteOffsetWeight(since));
+			this.draw(i, p, age, view);
+			if (!p.drawn && remote) this.remoteDrawn++;
 			p.drawn = true;
 		}
-		if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
+		if (dirty) {
+			this.mesh.instanceMatrix.needsUpdate = true;
+			this.streaks.instanceMatrix.needsUpdate = true;
+		}
+	}
+
+	/** Places pellet `i` at `this.to` with its streak trailing back along its flight. */
+	private draw(i: number, p: Pellet, age: number, view: ProjectileView | null): void {
+		let boost = 1;
+		if (view && view.metresPerPixel > 0) {
+			const distance = Math.hypot(this.to.x - view.x, this.to.y - view.y, this.to.z - view.z);
+			const pixels = DRAWN_RADIUS / (distance * view.metresPerPixel);
+			if (pixels < MIN_PIXEL_RADIUS) boost = Math.min(MAX_SIZE_BOOST, MIN_PIXEL_RADIUS / pixels);
+		}
+		this.matrix.makeScale(boost, boost, boost).setPosition(this.to);
+		this.mesh.setMatrixAt(i, this.matrix);
+		const seconds = age / 1000;
+		this.velocity
+			.set(
+				p.dir.x * PROJECTILE_SPEED,
+				p.dir.y * PROJECTILE_SPEED - PROJECTILE_GRAVITY * seconds,
+				p.dir.z * PROJECTILE_SPEED
+			)
+			.normalize();
+		// Never longer than the flight so far, so it doesn't reach back behind the mouth.
+		const length = Math.min(STREAK_LENGTH, PROJECTILE_SPEED * seconds);
+		const thickness = DRAWN_RADIUS * 0.9 * boost;
+		this.turn.setFromUnitVectors(ProjectileSystem.FORWARD, this.velocity);
+		this.matrix.compose(this.to, this.turn, this.size.set(thickness, thickness, length));
+		this.streaks.setMatrixAt(i, this.matrix);
 	}
 
 	/** Removes this player's pellet `shot` (the room refused it, so nobody else sees it). */
@@ -260,8 +378,7 @@ export class ProjectileSystem {
 		const index = this.pellets.findIndex((p) => p.active && p.shot === shot);
 		if (index < 0) return false;
 		this.pellets[index].active = false;
-		this.mesh.setMatrixAt(index, this.hidden);
-		this.mesh.instanceMatrix.needsUpdate = true;
+		this.hide(index);
 		return true;
 	}
 
@@ -270,16 +387,21 @@ export class ProjectileSystem {
 		for (let i = 0; i < this.pellets.length; i++)
 			if (this.pellets[i].active) {
 				this.pellets[i].active = false;
-				this.mesh.setMatrixAt(i, this.hidden);
+				this.hide(i);
 			}
+	}
+
+	private hide(index: number): void {
+		this.mesh.setMatrixAt(index, this.hidden);
+		this.streaks.setMatrixAt(index, this.hidden);
 		this.mesh.instanceMatrix.needsUpdate = true;
+		this.streaks.instanceMatrix.needsUpdate = true;
 	}
 
 	private stop(index: number, impact: ProjectileImpact): void {
 		const p = this.pellets[index];
 		p.active = false;
-		this.mesh.setMatrixAt(index, this.hidden);
-		this.mesh.instanceMatrix.needsUpdate = true;
+		this.hide(index);
 		if (impact.kind !== 'expired') {
 			if (impact.kind === 'world') this.worldHits++;
 			this.puff(impact.point, p.dir, 1);
@@ -302,9 +424,11 @@ export class ProjectileSystem {
 	}
 
 	dispose(): void {
-		this.mesh.geometry.dispose();
-		(this.mesh.material as THREE.Material).dispose();
-		this.mesh.dispose();
+		for (const mesh of [this.mesh, this.streaks]) {
+			mesh.geometry.dispose();
+			(mesh.material as THREE.Material).dispose();
+			mesh.dispose();
+		}
 		this.group.removeFromParent();
 	}
 }

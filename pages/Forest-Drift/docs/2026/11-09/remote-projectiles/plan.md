@@ -1,6 +1,6 @@
 # Plan: other players' pellets, visible and efficient
 
-**Status (2026-11-09):** Phase 1a (§0, the reason other players saw no pellet) is **built**. Everything else is still a plan.
+**Status (2026-11-09):** Phases 1a (§0), 1b (§4.2) and 2 (§4.3) are **built**. Phase 0's counters are partly built (`remoteDrawn`). Phase 3 is still a plan. See §9.
 
 **Goal:** in multiplayer, everyone clearly sees each pellet another player fires. It leaves the shooter's creature, flies its arc, and stops where it lands. The network sends **one message per shot** and never streams a pellet's position.
 
@@ -233,3 +233,36 @@ The room knows every player's last pose. It can skip sending `shot` to players m
 ## 8. Rollback
 
 Phases 1 and 2 are client only. A const `REMOTE_PELLET_CATCH_UP = false` in `remotePellet.ts` falls back to today's spawn-at-age behaviour, and the streaks have their own const. Phase 3 needs the Worker and site deployed together. Rooms ignore an unknown `speed` field, and an older client ignores it in `shot`.
+
+## 9. What was built (2026-11-09)
+
+**Phase 1b: the whole flight, from the creature you see**
+- `player/remotePellet.ts` (pure, unit-tested):
+  - `remoteFlightMs(age, sinceArrival)` is the display clock.
+  - `remoteOffsetWeight(sinceArrival)` fades the start offset.
+  - `REMOTE_CATCH_UP_MS` is 150, and `REMOTE_PELLET_CATCH_UP` is the rollback switch.
+- `ProjectileSystem.spawnRemote(origin, dir, colour, nowMs, ageMs, shooter, drawnMouth)`:
+  - It flies on that clock and is drawn from the drawn mouth, easing onto the true arc.
+  - Collisions sweep the true arc, so a wall crossed during the skipped part still stops it at the true point.
+  - An offset over 6 m is ignored.
+- `RemoteAvatarRenderer.muzzleOf(slot)` gives the shooter's held creature's mouth as drawn. `MultiplayerSession.onShot` passes it through `remoteShot`.
+
+**Phase 2: readability (all pellets)**
+- A tapered streak in the pellet's colour trails each pellet. It's one extra instanced draw call, up to 1.4 m long, and never longer than the flight so far.
+- Pellets are never drawn under 3 px radius (at most 4× their size), using the camera passed to `update` (`ThreeScene.projectileView`).
+- Glow is slightly brighter (emissive 0.3).
+
+**Tests**
+- Unit:
+  - `remotePellet.spec.ts`: starts at 0, exactly on the arc after catching up, only moves forward, and the offset fades out.
+  - `ProjectileSystem.spec.ts`:
+    - A late pellet is drawn first at the drawn mouth and moves forward every frame, then lands exactly on the shooter's arc.
+    - A wall crossed during the skipped part still stops it, and it's never drawn past the wall.
+    - Far-off pellets are drawn bigger.
+- New two-browser e2e, "everyone else sees a pellet fly through the air, even 200 ms behind":
+  - Playwright delays everything the room sends the watcher by 200 ms (`addLag`, via `routeWebSocket`).
+  - The owner fires across the watcher's view.
+  - The watcher must draw the pellet on every frame from first to last, starting within 1.5 m of the owner, moving along its path every frame, and covering at least 15 m.
+  - The software-rendered test browsers run at about 5 fps, so the check uses every frame rather than a fixed frame count.
+- In-app browser: a remote pellet arriving 200 ms late, paused mid-flight, shows as a clear coloured streak with a bright head.
+- Still one message per shot. No protocol change and no Worker deploy.

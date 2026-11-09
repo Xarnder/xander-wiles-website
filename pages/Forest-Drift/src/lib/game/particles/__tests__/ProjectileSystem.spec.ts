@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { MAX_PROJECTILES, ProjectileSystem, type ProjectileImpact } from '../ProjectileSystem';
-import type { Vec3Like } from '../../player/creatureProjectile';
+import { projectilePositionAt, type Vec3Like } from '../../player/creatureProjectile';
+import { REMOTE_CATCH_UP_MS } from '../../player/remotePellet';
+
+/** Where pellet `index` is drawn and how big (its instance matrix), or null when hidden. */
+function drawn(projectiles: ProjectileSystem, index = 0) {
+	const mesh = projectiles.group.children[0] as THREE.InstancedMesh;
+	const matrix = new THREE.Matrix4();
+	mesh.getMatrixAt(index, matrix);
+	const position = new THREE.Vector3(),
+		scale = new THREE.Vector3();
+	matrix.decompose(position, new THREE.Quaternion(), scale);
+	return scale.x === 0 ? null : { position, scale: scale.x };
+}
 
 /** A flat world at y = 0, optionally with a wall across −Z at `wallZ`. */
 function system(wallZ: number | null = null) {
@@ -61,7 +74,7 @@ describe('ProjectileSystem', () => {
 	it("never reports hits for other players' pellets", () => {
 		const { projectiles, impacts } = system();
 		projectiles.targets = () => [{ slot: 4, x: 0, y: 0, z: -10 }];
-		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 2);
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 0, 2);
 		run(projectiles);
 		expect(impacts.every((i) => i.kind !== 'player')).toBe(true);
 	});
@@ -100,7 +113,7 @@ describe('ProjectileSystem', () => {
 	it("stops other players' pellets at bodies, this player's included, without reporting", () => {
 		const { projectiles, impacts } = system();
 		projectiles.bodies = () => [{ slot: -1, x: 0, y: 0, z: -10 }];
-		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 2);
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 0, 2);
 		run(projectiles);
 		expect(impacts.map((i) => i.kind)).toEqual(['body']);
 		expect(projectiles.playerHits).toBe(0);
@@ -111,7 +124,7 @@ describe('ProjectileSystem', () => {
 		// Slot 2 fired from 0.4 m in front of their eye, well inside their body as drawn here.
 		const shooter = { slot: 2, x: 0, y: 0, z: 0 };
 		projectiles.bodies = () => [shooter, { slot: -1, x: 0, y: 0, z: -10 }];
-		projectiles.spawnRemote({ x: 0, y: 1.5, z: -0.4 }, forward, '#ffcc00', 0, 2);
+		projectiles.spawnRemote({ x: 0, y: 1.5, z: -0.4 }, forward, '#ffcc00', 0, 0, 2);
 		projectiles.update(100);
 		// Still flying, drawn about 3.5 m out.
 		expect(projectiles.activeCount).toBe(1);
@@ -122,5 +135,60 @@ describe('ProjectileSystem', () => {
 		expect(impacts).toHaveLength(1);
 		expect(impacts[0].kind).toBe('body');
 		expect(impacts[0].point.z).toBeLessThan(-9);
+	});
+
+	it("draws a late pellet from the shooter's creature as seen here, then on its true arc", () => {
+		const { projectiles } = system();
+		const mouth = { x: 0.6, y: 1.2, z: 0.3 };
+		// Arrived at 1000 ms, already 200 ms into its flight.
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 1000, 200, 2, mouth);
+		projectiles.update(1000);
+		const first = drawn(projectiles)!;
+		expect(first.position.distanceTo(new THREE.Vector3(mouth.x, mouth.y, mouth.z))).toBeLessThan(
+			1e-6
+		);
+		expect(projectiles.remoteDrawn).toBe(1);
+		// Every frame further along than the last while it catches up.
+		let lastZ = first.position.z;
+		for (let t = 1016; t < 1000 + REMOTE_CATCH_UP_MS; t += 16) {
+			projectiles.update(t);
+			const z = drawn(projectiles)!.position.z;
+			expect(z).toBeLessThan(lastZ);
+			lastZ = z;
+		}
+		// Caught up: exactly where the shooter's own pellet is, 200 ms + 150 ms into the flight.
+		projectiles.update(1000 + REMOTE_CATCH_UP_MS);
+		const truth = projectilePositionAt(origin, forward, 200 + REMOTE_CATCH_UP_MS, {
+			x: 0,
+			y: 0,
+			z: 0
+		});
+		expect(
+			drawn(projectiles)!.position.distanceTo(new THREE.Vector3(truth.x, truth.y, truth.z))
+		).toBeLessThan(1e-6);
+	});
+
+	it('still stops a late pellet at a wall it crossed before arriving, never drawn beyond it', () => {
+		const { projectiles, impacts } = system(-3);
+		// 200 ms old: the true pellet is already 7 m out, past the wall at 3 m.
+		projectiles.spawnRemote(origin, forward, '#ffcc00', 0, 200, 2, { x: 0, y: 1.5, z: 0 });
+		for (let t = 0; t <= 1500 && projectiles.activeCount > 0; t += 16) {
+			projectiles.update(t);
+			const at = drawn(projectiles);
+			if (at) expect(at.position.z).toBeGreaterThan(-3.1);
+		}
+		expect(impacts.map((i) => i.kind)).toEqual(['world']);
+		expect(impacts[0].point.z).toBeCloseTo(-3, 1);
+	});
+
+	it('draws far-off pellets a little bigger so they never shrink below a couple of pixels', () => {
+		const { projectiles } = system();
+		projectiles.spawn({ x: 0, y: 1.5, z: -30 }, forward, '#ffcc00', 0);
+		// 70° view, 560 px tall: 2.5 mm per pixel at 1 m, so 7.5 cm per pixel at 30 m.
+		const view = { x: 0, y: 1.5, z: 0, metresPerPixel: 0.0025 };
+		projectiles.update(16, view);
+		expect(drawn(projectiles)!.scale).toBeGreaterThan(1.5);
+		projectiles.update(32, { ...view, z: -29 });
+		expect(drawn(projectiles)!.scale).toBe(1);
 	});
 });

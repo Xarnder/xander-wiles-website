@@ -359,3 +359,12 @@ The calm is local to each player's own view of the herd.
 - `remoteDrawn` counts remote pellets actually drawn, and the e2e now requires it. That check fails without the fix.
 
 It's client only: no protocol change and no Worker deploy, and each shot is still one message from the shooter and one relayed by the room. Next steps, such as starting the pellet from the creature the viewer sees and adding streaks, are in `docs/2026/11-09/remote-projectiles/plan.md`.
+
+## Other players' pellets fly the whole way, from the creature you see (2026-11-09)
+
+A pellet's message arrives 100–250 ms after it was fired. It used to be drawn from part-way along its path, ahead of the shooter as drawn here. Now it starts at the mouth of the creature you see the shooter holding, and catches up with the true arc over 150 ms (`player/remotePellet.ts`). It still lands where and when it really does, and walls it crossed in the meantime still stop it.
+
+Every pellet, yours too, now has a short streak in its colour, can't shrink below about 3 px on screen, and glows a little brighter.
+
+A new two-browser e2e adds 200 ms of lag to one player and checks they draw the other's pellet flying the whole way across their view. Details are in `docs/2026/11-09/remote-projectiles/plan.md` §9. It's client only, with no protocol change and no Worker deploy.
+

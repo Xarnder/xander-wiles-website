@@ -114,13 +114,17 @@ export interface SceneMultiplayerContext {
 		self: boolean
 	) => void;
 	/** Ranged weapons: someone else's pellet, `ageMs` after it was fired. */
-	/** Someone else's pellet, fired by `slot`, already `ageMs` old. */
+	/**
+	 * Someone else's pellet, fired by `slot`, already `ageMs` old. `mouth`: their held creature's
+	 * mouth as drawn here, where it's drawn leaving from (null when it isn't drawn).
+	 */
 	remoteShot?: (
 		origin: Vec3Tuple,
 		dir: Vec3Tuple,
 		colour: string,
 		ageMs: number,
-		slot: number
+		slot: number,
+		mouth: Vec3Tuple | null
 	) => void;
 	/** Ranged weapons: the room's verdict on this player's pellet `shot`. */
 	shotResult?: (result: {
@@ -244,6 +248,7 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	private feed: WorldOpFeed | null = null;
 	private context: SceneMultiplayerContext | null = null;
 	private avatars: RemoteAvatarRenderer | null = null;
+	private readonly mouthScratch = new THREE.Vector3();
 	private pendingEnv: SharedEnvironment | null = null;
 	private pendingWelcome: WelcomeInfo | null = null;
 	private envTimer: ReturnType<typeof setTimeout> | null = null;
@@ -378,12 +383,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			onScores: (message) => this.applyScores(message),
 			onShot: (message) => {
 				const age = this.net.serverNow() - message.at;
+				const mouth = this.avatars?.muzzleOf(message.slot, this.mouthScratch) ?? null;
 				this.context?.remoteShot?.(
 					message.origin,
 					message.dir,
 					message.colour,
 					Number.isFinite(age) ? Math.max(0, age) : 0,
-					message.slot
+					message.slot,
+					mouth ? [mouth.x, mouth.y, mouth.z] : null
 				);
 			},
 			onShotResult: (message) => {

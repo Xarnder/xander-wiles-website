@@ -409,7 +409,19 @@ test('online carrying: the room arbitrates and everyone sees who holds what', as
 	expect(refused).toEqual({ ok: false, reason: 'rule' });
 });
 
-async function publishAndJoin(browser: Browser) {
+/**
+ * Delays everything the room sends `page` by `ms` (as a slow connection would), so remote pellets
+ * arrive late. Playwright proxies the socket; what the page sends goes straight through.
+ */
+async function addLag(page: Page, ms: number) {
+	await page.context().routeWebSocket(/.*/, (socket) => {
+		const room = socket.connectToServer();
+		room.onMessage((message) => setTimeout(() => socket.send(message), ms));
+		socket.onMessage((message) => room.send(message));
+	});
+}
+
+async function publishAndJoin(browser: Browser, options: { editorLagMs?: number } = {}) {
 	const owner = await newPlayer(browser);
 	await owner.getByRole('button', { name: '← Main menu', exact: true }).click();
 	await owner.getByRole('button', { name: 'Online', exact: true }).click();
@@ -422,6 +434,7 @@ async function publishAndJoin(browser: Browser) {
 	await owner.getByRole('button', { name: 'Join as owner', exact: true }).click();
 	await joinWorld(owner, 'Owner');
 	const editor = await newPlayer(browser);
+	if (options.editorLagMs) await addLag(editor, options.editorLagMs);
 	await editor.goto(editorLink);
 	await joinWorld(editor, 'Editor');
 	await walking(owner);
@@ -532,4 +545,81 @@ test('Lab-placed creatures are shared online: placed, carried and put down for e
 		)
 		.toBeLessThan(2);
 	expect(Math.hypot(spot.x - target.x, spot.z - target.z)).toBeGreaterThan(6);
+});
+
+test('everyone else sees a pellet fly through the air, even 200 ms behind', async ({ browser }) => {
+	test.setTimeout(600_000);
+	// The watcher hears everything from the room 200 ms late, so each pellet arrives 200 ms old.
+	const { owner, editor: watcher } = await publishAndJoin(browser, { editorLagMs: 200 });
+	await owner.waitForTimeout(3000);
+	await pickUp(owner);
+
+	// The owner stands facing −Z, aiming a little up; the watcher stands 12 m off to the side of
+	// the pellet's path, looking across it (−X), so the whole 30 m flight crosses their view.
+	const ownerFeet = await owner.evaluate(() => {
+		const s = (window as unknown as GameWindow).__forestSession.scene;
+		const p = s.controller.worldPosition;
+		const y = s.worldSurfaceSampler.getSupportingSurfaceY(p.x, p.z, p.y);
+		s.controller.restoreState({ x: p.x, y: y + 1.7, z: p.z }, 0, 0.2);
+		return { x: p.x, y, z: p.z };
+	});
+	await watcher.evaluate(
+		({ x, z }) => {
+			const s = (window as unknown as GameWindow).__forestSession.scene;
+			const y = s.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity);
+			s.controller.restoreState({ x, y: y + 1.7, z }, Math.PI / 2, 0);
+		},
+		{ x: ownerFeet.x + 12, z: ownerFeet.z - 12 }
+	);
+	// Long enough for each to see the other standing where they are.
+	await owner.waitForTimeout(2500);
+
+	// The watcher records, every frame, where it draws a pellet (none of its own are in the air).
+	const recording = watcher.evaluate(async () => {
+		type Pellets = { instanceMatrix: { array: ArrayLike<number> }; count: number };
+		const s = (window as unknown as GameWindow).__forestSession.scene as unknown as {
+			scene: { getObjectByName(name: string): { children: Pellets[] } | undefined };
+		};
+		const mesh = s.scene.getObjectByName('creature-pellets')!.children[0];
+		const frames: ({ x: number; y: number; z: number } | null)[] = [];
+		const start = performance.now();
+		while (performance.now() - start < 3000) {
+			await new Promise(requestAnimationFrame);
+			const m = mesh.instanceMatrix.array;
+			let drawn: { x: number; y: number; z: number } | null = null;
+			for (let i = 0; i < mesh.count && !drawn; i++) {
+				const o = i * 16;
+				if (m[o] !== 0) drawn = { x: m[o + 12], y: m[o + 13], z: m[o + 14] };
+			}
+			frames.push(drawn);
+		}
+		return frames;
+	});
+	await owner.waitForTimeout(300);
+	await owner.evaluate(() => {
+		const s = (window as unknown as GameWindow).__forestSession.scene;
+		s.setCarryTrigger(true);
+		s.setCarryTrigger(false);
+	});
+	const frames = await recording;
+
+	// Drawn on every one of the watcher's frames from when it appears to when it ends (however
+	// few that is at this test's frame rate: two software-rendered browsers manage about 5 fps)…
+	const from = frames.findIndex((f) => f !== null);
+	const to = frames.findLastIndex((f) => f !== null);
+	expect(from).toBeGreaterThanOrEqual(0);
+	const flight = frames.slice(from, to + 1);
+	expect(flight.every((f) => f !== null)).toBe(true);
+	expect(flight.length).toBeGreaterThanOrEqual(2);
+	const path = flight as { x: number; y: number; z: number }[];
+	// …leaving from the owner as the watcher sees them, not from part-way along its path…
+	expect(Math.hypot(path[0].x - ownerFeet.x, path[0].z - ownerFeet.z)).toBeLessThan(1.5);
+	// …and moving through the air along −Z, every frame further than the last, well down range.
+	for (let i = 1; i < path.length; i++) expect(path[i].z).toBeLessThan(path[i - 1].z);
+	expect(path[0].z - path.at(-1)!.z).toBeGreaterThan(15);
+	expect(
+		await watcher.evaluate(
+			() => (window as unknown as GameWindow).__forestSession.scene.projectiles.remoteDrawn
+		)
+	).toBe(1);
 });

@@ -27,7 +27,7 @@ import { CREATURE_RIDING_ENABLED, RIDE_REACH, type RideSeatKind } from './creatu
 import type { MountSeat } from './player/FirstPersonController';
 import type { CameraBody } from './player/ThirdPersonCamera';
 import type { LocalRidePose } from './player/PlayerInteractionView';
-import { ProjectileSystem } from './particles/ProjectileSystem';
+import { ProjectileSystem, type ProjectileView } from './particles/ProjectileSystem';
 import { CarryHints } from './creatures/CarryHints';
 import {
 	WaypointSystem,
@@ -2242,13 +2242,15 @@ export class ThreeScene implements WorldRuntime {
 					this.waypoints.setShared(list);
 				},
 				applySharedWaypoints: (message) => this.waypoints.applyShared(message),
-				remoteShot: (origin, dir, colour, ageMs, slot) =>
+				remoteShot: (origin, dir, colour, ageMs, slot, mouth) =>
 					this.projectiles.spawnRemote(
 						{ x: origin[0], y: origin[1], z: origin[2] },
 						{ x: dir[0], y: dir[1], z: dir[2] },
 						colour,
-						performance.now() - ageMs,
-						slot
+						performance.now(),
+						ageMs,
+						slot,
+						mouth ? { x: mouth[0], y: mouth[1], z: mouth[2] } : null
 					),
 				shotResult: ({ shot, hit, refused, charges }) => {
 					if (hit) this.carryFeedback?.({ type: 'hit' });
@@ -3770,6 +3772,16 @@ export class ThreeScene implements WorldRuntime {
 		};
 	}
 
+	/** The camera and pixel size, so far-off pellets are drawn big enough to see. */
+	private projectileView(): ProjectileView | null {
+		const height = this.renderer.domElement.clientHeight;
+		if (!(height > 0)) return null;
+		const at = this.camera.getWorldPosition(this.projectileViewScratch);
+		const tanHalf = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+		return { x: at.x, y: at.y, z: at.z, metresPerPixel: (2 * tanHalf) / height };
+	}
+	private readonly projectileViewScratch = new THREE.Vector3();
+
 	/** The mount, for the third-person camera to keep out of (none while on foot). */
 	private rideCameraBodies(): CameraBody[] {
 		const body = this.creatures?.rideCameraBody();
@@ -5048,7 +5060,7 @@ export class ThreeScene implements WorldRuntime {
 		this.surfaceBinder.flush();
 		this.updateHeldCreature(deltaSeconds);
 		this.updateWaypoints(deltaSeconds);
-		this.projectiles.update(performance.now());
+		this.projectiles.update(performance.now(), this.projectileView());
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
 		this.fulfilCaptureRequest();
