@@ -351,7 +351,6 @@
                         </div>
                         <div id="ai-attachments" class="ai-attachments" hidden></div>
                         <button type="button" id="ai-use-open" class="btn btn-ghost" hidden>Use the open note</button>
-                        <div id="ai-thread" class="ai-thread" hidden></div>
                         <label class="ai-field" id="ai-selection-field">
                             <span>Passage to expand</span>
                             <textarea id="ai-selection" rows="4" placeholder="Paste a paragraph, or select it in Raw before opening AI"></textarea>
@@ -360,14 +359,14 @@
                             <span id="ai-instruction-label">Input text box</span>
                             <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
                         </label>
+                        <div id="ai-thread" class="ai-thread" hidden></div>
                         <p id="ai-cost-preview" class="ai-cost" hidden></p>
                         <p id="ai-cost" class="ai-cost" hidden></p>
                         <div id="ai-result-wrap" class="ai-result" hidden>
                             <div id="ai-reply" class="ai-reply" hidden></div>
                             <div id="ai-diff" class="ai-diff" hidden></div>
-                            <p class="ai-review-hint">Save applies these changes and saves to Drive. Discard keeps your note unchanged. Apply starts normal autosave.</p>
+                            <p class="ai-review-hint">Save applies these changes and saves to Drive. Discard keeps your note unchanged.</p>
                             <div class="ai-result-actions">
-                                <button type="button" id="ai-accept" class="btn btn-primary">Apply (autosaves)</button>
                                 <button type="button" id="ai-discard" class="btn btn-ghost">Discard</button>
                             </div>
                         </div>
@@ -394,8 +393,9 @@
                         </details>
                     </div>
                     <div class="ai-send-dock">
-                        <button type="button" id="ai-save" class="btn btn-ghost" disabled>Save</button>
+                        <p id="ai-wait-timer" class="ai-wait-timer" hidden></p>
                         <button type="button" id="ai-run" class="btn btn-primary">Send</button>
+                        <button type="button" id="ai-save" class="btn btn-primary" disabled hidden>Save</button>
                     </div>
                 </div>
             </section>
@@ -554,7 +554,7 @@
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here. Tap Preview content and choose Above / Below to place it.</li>
                         <li>The toolbar <strong>Add list</strong> inserts a normal markdown list. In <strong>Preview</strong> it stays there and opens the first point. In <strong>List</strong>, <strong>Convert to custom list</strong> turns that list into a ranked <code>mdlist</code>.</li>
-                        <li>In Finder or Pinned, open a note’s menu and choose <strong>Open in AI</strong>. Mark it <strong>Context</strong> to ask about it, or <strong>Edit</strong> to rewrite only that file. An edit shows the previous text and the proposal with removals and additions highlighted. Accept writes the note; Drive still updates through the normal save.</li>
+                        <li>In Finder or Pinned, open a note’s menu and choose <strong>Open in AI</strong>. Mark it <strong>Context</strong> to ask about it, or <strong>Edit</strong> to rewrite only that file. An edit shows the previous text and the proposal with removals and additions highlighted. Choose Save to apply and save the proposal to Drive, or Discard to leave your note unchanged.</li>
                         <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder. Pinned opens first after sign-in.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>

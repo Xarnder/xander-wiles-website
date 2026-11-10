@@ -8383,3 +8383,25 @@ input[type="range"].file-color-hue::-moz-range-thumb { background: #fff; border-
 #ai-save:disabled { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); opacity: 0.65; cursor: not-allowed; }
 
 .ai-review-hint { margin: 4px 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.4; }
+
+/* One primary action before generation; retry left, save right after a response. */
+.ai-send-dock:not(.has-response) { grid-template-columns: minmax(0, 1fr); }
+.ai-send-dock.has-response #ai-run:not(:disabled) {
+    background: #343434;
+    color: #f2f2f2;
+    border: 1px solid #595959;
+    box-shadow: none;
+}
+.ai-send-dock #ai-save:not(:disabled) { background: #fff; color: #111; border: 1px solid #fff; }
+
+.ai-content-scroll.is-processing { opacity: 0.5; filter: grayscale(1); cursor: wait; }
+.ai-content-scroll.is-processing :is(button, select, textarea, summary) { cursor: wait; }
+.ai-wait-timer {
+    grid-column: 1 / -1;
+    margin: 0;
+    text-align: center;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}
