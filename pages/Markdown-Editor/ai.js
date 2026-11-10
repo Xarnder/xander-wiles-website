@@ -4,6 +4,7 @@
  * Drive writes stay in the existing editor save path.
  */
 
+import { insertAdditions } from './ai-insertions.js';
 import { parseDocument } from './lists.js';
 
 export const AI_TASKS = Object.freeze(['expand', 'header', 'summarize', 'revise']);
@@ -89,7 +90,10 @@ export function previewAiCost(input) {
 
     let inputChars = instruction.length + contextChars + 200;
     let outputChars = 400;
-    if (task === 'context') {
+    if (input?.addOnly) {
+        inputChars += note.length + note.split('\n').length * 24 + 200;
+        outputChars = Math.max(400, instruction.length * 4);
+    } else if (task === 'context') {
         outputChars = Math.min(1600, Math.max(240, instruction.length * 4 || 400));
     } else if (task === 'expand') {
         inputChars += note.length + passage.length + 180;
@@ -423,6 +427,16 @@ export function stampAiDateTags(markdown, now = new Date()) {
 }
 
 export function applyAiProposal(input) {
+    if (input?.addOnly) {
+        try {
+            const original = String(input.original || '');
+            const markdown = insertAdditions(original, input.additions, stampAiDateTags);
+            const error = fenceSafetyError(original, markdown);
+            return error ? { ok: false, error } : { ok: true, markdown };
+        } catch (err) {
+            return { ok: false, error: `${err.message} No changes were applied. Retry only if you choose.` };
+        }
+    }
     const result = applyAiProposalContent(input);
     if (!result.ok) return result;
     return { ...result, markdown: stampAiDateTags(result.markdown) };

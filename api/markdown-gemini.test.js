@@ -26,3 +26,36 @@ for (const provider of ['gemini', 'openai']) {
         assert.match(sent.system_instruction || sent.instructions, /note is empty/);
     });
 }
+
+for (const provider of ['gemini', 'openai']) {
+    test(`${provider}: add only sends numbered context and returns insertions without regeneration`, async (t) => {
+        const key = provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
+        const previous = process.env[key];
+        process.env[key] = 'test-key';
+        t.after(() => { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
+        let calls = 0;
+        let output = '{"additions":[{"afterLine":1,"text":"New text"}]}';
+        t.mock.method(globalThis, 'fetch', async (url, options) => {
+            if (url.includes('drive/v3/about')) return Response.json({ user: { emailAddress: 'xanderwiles@gmail.com' } });
+            calls += 1;
+            const sent = JSON.parse(options.body);
+            assert.deepEqual(JSON.parse(sent.input).readOnlyNote, [{ line: 1, text: 'Original' }]);
+            assert.match(sent.system_instruction || sent.instructions, /ONLY new text/);
+            return Response.json(provider === 'gemini' ? { status: 'completed', output_text: output }
+                : { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: output }] }] });
+        });
+        const request = () => new Request('http://localhost/api/markdown-gemini', {
+            method: 'POST', headers: { Authorization: 'Bearer fixture' },
+            body: JSON.stringify({ provider, task: 'revise', addOnly: true, markdown: 'Original', instruction: 'Add a paragraph' }),
+        });
+        const good = await handler(request());
+        assert.equal(good.status, 200);
+        assert.deepEqual((await good.json()).additions, [{ afterLine: 1, text: 'New text' }]);
+        assert.equal(calls, 1);
+        output = 'Here is a full rewrite';
+        const bad = await handler(request());
+        assert.equal(bad.status, 502);
+        assert.match((await bad.json()).error, /invalid insertion JSON/);
+        assert.equal(calls, 2, 'invalid output must not trigger automatic regeneration');
+    });
+}

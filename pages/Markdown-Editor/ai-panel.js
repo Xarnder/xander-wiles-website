@@ -25,7 +25,7 @@ const TASK_COPY = {
     },
     revise: {
         instructionLabel: 'Message',
-        instructionPlaceholder: 'Say what to change in the file marked Edit',
+        instructionPlaceholder: 'Describe what to add or change in the selected note',
         instructionRequired: true,
     },
 };
@@ -40,7 +40,7 @@ let nodes = null;
  *   onGoFinder: Function,
  * }} */
 let deps = null;
-/** @type {Array<{ id: string, name: string, content: string, role: 'context' | 'edit' }>} */
+/** @type {Array<{ id: string, name: string, content: string, role: 'context' | 'add' | 'edit' }>} */
 let attachments = [];
 /** @type {null | {
  *   kind: 'edit' | 'reply',
@@ -77,6 +77,7 @@ function readEls() {
         active: document.getElementById('ai-active'),
         title: document.getElementById('ai-file-title'),
         attachments: document.getElementById('ai-attachments'),
+        modeControls: document.getElementById('ai-mode-controls'),
         useOpen: document.getElementById('ai-use-open'),
         thread: document.getElementById('ai-thread'),
         selectionField: document.getElementById('ai-selection-field'),
@@ -191,6 +192,7 @@ function refreshCostPreview() {
     const source = asking ? null : editing || (doc?.fileId ? doc : null);
     const text = previewAiCost({
         provider: nodes.provider?.value,
+        addOnly: !asking && (editing?.role || 'add') === 'add',
         task: asking ? 'context' : task,
         markdown: source?.content || '',
         selection: nodes.selection?.value || '',
@@ -202,7 +204,7 @@ function refreshCostPreview() {
 }
 
 function editAttachment() {
-    return attachments.find((file) => file.role === 'edit') || null;
+    return attachments.find((file) => file.role !== 'context') || null;
 }
 
 /** Remember a Raw selection so Expand can use it after the user opens the AI tab. */
@@ -213,16 +215,16 @@ export function captureAiSelection(text) {
 }
 
 /**
- * @param {{ id: string, name?: string, content: string, role?: 'context' | 'edit' }} file
+ * @param {{ id: string, name?: string, content: string, role?: 'context' | 'add' | 'edit' }} file
  */
 export function attachAiFile(file) {
     const id = String(file?.id || '');
     const content = String(file?.content ?? '');
     if (!id) return;
-    const role = file.role === 'context' ? 'context' : 'edit';
-    if (role === 'edit') {
+    const role = file.role === 'context' ? 'context' : file.role === 'edit' ? 'edit' : 'add';
+    if (role !== 'context') {
         for (const existing of attachments) {
-            if (existing.role === 'edit' && existing.id !== id) existing.role = 'context';
+            if (existing.role !== 'context' && existing.id !== id) existing.role = 'context';
         }
     }
     const current = attachments.find((entry) => entry.id === id);
@@ -239,7 +241,7 @@ export function attachAiFile(file) {
         });
     }
     if (attachments.length > 4) attachments = attachments.slice(-4);
-    task = role === 'edit' ? 'revise' : task;
+    task = role !== 'context' ? 'revise' : task;
     clearProposal();
     paintTask();
     syncAiPanel();
@@ -249,8 +251,8 @@ export function attachAiFile(file) {
 function setAttachmentRole(id, role) {
     const file = attachments.find((entry) => entry.id === id);
     if (!file) return;
-    if (role === 'edit') {
-        for (const entry of attachments) entry.role = entry.id === id ? 'edit' : 'context';
+    if (role !== 'context') {
+        for (const entry of attachments) entry.role = entry.id === id ? role : 'context';
         task = 'revise';
         paintTask();
     } else {
@@ -266,10 +268,42 @@ function removeAttachment(id) {
     syncAiPanel();
 }
 
+function buildModeToggle(file) {
+        const modes = document.createElement('div');
+        modes.className = 'ai-chip-modes';
+        modes.setAttribute('role', 'radiogroup');
+        modes.setAttribute('aria-label', `How to use ${file.name}`);
+
+        for (const role of ['context', 'add', 'edit']) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-chip-mode';
+            btn.textContent = role === 'context' ? 'Context' : role === 'add' ? 'Add only' : 'Subtract and add';
+            const active = file.role === role;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', active ? 'true' : 'false');
+            btn.addEventListener('click', () => {
+                if (running) return;
+                if (attachments.some(entry => entry.id === file.id)) setAttachmentRole(file.id, role);
+                else attachAiFile({ ...file, role });
+            });
+            modes.append(btn);
+        }
+
+    return modes;
+}
+
 function renderAttachments() {
     const host = nodes?.attachments;
     if (!host) return;
     host.replaceChildren();
+    const doc = deps?.getDocument();
+    const primary = editAttachment() || attachments[0] || (doc?.fileId ? {
+        id: doc.fileId, name: doc.fileName, content: doc.content || '', role: 'add',
+    } : null);
+    nodes.modeControls?.replaceChildren();
+    if (primary) nodes.modeControls?.append(buildModeToggle(primary));
     host.hidden = attachments.length === 0;
     for (const file of attachments) {
         const chip = document.createElement('div');
@@ -280,31 +314,14 @@ function renderAttachments() {
         name.textContent = displayNoteTitle(file.name);
         name.title = file.name;
 
-        const modes = document.createElement('div');
-        modes.className = 'ai-chip-modes';
-        modes.setAttribute('role', 'radiogroup');
-        modes.setAttribute('aria-label', `How to use ${file.name}`);
-
-        for (const role of ['context', 'edit']) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'ai-chip-mode';
-            btn.textContent = role === 'context' ? 'Context' : 'Edit';
-            const active = file.role === role;
-            btn.classList.toggle('is-active', active);
-            btn.setAttribute('role', 'radio');
-            btn.setAttribute('aria-checked', active ? 'true' : 'false');
-            btn.addEventListener('click', () => setAttachmentRole(file.id, role));
-            modes.append(btn);
-        }
-
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'ai-chip-remove';
         remove.textContent = 'Remove';
         remove.addEventListener('click', () => removeAttachment(file.id));
 
-        chip.append(name, modes, remove);
+        if (file.id === primary?.id) chip.append(name, remove);
+        else chip.append(name, buildModeToggle(file), remove);
         host.append(chip);
     }
 }
@@ -550,6 +567,9 @@ export function syncAiPanel() {
         nodes.title.title = named || title;
     }
     renderAttachments();
+    const editingRole = editAttachment()?.role || 'add';
+    if (nodes.tasks[0]?.parentElement) nodes.tasks[0].parentElement.hidden = editingRole !== 'edit';
+    if (nodes.selectionField && editingRole !== 'edit') nodes.selectionField.hidden = true;
     if (nodes.useOpen) {
         const already = Boolean(doc?.fileId && attachments.some((file) => file.id === doc.fileId));
         nodes.useOpen.hidden = !open || already;
@@ -667,7 +687,7 @@ export function initAiPanel(options) {
             id: doc.fileId,
             name: doc.fileName,
             content: doc.content || '',
-            role: 'edit',
+            role: 'add',
         });
     });
     nodes.discard?.addEventListener('click', () => {
@@ -690,14 +710,14 @@ export function initAiPanel(options) {
 
 function targetFile() {
     const edit = editAttachment();
-    if (edit) return edit;
     const doc = deps?.getDocument();
+    if (edit) return doc?.fileId === edit.id ? { ...edit, content: doc.content || '' } : edit;
     if (!doc?.fileId) return null;
     return {
         id: doc.fileId,
         name: doc.fileName || 'note.md',
         content: doc.content || '',
-        role: 'edit',
+        role: 'add',
     };
 }
 
@@ -723,8 +743,9 @@ async function runProposal() {
     const copy = TASK_COPY[task] || TASK_COPY.revise;
     const instruction = nodes.instruction?.value.trim() || ((pending || lastEdit) ? lastInstruction : '');
     const selection = nodes.selection?.value ?? '';
-    const sentTask = asking ? 'context' : task;
-    if ((asking || copy.instructionRequired) && !instruction) {
+    const addOnly = !asking && (editing?.role || 'add') === 'add';
+    const sentTask = asking ? 'context' : addOnly ? 'revise' : task;
+    if ((asking || addOnly || copy.instructionRequired) && !instruction) {
         setStatus(asking ? 'Ask something about the attached note.' : 'Say what should change.', 'error');
         return;
     }
@@ -770,6 +791,7 @@ async function runProposal() {
                 },
                 body: JSON.stringify({
                     provider,
+                    addOnly,
                     task: sentTask,
                     markdown: asking ? '' : source.content,
                     selection: sentTask === 'expand' ? selection : '',
@@ -786,6 +808,11 @@ async function runProposal() {
 
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
+            if (payload.usage) {
+                recordAiCall({ ...payload.usage, provider, at: Date.now(), task: sentTask, fileName: source.name });
+                renderAiUsage();
+                showCost({ ...payload.usage, provider });
+            }
             if (response.status === 404) {
                 throw new Error(
                     'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
@@ -838,11 +865,14 @@ async function runProposal() {
 
         const applied = applyAiProposal({
             task: sentTask,
+            addOnly,
             original: source.content,
             selection,
             proposal: payload.markdown,
+            additions: payload.additions,
         });
         if (!applied.ok) {
+            if (nodes.instruction) nodes.instruction.value = instruction;
             setStatus(applied.error, 'error');
             showCost(usage);
             syncAiPanel();
@@ -859,12 +889,14 @@ async function runProposal() {
         if (nodes.resultWrap) nodes.resultWrap.hidden = false;
         pending = {
             kind: 'edit',
+            addOnly,
             task: sentTask,
             fileId: source.id,
             fileName: source.name,
             original: source.content,
             selection,
             proposal: payload.markdown,
+            additions: payload.additions,
             markdown: applied.markdown,
         };
         setStatus('Removed lines are struck through. Added lines are highlighted. Save applies and saves this note. Discard leaves it unchanged.', 'ok');
@@ -892,9 +924,11 @@ async function acceptProposal() {
     }
     const applied = applyAiProposal({
         task: pending.task,
+        addOnly: pending.addOnly,
         original: pending.original,
         selection: pending.selection,
         proposal: pending.proposal,
+        additions: pending.additions,
     });
     if (!applied.ok) {
         setStatus(applied.error, 'error');

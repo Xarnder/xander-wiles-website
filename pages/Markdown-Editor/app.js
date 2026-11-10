@@ -2790,9 +2790,9 @@ async function openEntryInAi(file) {
             name = meta.name || name;
             content = await getFileContent(file.id);
         }
-        attachAiFile({ id: file.id, name, content, role: 'edit' });
+        attachAiFile({ id: file.id, name, content, role: 'add' });
         await switchAppMode('ai');
-        setStatus(`Added “${name}”. Choose Context or Edit, then send a message.`, 'ok');
+        setStatus(`Added “${name}”. Add only text is selected. Choose a mode, then send a message.`, 'ok');
     } catch (err) {
         setStatus(err.message || 'Could not open that file in AI', 'error');
     }

@@ -8405,3 +8405,18 @@ input[type="range"].file-color-hue::-moz-range-thumb { background: #fff; border-
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);
 }
+
+.ai-chip-modes { flex: 1 0 100%; display: grid; grid-template-columns: 0.8fr 1fr 1.4fr; border-radius: 12px; min-width: 0; }
+.ai-chip-mode { min-height: 44px; padding: 6px; border-radius: 9px; white-space: normal; line-height: 1.25; }
+
+.ai-mode-controls { padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.ai-mode-controls .ai-chip-modes { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ai-heading #ai-file-title, .ai-chip-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    max-height: none;
+}
+.ai-heading { align-items: flex-start; }

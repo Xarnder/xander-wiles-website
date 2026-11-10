@@ -339,6 +339,7 @@
                 </div>
                 <div id="ai-active" class="ai-active" hidden>
                     <div class="ai-content-scroll">
+                        <div id="ai-mode-controls" class="ai-mode-controls" aria-label="AI editing mode"></div>
                         <div class="ai-heading">
                             <h2 id="ai-file-title" class="editor-file-title"></h2>
                             <button type="button" id="ai-reset" class="btn btn-ghost">Reset AI</button>
@@ -382,8 +383,8 @@
                         <details class="ai-help">
                             <summary>Help and tips</summary>
                             <div class="ai-help-copy">
-                                <p>In Finder or Pinned, open a markdown file’s menu and choose Open in AI. Then mark it as context, or as the only file to edit.</p>
-                                <p>Context answers a question and leaves the file alone. Edit rewrites that one note and shows the previous text beside the proposal.</p>
+                                <p>Open a markdown file from Finder or Pinned using Open in AI. Add only text is selected by default.</p>
+                                <p>Context answers questions without changing the note. Add only text preserves all existing lines and inserts new text. Add and subtract lines allows rewriting and removing lines. Review the proposal, then Save or Discard.</p>
                                 <aside class="ai-debug" aria-label="AI debug status">
                                     <span class="ai-debug-title">Debug / status</span>
                                     <div id="ai-debug-global"></div>
@@ -554,7 +555,7 @@
                         <li>Date tags use <code>{{date:YYYY-MM-DD}}</code> (smart formats like <code>3 Aug 2026</code> also work). They stay in Raw; Preview hides them unless you turn on <strong>Show dates</strong> in the Edit ⋮ menu. New list items (normal and custom) get today’s tag automatically. Use <strong>Insert date</strong> for one tag, or <strong>Fill missing list dates…</strong> to stamp every undated list item with the file’s created date or a custom date.</li>
                         <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here. Tap Preview content and choose Above / Below to place it.</li>
                         <li>The toolbar <strong>Add list</strong> inserts a normal markdown list. In <strong>Preview</strong> it stays there and opens the first point. In <strong>List</strong>, <strong>Convert to custom list</strong> turns that list into a ranked <code>mdlist</code>.</li>
-                        <li>In Finder or Pinned, open a note’s menu and choose <strong>Open in AI</strong>. Mark it <strong>Context</strong> to ask about it, or <strong>Edit</strong> to rewrite only that file. An edit shows the previous text and the proposal with removals and additions highlighted. Choose Save to apply and save the proposal to Drive, or Discard to leave your note unchanged.</li>
+                        <li>In Finder or Pinned, open a note’s menu and choose <strong>Open in AI</strong>. Choose <strong>Context</strong> to ask questions, <strong>Add only text</strong> (the default) to preserve existing lines, or <strong>Add and subtract lines</strong> to allow rewriting. An edit shows the previous text and the proposal with removals and additions highlighted. Choose Save to apply and save the proposal to Drive, or Discard to leave your note unchanged.</li>
                         <li>Tap ⋮ in Finder to <strong>Pin</strong> a note or folder. Pinned opens first after sign-in.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
