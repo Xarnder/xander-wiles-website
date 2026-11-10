@@ -33,6 +33,7 @@ function isAllowedEmail(email) {
 }
 
 const REVISE_SYSTEM = `You edit one Markdown note.
+If the note is empty, create its content from the user instruction.
 Return only the requested full revised Markdown document. No preamble and no closing comment.
 Preserve every mdlist fence exactly, including its JSON and the HTML comment above it.
 Preserve every {{date:...}} tag unless the task explicitly asks to add one.
@@ -204,7 +205,9 @@ export default async function handler(request) {
 
     if (!TASKS.has(task)) return json({ error: 'Unknown AI task.' }, 400);
     if (contextFiles.error) return json({ error: contextFiles.error }, contextFiles.status);
-    if (task !== 'context' && !markdown.trim()) return json({ error: 'The note is empty.' }, 400);
+    if (task === 'summarize' && !markdown.trim()) {
+        return json({ error: 'There is nothing to summarize yet. Choose Revise and describe what to write in this empty note.' }, 400);
+    }
     if (task === 'context' && !markdown.trim() && !contextFiles.files.length) {
         return json({ error: 'Attach a note to use as context.' }, 400);
     }

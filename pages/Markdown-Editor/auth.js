@@ -1,5 +1,6 @@
 import {
     DRIVE_SCOPE,
+    DRIVE_APPDATA_SCOPE,
     GOOGLE_CLIENT_ID,
     OAUTH_SESSION_KEY,
     REMEMBER_SIGNIN_KEY,
@@ -9,6 +10,7 @@ import {
 let tokenClient = null;
 let accessToken = null;
 let expiresAt = 0;
+let grantedScopes = '';
 let gisReadyPromise = null;
 
 function waitForGis() {
@@ -65,7 +67,7 @@ function persistSession() {
     try {
         localStorage.setItem(
             OAUTH_SESSION_KEY,
-            JSON.stringify({ accessToken, expiresAt })
+            JSON.stringify({ accessToken, expiresAt, scope: grantedScopes })
         );
         localStorage.setItem(REMEMBER_SIGNIN_KEY, '1');
     } catch {
@@ -95,6 +97,7 @@ function hydrateFromStorage() {
     const data = readStoredSession();
     if (!data) return false;
     if (Date.now() >= data.expiresAt - 30_000) return false;
+    grantedScopes = String(data.scope || '');
     accessToken = data.accessToken;
     expiresAt = data.expiresAt;
     return true;
@@ -121,6 +124,7 @@ export function clearToken(options = {}) {
     const token = accessToken || readStoredSession()?.accessToken || null;
     accessToken = null;
     expiresAt = 0;
+    grantedScopes = '';
     clearPersistedSession();
 
     if (forget) {
@@ -158,6 +162,7 @@ export async function requestAccessToken(options = {}) {
                 reject(new Error(response.error_description || response.error || 'Sign-in failed'));
                 return;
             }
+            grantedScopes = String(response.scope || '');
             accessToken = response.access_token;
             const expiresIn = Number(response.expires_in || 3600);
             expiresAt = Date.now() + expiresIn * 1000;
@@ -200,4 +205,9 @@ export async function tryRestoreSession() {
     } catch {
         return false;
     }
+}
+
+/** Old cached sessions have no scope metadata: keep file access, pause private settings sync. */
+export function hasCloudSettingsScope() {
+    return Boolean(getAccessToken()) && grantedScopes.split(/\s+/).includes(DRIVE_APPDATA_SCOPE);
 }

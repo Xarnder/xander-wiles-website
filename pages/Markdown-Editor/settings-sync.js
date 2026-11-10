@@ -328,6 +328,7 @@ async function pushSnapshotWithRetry(getSnapshot, options = {}) {
             return;
         } catch (err) {
             lastErr = err instanceof Error ? err : new Error(String(err));
+            if (err.status === 401 || err.status === 403) break;
             if (attempt < 2) await sleep(350 * (attempt + 1));
         }
     }

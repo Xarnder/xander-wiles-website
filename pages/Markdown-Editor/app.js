@@ -63,6 +63,7 @@ import {
     clearToken,
     getAccessToken,
     isSignedIn,
+    hasCloudSettingsScope,
     refreshAccessToken,
     requestAccessToken,
     tryRestoreSession,
@@ -116,6 +117,7 @@ import {
     rebaseEditorBaseline,
     setEditorText,
     textsEqual,
+    assertAiSaveConfirmed,
     classifyRemoteContentChange,
     normalizeEditorText,
     writeDraft,
@@ -1247,7 +1249,7 @@ function hasRestorableUserSettings() {
 }
 
 function canPushSettingsToCloud() {
-    return settingsCloudPullDone && (userEditedSettings || hasRestorableUserSettings());
+    return settingsCloudPullDone && hasCloudSettingsScope() && (userEditedSettings || hasRestorableUserSettings());
 }
 
 function queueSettingsCloudSync(options = {}) {
@@ -1562,6 +1564,14 @@ async function syncSettingsFromCloudOnce() {
 }
 
 async function syncSettingsFromCloud() {
+    const missingPermission = isSignedIn() && !hasCloudSettingsScope();
+    const notice = document.getElementById('settings-sync-permission');
+    if (notice) notice.hidden = !missingPermission;
+    if (missingPermission) {
+        await applyCachedSettingsFallback();
+        settingsCloudPullDone = true;
+        return;
+    }
     if (!isSignedIn()) {
         settingsCloudPullDone = true;
         return;
@@ -1577,6 +1587,7 @@ async function syncSettingsFromCloud() {
         } catch (err) {
             lastErr = err;
             console.warn('[md-editor] settings cloud load failed', err);
+            if (err.status === 401 || err.status === 403) break;
             if (attempt < 2) await sleepMs(400 * (attempt + 1));
         }
     }
@@ -2787,7 +2798,7 @@ async function openEntryInAi(file) {
     }
 }
 
-async function acceptAiFile({ fileId, fileName, markdown }) {
+async function acceptAiFile({ fileId, fileName, markdown, original }) {
     if (state.editor.fileId !== fileId) {
         await openMarkdownFile({
             id: fileId,
@@ -2795,6 +2806,10 @@ async function acceptAiFile({ fileId, fileName, markdown }) {
             mimeType: 'text/markdown',
         });
         if (state.editor.fileId !== fileId) return false;
+    }
+    flushCurrentEditorContent();
+    if (!textsEqual(state.editor.editorContent, original)) {
+        throw new Error('This note changed since the AI proposal was created. Send again before applying it.');
     }
     applyAcceptedAiMarkdown(markdown);
     const els = getEls();
@@ -5194,6 +5209,7 @@ async function saveCurrentFileExclusive(options = {}) {
             }
             if (remote.kind === 'same-as-local') {
                 applySavedBaseline(ed, snapshot);
+                syncAiPanel();
                 applyDriveVersionMeta(ed, {
                     version: remote.remoteVersion,
                     headRevisionId: remote.headRevisionId,
@@ -5225,6 +5241,7 @@ async function saveCurrentFileExclusive(options = {}) {
         if (!stillSameFile()) return;
 
         applySavedBaseline(ed, snapshot);
+        syncAiPanel();
         let nextVersion = savedMeta?.version;
         let nextHead = savedMeta?.headRevisionId ? String(savedMeta.headRevisionId) : null;
         if (nextVersion == null || nextVersion === '' || !nextHead) {
@@ -5650,6 +5667,8 @@ function wireEvents() {
                 fileId: state.editor.fileId,
                 fileName: state.editor.fileName,
                 content: state.editor.editorContent,
+                savedContent: state.editor.originalContent,
+                dirty: state.editor.dirty,
                 status: state.editor.status,
             };
         },
@@ -5663,6 +5682,13 @@ function wireEvents() {
             return getAccessToken();
         },
         onAcceptFile: acceptAiFile,
+        async onSave() {
+            const fileId = state.editor.fileId;
+            flushCurrentEditorContent();
+            const expected = state.editor.editorContent;
+            await saveCurrentFile({ blocking: true });
+            assertAiSaveConfirmed(state.editor, fileId, expected);
+        },
         onGoFinder() {
             switchAppMode('finder');
         },

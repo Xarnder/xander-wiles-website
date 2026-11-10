@@ -264,3 +264,16 @@ export function promptRestoreDraft(dialogEl) {
         dialogEl.showModal();
     });
 }
+
+/** A resolved save promise alone does not confirm a successful Drive write. */
+export function assertAiSaveConfirmed(editor, fileId, expected) {
+    if (!fileId || editor.fileId !== fileId) {
+        throw new Error('The open note changed before saving could be confirmed.');
+    }
+    if (editor.status === 'error' || editor.status === 'conflict') {
+        throw new Error(editor.errorMessage || 'The note could not be saved. Resolve the conflict or retry Save.');
+    }
+    if (editor.dirty || !textsEqual(editor.originalContent, expected)) {
+        throw new Error('The AI edits have not been saved to Drive. Your edits are still in the editor; retry Save.');
+    }
+}

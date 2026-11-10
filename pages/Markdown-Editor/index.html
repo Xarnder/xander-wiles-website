@@ -335,46 +335,67 @@
             <section id="view-ai" class="view view-ai" hidden>
                 <div id="ai-empty" class="empty-panel">
                     <p class="empty-panel-title">No note in the chat</p>
-                    <p class="empty-panel-copy">In Finder or Pinned, open a markdown file’s menu and choose Open in AI. Then mark it as context, or as the only file to edit.</p>
                     <button type="button" id="ai-go-edit" class="btn btn-primary">Go to Finder</button>
                 </div>
                 <div id="ai-active" class="ai-active" hidden>
-                    <h2 id="ai-file-title" class="editor-file-title"></h2>
-                    <p class="ai-lede">Context answers a question and leaves the file alone. Edit rewrites that one note and shows the previous text beside the proposal.</p>
-                    <label class="ai-field">AI provider
-                        <select id="ai-provider">
-                            <option value="gemini">Google Gemini</option>
-                            <option value="openai">OpenAI (ChatGPT)</option>
-                        </select>
-                    </label>
-                    <div class="ai-tasks" role="radiogroup" aria-label="AI task">
-                        <button type="button" class="ai-task is-active" data-ai-task="expand" role="radio" aria-checked="true">Expand</button>
-                        <button type="button" class="ai-task" data-ai-task="header" role="radio" aria-checked="false">Header</button>
-                        <button type="button" class="ai-task" data-ai-task="summarize" role="radio" aria-checked="false">Summarize</button>
-                        <button type="button" class="ai-task" data-ai-task="revise" role="radio" aria-checked="false">Revise</button>
-                    </div>
-                    <div id="ai-attachments" class="ai-attachments" hidden></div>
-                    <button type="button" id="ai-use-open" class="btn btn-ghost" hidden>Use the open note</button>
-                    <div id="ai-thread" class="ai-thread" hidden></div>
-                    <label class="ai-field" id="ai-selection-field">
-                        <span>Passage to expand</span>
-                        <textarea id="ai-selection" rows="4" placeholder="Paste a paragraph, or select it in Raw before opening AI"></textarea>
-                    </label>
-                    <label class="ai-field">
-                        <span id="ai-instruction-label">Message</span>
-                        <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
-                    </label>
-                    <p id="ai-cost-preview" class="ai-cost" hidden></p>
-                    <button type="button" id="ai-run" class="btn btn-primary">Send</button>
-                    <p id="ai-status" class="ai-status" role="status" hidden></p>
-                    <p id="ai-cost" class="ai-cost" hidden></p>
-                    <div id="ai-result-wrap" class="ai-result" hidden>
-                        <div id="ai-reply" class="ai-reply" hidden></div>
-                        <div id="ai-diff" class="ai-diff" hidden></div>
-                        <div class="ai-result-actions">
-                            <button type="button" id="ai-accept" class="btn btn-primary">Accept</button>
-                            <button type="button" id="ai-discard" class="btn btn-ghost">Discard</button>
+                    <div class="ai-content-scroll">
+                        <div class="ai-heading">
+                            <h2 id="ai-file-title" class="editor-file-title"></h2>
+                            <button type="button" id="ai-reset" class="btn btn-ghost">Reset AI</button>
                         </div>
+                        <div class="ai-tasks" role="radiogroup" aria-label="AI task">
+                            <button type="button" class="ai-task is-active" data-ai-task="expand" role="radio" aria-checked="true">Expand</button>
+                            <button type="button" class="ai-task" data-ai-task="header" role="radio" aria-checked="false">Header</button>
+                            <button type="button" class="ai-task" data-ai-task="summarize" role="radio" aria-checked="false">Summarize</button>
+                            <button type="button" class="ai-task" data-ai-task="revise" role="radio" aria-checked="false">Revise</button>
+                        </div>
+                        <div id="ai-attachments" class="ai-attachments" hidden></div>
+                        <button type="button" id="ai-use-open" class="btn btn-ghost" hidden>Use the open note</button>
+                        <div id="ai-thread" class="ai-thread" hidden></div>
+                        <label class="ai-field" id="ai-selection-field">
+                            <span>Passage to expand</span>
+                            <textarea id="ai-selection" rows="4" placeholder="Paste a paragraph, or select it in Raw before opening AI"></textarea>
+                        </label>
+                        <label class="ai-field">
+                            <span id="ai-instruction-label">Input text box</span>
+                            <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
+                        </label>
+                        <p id="ai-cost-preview" class="ai-cost" hidden></p>
+                        <p id="ai-cost" class="ai-cost" hidden></p>
+                        <div id="ai-result-wrap" class="ai-result" hidden>
+                            <div id="ai-reply" class="ai-reply" hidden></div>
+                            <div id="ai-diff" class="ai-diff" hidden></div>
+                            <p class="ai-review-hint">Save applies these changes and saves to Drive. Discard keeps your note unchanged. Apply starts normal autosave.</p>
+                            <div class="ai-result-actions">
+                                <button type="button" id="ai-accept" class="btn btn-primary">Apply (autosaves)</button>
+                                <button type="button" id="ai-discard" class="btn btn-ghost">Discard</button>
+                            </div>
+                        </div>
+                        <p id="ai-error" class="ai-error" role="alert" hidden></p>
+                        <label class="ai-field ai-provider-field">AI provider
+                            <span class="ai-provider-control">
+                                <select id="ai-provider">
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="openai">OpenAI (ChatGPT)</option>
+                                </select>
+                            </span>
+                        </label>
+                        <details class="ai-help">
+                            <summary>Help and tips</summary>
+                            <div class="ai-help-copy">
+                                <p>In Finder or Pinned, open a markdown file’s menu and choose Open in AI. Then mark it as context, or as the only file to edit.</p>
+                                <p>Context answers a question and leaves the file alone. Edit rewrites that one note and shows the previous text beside the proposal.</p>
+                                <aside class="ai-debug" aria-label="AI debug status">
+                                    <span class="ai-debug-title">Debug / status</span>
+                                    <div id="ai-debug-global"></div>
+                                    <p id="ai-status" class="ai-status" role="status" hidden></p>
+                                </aside>
+                            </div>
+                        </details>
+                    </div>
+                    <div class="ai-send-dock">
+                        <button type="button" id="ai-save" class="btn btn-ghost" disabled>Save</button>
+                        <button type="button" id="ai-run" class="btn btn-primary">Send</button>
                     </div>
                 </div>
             </section>
@@ -399,6 +420,7 @@
                     <p class="settings-lede">Search Drive for markdown files, or sign out of this device.</p>
                     <div class="settings-actions">
                         <button type="button" id="btn-mode-search" class="btn btn-primary btn-large">Find .md</button>
+                        <p id="settings-sync-permission" class="ai-status is-warn" role="status" hidden>Settings are kept on this device. To sync them across devices, sign out and sign in again, then allow access to the app’s hidden settings data. Your notes can still be saved normally.</p>
                         <button type="button" id="btn-sign-out" class="btn btn-ghost btn-large">Sign out</button>
                     </div>
                     <div class="settings-tabs" role="tablist" aria-label="Settings sections">
@@ -673,6 +695,18 @@
                 <button type="submit" value="turn-off" class="btn btn-ghost">Turn off anyway</button>
             </div>
         </form>
+    </dialog>
+
+    <dialog id="ai-reset-dialog" class="dialog" aria-labelledby="ai-reset-title" aria-describedby="ai-reset-description ai-reset-status">
+        <div class="dialog-body">
+            <h2 id="ai-reset-title">Reset AI session?</h2>
+            <p id="ai-reset-description">Clear the conversation, attachments, instructions and proposal. Accepted document edits stay in your note.</p>
+            <p id="ai-reset-status" role="status"></p>
+            <label class="ai-reset-label" for="ai-reset-slider">Slide all the way right to reset</label>
+            <input id="ai-reset-slider" class="ai-reset-slider" type="range" min="0" max="100" value="0" aria-label="Slide to reset AI session">
+            <p class="dialog-hint">Release at the end to confirm. With a keyboard, press End.</p>
+            <div class="dialog-actions"><button type="button" id="ai-reset-cancel" class="btn btn-ghost">Cancel</button></div>
+        </div>
     </dialog>
 
     <dialog id="unsaved-dialog" class="dialog">

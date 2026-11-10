@@ -5,7 +5,7 @@
 
 import { annotateDiff, applyAiProposal, formatDiffCounts, formatAiCost, previewAiCost } from './ai.js';
 import { recordAiCall, renderAiUsage } from './ai-usage.js';
-import { displayNoteTitle } from './ui.js';
+import { displayNoteTitle, revealAiError } from './ui.js';
 
 const TASK_COPY = {
     expand: {
@@ -36,6 +36,7 @@ let nodes = null;
  *   getDocument: Function,
  *   getToken: Function,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
+ *   onSave: () => Promise<void>,
  *   onGoFinder: Function,
  * }} */
 let deps = null;
@@ -52,11 +53,20 @@ let attachments = [];
  *   markdown: string,
  * }} */
 let pending = null;
+let lastEdit = null;
+let accepting = false;
+let saving = false;
 let running = false;
 let task = 'revise';
 
 function readEls() {
     return {
+        reset: document.getElementById('ai-reset'),
+        resetDialog: document.getElementById('ai-reset-dialog'),
+        resetStatus: document.getElementById('ai-reset-status'),
+        resetSlider: document.getElementById('ai-reset-slider'),
+        resetCancel: document.getElementById('ai-reset-cancel'),
+        help: document.querySelector('.ai-help'),
         provider: document.getElementById('ai-provider'),
         empty: document.getElementById('ai-empty'),
         active: document.getElementById('ai-active'),
@@ -69,8 +79,10 @@ function readEls() {
         instructionLabel: document.getElementById('ai-instruction-label'),
         instruction: document.getElementById('ai-instruction'),
         run: document.getElementById('ai-run'),
+        save: document.getElementById('ai-save'),
         preview: document.getElementById('ai-cost-preview'),
         status: document.getElementById('ai-status'),
+        error: document.getElementById('ai-error'),
         cost: document.getElementById('ai-cost'),
         resultWrap: document.getElementById('ai-result-wrap'),
         reply: document.getElementById('ai-reply'),
@@ -84,6 +96,11 @@ function readEls() {
 
 function setStatus(message, kind = '') {
     if (!nodes?.status) return;
+    if (kind !== 'error' && nodes.help) nodes.help.open = false;
+    if (nodes.error) {
+        nodes.error.hidden = !message || kind !== 'error';
+        nodes.error.textContent = kind === 'error' ? message : '';
+    }
     if (!message) {
         nodes.status.hidden = true;
         nodes.status.textContent = '';
@@ -94,6 +111,7 @@ function setStatus(message, kind = '') {
     nodes.status.textContent = message;
     nodes.status.classList.toggle('is-error', kind === 'error');
     nodes.status.classList.toggle('is-ok', kind === 'ok');
+    if (kind === 'error') revealAiError(nodes.status);
 }
 
 function paintTask() {
@@ -105,7 +123,7 @@ function paintTask() {
         btn.setAttribute('aria-checked', active ? 'true' : 'false');
     }
     if (nodes.selectionField) nodes.selectionField.hidden = task !== 'expand';
-    if (nodes.instructionLabel) nodes.instructionLabel.textContent = copy.instructionLabel;
+    if (nodes.instructionLabel) nodes.instructionLabel.textContent = 'Input text box';
     if (nodes.instruction) nodes.instruction.placeholder = copy.instructionPlaceholder;
 }
 
@@ -263,14 +281,30 @@ function renderAttachments() {
     }
 }
 
-function appendTurn(text, kind) {
+function showSentMessage(text) {
     if (!nodes?.thread || !text) return;
+    const title = document.createElement('h3');
+    title.className = 'ai-sent-title';
+    title.textContent = 'Message sent:';
+    const message = document.createElement('p');
+    message.className = 'ai-sent-message';
+    message.textContent = text;
+    nodes.thread.replaceChildren(title, message);
     nodes.thread.hidden = false;
-    const bubble = document.createElement('p');
-    bubble.className = `ai-bubble ai-bubble--${kind}`;
-    bubble.textContent = text;
-    nodes.thread.append(bubble);
-    bubble.scrollIntoView({ block: 'nearest' });
+}
+
+/** Scroll only the AI content pane, leaving the PWA shell and Send dock in place. */
+export function scrollAiReviewIntoView(review) {
+    const pane = review?.closest('.ai-content-scroll');
+    if (!pane) return;
+    // Wait for the result and the finished-request controls to settle before measuring.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!review.isConnected || review.closest('[hidden]')) return;
+        const top = pane.scrollTop + review.getBoundingClientRect().top
+            - pane.getBoundingClientRect().top - pane.clientTop - 8;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        pane.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' });
+    }));
 }
 
 const AI_DIFF_JUMP_LIMIT = 4;
@@ -432,8 +466,41 @@ function diffCell(kind, text, lineNo) {
     return cell;
 }
 
+function refreshResetStatus() {
+    const doc = deps?.getDocument();
+    if (lastEdit && doc?.fileId === lastEdit.fileId && doc.savedContent === lastEdit.markdown) {
+        lastEdit.saved = true;
+    }
+    if (!nodes?.resetStatus) return;
+    nodes.resetStatus.textContent = pending?.kind === 'edit'
+        ? 'Last AI edits: not saved — this proposal has not been accepted. Reset will discard it.'
+        : !lastEdit ? 'No AI edits to save in this session.'
+        : lastEdit.saved ? 'Last AI edits: saved to Drive.'
+        : doc?.fileId === lastEdit.fileId && doc.status === 'saving'
+            ? 'Last AI edits: saving to Drive. Reset will not interrupt the save.'
+            : 'Last AI edits: not confirmed saved to Drive. Reset keeps accepted edits in the document; save the note to keep them in Drive.';
+}
+
+function resetAiSession() {
+    if (running || accepting) return;
+    attachments = [];
+    clearProposal();
+    lastEdit = null;
+    nodes.thread?.replaceChildren();
+    if (nodes.thread) nodes.thread.hidden = true;
+    if (nodes.instruction) nodes.instruction.value = '';
+    if (nodes.selection) nodes.selection.value = '';
+    task = 'revise';
+    paintTask();
+    setStatus('AI session reset.');
+    nodes.resetDialog.close();
+    syncAiPanel();
+}
+
 export function syncAiPanel() {
     if (!nodes || !deps) return;
+    refreshResetStatus();
+    if (nodes.reset) nodes.reset.disabled = running || accepting || saving;
     const doc = deps.getDocument();
     const open = Boolean(doc?.fileId);
     const ready = attachments.length > 0 || open;
@@ -446,7 +513,7 @@ export function syncAiPanel() {
             (attachments.length === 1 ? attachments[0].name : '') ||
             doc?.fileName ||
             '';
-        const title = named ? displayNoteTitle(named) : '';
+        const title = named ? `Opened note: ${named}` : '';
         nodes.title.textContent = title;
         nodes.title.hidden = !title;
         nodes.title.title = named || title;
@@ -459,13 +526,35 @@ export function syncAiPanel() {
     if (pending && editAttachment() && pending.fileId !== editAttachment().id) clearProposal();
     const target = editAttachment();
     const blocked =
-        running ||
+        running || accepting || saving ||
         (target &&
             doc?.fileId === target.id &&
             (doc.status === 'saving' || doc.status === 'conflict'));
-    if (nodes.run) nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
+    if (nodes.run) {
+        nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
+        nodes.run.classList.toggle('is-loading', running);
+        nodes.run.setAttribute('aria-busy', String(running));
+        nodes.run.textContent = running ? 'Sending to AI…' : 'Send';
+    }
+    if (nodes.save) {
+        const busy = saving || doc?.status === 'saving';
+        nodes.save.disabled = running || accepting || busy || doc?.status === 'conflict' ||
+            (pending?.kind !== 'edit' && (!open || !doc?.dirty));
+        nodes.save.textContent = busy ? 'Saving…' : 'Save';
+        nodes.save.setAttribute('aria-busy', String(busy));
+        nodes.save.title = pending?.kind === 'edit'
+            ? 'Apply the proposed edits and save this note to Drive.'
+            : !open ? 'Accept an AI edit or open a note to save.'
+            : !doc?.dirty ? 'All document changes are saved.' : 'Save this note to Drive';
+    }
+    if (nodes.instruction) {
+        nodes.instruction.disabled = running;
+        nodes.instruction.setAttribute('aria-busy', String(running));
+    }
+    if (nodes.selection) nodes.selection.disabled = running;
     if (nodes.accept) nodes.accept.disabled = Boolean(blocked) || pending?.kind !== 'edit';
     if (nodes.accept) nodes.accept.hidden = pending?.kind === 'reply';
+    if (nodes.discard) nodes.discard.disabled = running || accepting || saving;
     refreshCostPreview();
 }
 
@@ -474,6 +563,7 @@ export function syncAiPanel() {
  *   getDocument: () => { fileId?: string, fileName?: string, content?: string, status?: string },
  *   getToken: () => Promise<string | null>,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
+ *   onSave: () => Promise<void>,
  *   onGoFinder: () => void,
  * }} options
  */
@@ -485,6 +575,33 @@ export function initAiPanel(options) {
         return;
     }
     nodes.run.dataset.bound = '1';
+    nodes.save?.addEventListener('click', async () => {
+        if (nodes.save.disabled || saving) return;
+        saving = true;
+        syncAiPanel();
+        try {
+            if (pending?.kind === 'edit' && !(await acceptProposal())) return;
+            await deps.onSave();
+            refreshResetStatus();
+            setStatus('Saved to Drive.', 'ok');
+        } catch (err) {
+            setStatus(err?.message || 'Could not save the note.', 'error');
+        } finally {
+            saving = false;
+            syncAiPanel();
+        }
+    });
+    if (nodes.help) nodes.help.open = false;
+    nodes.reset?.addEventListener('click', () => {
+        refreshResetStatus();
+        nodes.resetSlider.value = '0';
+        nodes.resetDialog.showModal();
+    });
+    nodes.resetCancel?.addEventListener('click', () => nodes.resetDialog.close());
+    nodes.resetSlider?.addEventListener('change', () => {
+        if (Number(nodes.resetSlider.value) === 100) resetAiSession();
+        nodes.resetSlider.value = '0';
+    });
     nodes.provider?.addEventListener('change', () => {
         hideCost();
         refreshCostPreview();
@@ -513,8 +630,9 @@ export function initAiPanel(options) {
         });
     });
     nodes.discard?.addEventListener('click', () => {
+        if (accepting || saving) return;
         clearProposal();
-        setStatus('');
+        setStatus('Proposal discarded. The note was not changed.', 'ok');
         syncAiPanel();
     });
     nodes.accept?.addEventListener('click', () => {
@@ -525,8 +643,6 @@ export function initAiPanel(options) {
     nodes.selection?.addEventListener('input', refreshPreview);
     nodes.run.addEventListener('click', () => {
         runProposal().catch((err) => {
-            running = false;
-            if (nodes.run) nodes.run.textContent = 'Send';
             setStatus(err?.message || 'AI request failed', 'error');
             syncAiPanel();
         });
@@ -585,139 +701,147 @@ async function runProposal() {
         return;
     }
 
-    const token = await deps.getToken();
-    if (!token) {
-        setStatus('Sign in again to use AI.', 'error');
-        return;
-    }
-
     running = true;
-    clearProposal();
-    nodes.run.textContent = 'Working…';
-    setStatus(asking ? 'Reading the note…' : 'Editing the note…');
+    setStatus('Preparing AI request…');
     syncAiPanel();
-    appendTurn(instruction || TASK_COPY[task]?.instructionLabel || 'Edit', 'user');
-
-    const provider = nodes.provider?.value || 'gemini';
-    let response;
     try {
-        response = await fetch('/api/markdown-gemini', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                provider,
-                task: sentTask,
-                markdown: asking ? '' : source.content,
-                selection: sentTask === 'expand' ? selection : '',
-                instruction,
-                contextFiles: contexts.map((file) => ({
-                    name: file.name,
-                    markdown: file.content,
-                })),
-            }),
-        });
-    } catch {
-        throw new Error('Could not reach the AI service.');
-    } finally {
-        running = false;
-        if (nodes.run) nodes.run.textContent = 'Send';
-    }
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        if (response.status === 404) {
-            throw new Error(
-                'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
-            );
+        const token = await deps.getToken();
+        if (!token) {
+            setStatus('Sign in again to use AI.', 'error');
+            return;
         }
-        throw new Error(payload.error || `AI request failed (${response.status})`);
-    }
 
-    const usage = { ...payload.usage, provider };
-    recordAiCall({
-        ...usage,
-        at: Date.now(),
-        task: sentTask,
-        fileName: source.name,
-    });
-    renderAiUsage();
+        clearProposal();
+        setStatus(asking ? 'Reading the note…' : 'Editing the note…');
+        syncAiPanel();
+        showSentMessage(instruction || `${sentTask.charAt(0).toUpperCase()}${sentTask.slice(1)} (no additional instructions)`);
+        if (nodes.instruction) nodes.instruction.value = '';
+        refreshCostPreview();
 
-    if (sentTask === 'context') {
-        const reply = String(payload.reply || '').trim();
-        if (!reply) throw new Error('The AI provider returned an empty answer.');
-        if (nodes.reply) {
-            nodes.reply.hidden = false;
-            nodes.reply.textContent = reply;
+        const provider = nodes.provider?.value || 'gemini';
+        let response;
+        try {
+            response = await fetch('/api/markdown-gemini', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    provider,
+                    task: sentTask,
+                    markdown: asking ? '' : source.content,
+                    selection: sentTask === 'expand' ? selection : '',
+                    instruction,
+                    contextFiles: contexts.map((file) => ({
+                        name: file.name,
+                        markdown: file.content,
+                    })),
+                }),
+            });
+        } catch {
+            throw new Error('Could not reach the AI service.');
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error(
+                    'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
+                );
+            }
+            throw new Error(payload.error || `AI request failed (${response.status})`);
+        }
+
+        const usage = { ...payload.usage, provider };
+        recordAiCall({
+            ...usage,
+            at: Date.now(),
+            task: sentTask,
+            fileName: source.name,
+        });
+        renderAiUsage();
+
+        if (sentTask === 'context') {
+            const reply = String(payload.reply || '').trim();
+            if (!reply) throw new Error('The AI provider returned an empty answer.');
+            if (nodes.reply) {
+                nodes.reply.hidden = false;
+                nodes.reply.textContent = reply;
+            }
+            if (nodes.resultWrap) nodes.resultWrap.hidden = false;
+            if (nodes.accept) nodes.accept.hidden = true;
+            pending = {
+                kind: 'reply',
+                task: 'context',
+                fileId: source.id,
+                fileName: source.name,
+                original: source.content,
+                selection: '',
+                proposal: reply,
+                markdown: '',
+            };
+            setStatus('Answered from the attached note. The file was not changed.', 'ok');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const live = targetFile();
+        if (!live || live.id !== source.id || live.content !== source.content) {
+            setStatus('That note changed. Send again.', 'error');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const applied = applyAiProposal({
+            task: sentTask,
+            original: source.content,
+            selection,
+            proposal: payload.markdown,
+        });
+        if (!applied.ok) {
+            setStatus(applied.error, 'error');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const hasChanges = renderDiff(source.content, applied.markdown);
+        if (!hasChanges) {
+            setStatus('The model returned the same text.', 'ok');
+            showCost(usage);
+            syncAiPanel();
+            return;
         }
         if (nodes.resultWrap) nodes.resultWrap.hidden = false;
-        if (nodes.accept) nodes.accept.hidden = true;
+        if (nodes.accept) nodes.accept.hidden = false;
         pending = {
-            kind: 'reply',
-            task: 'context',
+            kind: 'edit',
+            task: sentTask,
             fileId: source.id,
             fileName: source.name,
             original: source.content,
-            selection: '',
-            proposal: reply,
-            markdown: '',
+            selection,
+            proposal: payload.markdown,
+            markdown: applied.markdown,
         };
-        appendTurn(reply, 'assistant');
-        setStatus('Answered from the attached note. The file was not changed.', 'ok');
+        setStatus('Removed lines are struck through. Added lines are highlighted. Accept writes this note.', 'ok');
         showCost(usage);
         syncAiPanel();
-        return;
-    }
-
-    const live = targetFile();
-    if (!live || live.id !== source.id || live.content !== source.content) {
-        setStatus('That note changed. Send again.', 'error');
-        showCost(usage);
+        scrollAiReviewIntoView(nodes.resultWrap);
+    } catch (err) {
+        if (nodes.instruction && !nodes.instruction.value.trim()) nodes.instruction.value = instruction;
+        throw err;
+    } finally {
+        running = false;
         syncAiPanel();
-        return;
     }
-
-    const applied = applyAiProposal({
-        task: sentTask,
-        original: source.content,
-        selection,
-        proposal: payload.markdown,
-    });
-    if (!applied.ok) {
-        setStatus(applied.error, 'error');
-        showCost(usage);
-        syncAiPanel();
-        return;
-    }
-
-    const hasChanges = renderDiff(source.content, applied.markdown);
-    if (!hasChanges) {
-        setStatus('The model returned the same text.', 'ok');
-        showCost(usage);
-        syncAiPanel();
-        return;
-    }
-    if (nodes.resultWrap) nodes.resultWrap.hidden = false;
-    if (nodes.accept) nodes.accept.hidden = false;
-    pending = {
-        kind: 'edit',
-        task: sentTask,
-        fileId: source.id,
-        fileName: source.name,
-        original: source.content,
-        selection,
-        proposal: payload.markdown,
-        markdown: applied.markdown,
-    };
-    setStatus('Removed lines are struck through. Added lines are highlighted. Accept writes this note.', 'ok');
-    showCost(usage);
-    syncAiPanel();
 }
 
 async function acceptProposal() {
-    if (!deps || pending?.kind !== 'edit') return;
+    if (!deps || accepting || pending?.kind !== 'edit') return;
     const live = targetFile();
     if (!live || live.id !== pending.fileId || live.content !== pending.original) {
         setStatus('That note changed. Send again.', 'error');
@@ -735,15 +859,27 @@ async function acceptProposal() {
         setStatus(applied.error, 'error');
         return;
     }
-    const ok = await deps.onAcceptFile({
-        fileId: pending.fileId,
-        fileName: pending.fileName,
-        markdown: applied.markdown,
-    });
+    const proposal = pending;
+    accepting = true;
+    syncAiPanel();
+    let ok;
+    try {
+        ok = await deps.onAcceptFile({
+            fileId: proposal.fileId,
+            fileName: proposal.fileName,
+            markdown: applied.markdown,
+            original: proposal.original,
+        });
+    } finally {
+        accepting = false;
+        syncAiPanel();
+    }
     if (!ok) return;
-    const chip = attachments.find((file) => file.id === pending.fileId);
+    lastEdit = { fileId: proposal.fileId, markdown: applied.markdown, saved: false };
+    const chip = attachments.find((file) => file.id === proposal.fileId);
     if (chip) chip.content = applied.markdown;
     clearProposal();
     setStatus('Applied. Autosave will write this to Drive.', 'ok');
     syncAiPanel();
+    return true;
 }
