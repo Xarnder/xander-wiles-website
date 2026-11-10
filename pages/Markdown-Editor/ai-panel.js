@@ -99,6 +99,22 @@ function readEls() {
     };
 }
 
+/** The current draft always wins; an empty draft repeats the last sent instruction. */
+export function chooseAiInstruction(draft, previous) {
+    return String(draft ?? '').trim() || String(previous ?? '').trim();
+}
+
+function paintSendAction() {
+    if (!nodes?.run) return;
+    const hasPrevious = Boolean(lastInstruction);
+    const hasDraft = Boolean(nodes.instruction?.value.trim());
+    nodes.run.textContent = running ? 'Sending to AI…'
+        : hasPrevious && hasDraft ? 'Send new message'
+        : hasPrevious ? 'Send Again' : 'Send';
+    nodes.run.title = hasDraft ? 'Send the message currently in the input box.'
+        : hasPrevious ? 'Input is empty: resend the last sent message.' : 'Send your message.';
+}
+
 export function formatAiWaitTime(milliseconds) {
     const seconds = Math.max(0, Math.floor(milliseconds / 1000));
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -196,7 +212,7 @@ function refreshCostPreview() {
         task: asking ? 'context' : task,
         markdown: source?.content || '',
         selection: nodes.selection?.value || '',
-        instruction: nodes.instruction?.value || '',
+        instruction: chooseAiInstruction(nodes.instruction?.value, lastInstruction),
         contextFiles: contexts.map((file) => ({ name: file.name, markdown: file.content })),
     });
     nodes.preview.hidden = !text;
@@ -587,7 +603,7 @@ export function syncAiPanel() {
         nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
         nodes.run.classList.toggle('is-loading', running);
         nodes.run.setAttribute('aria-busy', String(running));
-        nodes.run.textContent = running ? 'Sending to AI…' : hasResponse ? 'Send Again' : 'Send';
+        paintSendAction();
     }
     if (nodes.save) {
         nodes.save.hidden = !hasResponse;
@@ -696,7 +712,10 @@ export function initAiPanel(options) {
         setStatus('Proposal discarded. The note was not changed.', 'ok');
         syncAiPanel();
     });
-    const refreshPreview = () => refreshCostPreview();
+    const refreshPreview = () => {
+        paintSendAction();
+        refreshCostPreview();
+    };
     nodes.instruction?.addEventListener('input', refreshPreview);
     nodes.selection?.addEventListener('input', refreshPreview);
     nodes.run.addEventListener('click', () => {
@@ -741,7 +760,7 @@ async function runProposal() {
     }
 
     const copy = TASK_COPY[task] || TASK_COPY.revise;
-    const instruction = nodes.instruction?.value.trim() || ((pending || lastEdit) ? lastInstruction : '');
+    const instruction = chooseAiInstruction(nodes.instruction?.value, lastInstruction);
     const selection = nodes.selection?.value ?? '';
     const addOnly = !asking && (editing?.role || 'add') === 'add';
     const sentTask = asking ? 'context' : addOnly ? 'revise' : task;
