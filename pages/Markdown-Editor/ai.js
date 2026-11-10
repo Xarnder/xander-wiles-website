@@ -416,7 +416,19 @@ function insertSummary(original, summarySection) {
  * @param {{ task: string, original: string, selection?: string, proposal: string }} input
  * @returns {{ ok: true, markdown: string } | { ok: false, error: string }}
  */
+/** Stamp special date tags deterministically using the device's current local date. */
+export function stampAiDateTags(markdown, now = new Date()) {
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return String(markdown).replace(/\{\{\s*date\s*(?::[^}]*)?\}\}/gi, `{{date:${today}}}`);
+}
+
 export function applyAiProposal(input) {
+    const result = applyAiProposalContent(input);
+    if (!result.ok) return result;
+    return { ...result, markdown: stampAiDateTags(result.markdown) };
+}
+
+function applyAiProposalContent(input) {
     const task = input?.task === 'edit' ? 'revise' : input?.task;
     const original = String(input?.original ?? '');
     const proposal = stripWrappingFence(input?.proposal ?? '');

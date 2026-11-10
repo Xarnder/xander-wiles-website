@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     annotateDiff,
+    stampAiDateTags,
     applyAiProposal,
     diffLines,
     formatDiffCounts,
@@ -214,4 +215,23 @@ test('OpenAI prices cached input separately and bills reported output once', () 
         provider: 'openai', inputTokens: 1000000, cachedInputTokens: 500000, outputTokens: 1000000,
     }), 'This reply $1.85 (1,000,000 in, 1,000,000 out).');
     assert.equal(formatAiCost({ provider: 'openai' }), '');
+});
+
+
+test('AI date tags always use the current local date, including stale and bare tags', () => {
+    const now = new Date(2026, 10, 10, 0, 5);
+    assert.equal(
+        stampAiDateTags('{{date:2020-01-01}} {{date}} {{ DATE: yesterday }} {{date:}}', now),
+        '{{date:2026-11-10}} {{date:2026-11-10}} {{date:2026-11-10}} {{date:2026-11-10}}'
+    );
+    assert.equal(stampAiDateTags('An event on 2020-01-01. {{other:value}}', now), 'An event on 2020-01-01. {{other:value}}');
+});
+
+test('AI edits stamp the final note after composition for every edit task', () => {
+    for (const task of ['revise', 'header', 'expand', 'summarize']) {
+        const result = applyAiProposal({ task, original: '# Note\n\n{{date:2000-01-01}}\n\nPassage.', selection: 'Passage.', proposal: task === 'header' ? '# New\n\n{{date:1999-01-01}}\n\nSummary.' : 'Updated {{date:1999-01-01}}' });
+        assert.equal(result.ok, true);
+        assert.doesNotMatch(result.markdown, /date:(2000|1999)/);
+        assert.ok(result.markdown.includes(stampAiDateTags('{{date}}')));
+    }
 });
