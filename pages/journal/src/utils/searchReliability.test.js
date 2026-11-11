@@ -79,7 +79,7 @@ function largeJournal(count) {
 }
 
 for (const count of [2501, 5000]) {
-    test(`loads all ${count} entries, including the oldest match beyond multiple 500-document pages`, async (t) => {
+    test(`loads all ${count} entries, including the oldest match beyond multiple pages`, async (t) => {
         const docs = largeJournal(count);
         const indexById = new Map(docs.map((entry, index) => [entry.id, index]));
         let calls = 0;
@@ -117,18 +117,18 @@ test('a failed later page keeps both fresh and older cached results, and retry k
         readCache: async () => snapshot([docs.at(-1)]),
         readPage: async () => {
             if (calls === 4) throw new Error('Connection interrupted');
-            return snapshot(docs.slice(calls++ * 500, calls * 500));
+            return snapshot(docs.slice(calls++ * SEARCH_BATCH_SIZE, calls * SEARCH_BATCH_SIZE));
         }, isCurrent: () => true, yieldControl: noWait, onUpdate: (next) => { state = next; }
     });
     assert.equal(state.status, 'partial');
-    assert.equal(state.entries.length, 2001);
+    assert.equal(state.entries.length, 4 * SEARCH_BATCH_SIZE + 1);
     assert.equal(filterSearchEntries(state.entries, 'rare silver comet', 'phrase')[0].id, oldest.id);
     const saved = state.entries;
     const updates = [];
     calls = 0;
     await loadSearchIndex({
         initialEntries: saved, readCache: async () => snapshot([]),
-        readPage: async () => snapshot(docs.slice(calls++ * 500, calls * 500)),
+        readPage: async () => snapshot(docs.slice(calls++ * SEARCH_BATCH_SIZE, calls * SEARCH_BATCH_SIZE)),
         isCurrent: () => true, yieldControl: noWait, onUpdate: (next) => updates.push(next)
     });
     assert.ok(updates.every(({ entries }) => entries.length >= saved.length));
@@ -137,17 +137,17 @@ test('a failed later page keeps both fresh and older cached results, and retry k
 });
 
 test('repeated or cycling server pages stop with recoverable partial results', { timeout: 1000 }, async () => {
-    const docs = largeJournal(1000);
+    const docs = largeJournal(2 * SEARCH_BATCH_SIZE);
     let calls = 0;
     let state;
     await loadSearchIndex({
         readCache: async () => snapshot([]),
-        readPage: async () => snapshot(calls++ % 2 === 0 ? docs.slice(0, 500) : docs.slice(500)),
+        readPage: async () => snapshot(calls++ % 2 === 0 ? docs.slice(0, SEARCH_BATCH_SIZE) : docs.slice(SEARCH_BATCH_SIZE)),
         isCurrent: () => true, yieldControl: noWait, onUpdate: (next) => { state = next; }
     });
     assert.equal(calls, 3);
     assert.equal(state.status, 'partial');
-    assert.equal(state.entries.length, 1000);
+    assert.equal(state.entries.length, 2 * SEARCH_BATCH_SIZE);
 });
 
 test('cancelling a stalled read exits promptly and never publishes a late error', { timeout: 1000 }, async () => {
