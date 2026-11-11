@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from './markdown-gemini.js';
+import handler, { aiSystemPrompt } from './markdown-gemini.js';
 
 for (const provider of ['gemini', 'openai']) {
     test(`${provider}: revise creates content in an empty note`, async (t) => {
@@ -59,3 +59,23 @@ for (const provider of ['gemini', 'openai']) {
         assert.equal(calls, 2, 'invalid output must not trigger automatic regeneration');
     });
 }
+
+
+test('compact bullet instructions are on by default and can be disabled in every mode', () => {
+    for (const [task, addOnly] of [['context', false], ['revise', true], ['revise', false], ['summarize', false]]) {
+        assert.match(aiSystemPrompt(task, addOnly), /no blank lines or extra gaps/);
+        assert.doesNotMatch(aiSystemPrompt(task, addOnly, false), /no blank lines or extra gaps/);
+    }
+});
+
+
+test('date tag instructions default on with an example and can be disabled independently', () => {
+    for (const [task, addOnly] of [['context', false], ['revise', true], ['header', false]]) {
+        assert.match(aiSystemPrompt(task, addOnly), /Example:.*\{\{date:\d{4}-\d{2}-\d{2}\}\}/);
+        const off = aiSystemPrompt(task, addOnly, true, false);
+        assert.doesNotMatch(off, /Example:|one \{\{date/);
+        assert.match(off, /Do not add new date tags/);
+        assert.match(off, /no blank lines/);
+    }
+    assert.match(aiSystemPrompt('revise', true, false, true), /Include our special date tags/);
+});

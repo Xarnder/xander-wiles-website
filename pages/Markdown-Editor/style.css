@@ -8420,3 +8420,11 @@ input[type="range"].file-color-hue::-moz-range-thumb { background: #fff; border-
     max-height: none;
 }
 .ai-heading { align-items: flex-start; }
+
+.ai-copy-message { align-self: flex-start; min-height: 44px; padding: 8px 12px; font-size: 0.82rem; white-space: normal; }
+
+.ai-bullet-preference { display: flex; align-items: center; gap: 10px; min-height: 44px; margin-bottom: 10px; cursor: pointer; }
+.ai-bullet-preference input { flex-shrink: 0; width: 20px; height: 20px; accent-color: var(--accent); }
+
+.ai-prompt-preview { margin: 8px 0; padding: 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 ui-monospace, SFMono-Regular, monospace; user-select: text; }
+.ai-prompt-details { min-width: 0; }

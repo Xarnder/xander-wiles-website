@@ -1,3 +1,4 @@
+import { buildAiProviderRequest } from './ai-prompts.js';
 /**
  * AI tab. Finder / Pinned can drop a note into the composer as context or as the only file to edit.
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
@@ -73,6 +74,8 @@ function readEls() {
         resetCancel: document.getElementById('ai-reset-cancel'),
         help: document.querySelector('.ai-help'),
         provider: document.getElementById('ai-provider'),
+        compactBullets: document.getElementById('ai-compact-bullets'),
+        includeDateTags: document.getElementById('ai-include-date-tags'),
         empty: document.getElementById('ai-empty'),
         active: document.getElementById('ai-active'),
         title: document.getElementById('ai-file-title'),
@@ -80,6 +83,7 @@ function readEls() {
         modeControls: document.getElementById('ai-mode-controls'),
         useOpen: document.getElementById('ai-use-open'),
         thread: document.getElementById('ai-thread'),
+        copyMessage: document.getElementById('ai-copy-message'),
         selectionField: document.getElementById('ai-selection-field'),
         selection: document.getElementById('ai-selection'),
         instructionLabel: document.getElementById('ai-instruction-label'),
@@ -87,6 +91,8 @@ function readEls() {
         run: document.getElementById('ai-run'),
         save: document.getElementById('ai-save'),
         preview: document.getElementById('ai-cost-preview'),
+        promptPreview: document.getElementById('ai-prompt-preview'),
+        promptDetails: document.getElementById('ai-prompt-details'),
         status: document.getElementById('ai-status'),
         error: document.getElementById('ai-error'),
         cost: document.getElementById('ai-cost'),
@@ -199,7 +205,39 @@ function showCost(usage) {
     nodes.cost.textContent = text ? `${usage.provider === 'openai' ? 'OpenAI' : 'Gemini'} · ${text}` : '';
 }
 
+function buildCurrentAiRequest() {
+    const editing = editAttachment();
+    const contexts = attachments.filter(file => file.role === 'context');
+    const asking = contexts.length > 0 && !editing;
+    const addOnly = !asking && (editing?.role || 'add') === 'add';
+    const sentTask = asking ? 'context' : addOnly ? 'revise' : task;
+    return {
+        provider: nodes.provider?.value || 'gemini',
+        addOnly,
+        compactBullets: nodes.compactBullets?.checked !== false,
+        includeDateTags: nodes.includeDateTags?.checked !== false,
+        task: sentTask,
+        markdown: asking ? '' : targetFile()?.content || '',
+        selection: sentTask === 'expand' ? nodes.selection?.value || '' : '',
+        instruction: chooseAiInstruction(nodes.instruction?.value, lastInstruction),
+        contextFiles: contexts.map(file => ({ name: file.name, markdown: file.content })),
+    };
+}
+
+function refreshPromptPreview() {
+    if (!nodes?.promptPreview || !nodes.promptDetails?.open || !deps) return;
+    const request = buildCurrentAiRequest();
+    nodes.promptPreview.textContent = JSON.stringify({
+        editorApi: { endpoint: '/api/markdown-gemini', body: request },
+        providerApi: {
+            endpoint: request.provider === 'openai' ? 'https://api.openai.com/v1/responses' : 'https://generativelanguage.googleapis.com/v1beta/interactions',
+            body: buildAiProviderRequest(request),
+        },
+    }, null, 2);
+}
+
 function refreshCostPreview() {
+    refreshPromptPreview();
     if (!nodes?.preview || !deps) return;
     const doc = deps.getDocument();
     const editing = editAttachment();
@@ -564,6 +602,10 @@ function resetAiSession() {
 export function syncAiPanel() {
     if (!nodes || !deps) return;
     refreshResetStatus();
+    if (nodes.copyMessage) {
+        nodes.copyMessage.hidden = !lastInstruction;
+        nodes.copyMessage.disabled = running;
+    }
     if (nodes.reset) nodes.reset.disabled = running || accepting || saving;
     const doc = deps.getDocument();
     const open = Boolean(doc?.fileId);
@@ -627,7 +669,7 @@ export function syncAiPanel() {
         nodes.contentPane.inert = running;
         nodes.contentPane.classList.toggle('is-processing', running);
         nodes.contentPane.setAttribute('aria-busy', String(running));
-        for (const control of nodes.contentPane.querySelectorAll('button, select')) {
+        for (const control of nodes.contentPane.querySelectorAll('button, select, input')) {
             if (control === nodes.reset || control === nodes.discard) continue;
             control.disabled = running;
         }
@@ -652,6 +694,21 @@ export function initAiPanel(options) {
         return;
     }
     nodes.run.dataset.bound = '1';
+    nodes.promptDetails?.addEventListener('toggle', refreshPromptPreview);
+    if (nodes.includeDateTags) {
+        try { nodes.includeDateTags.checked = localStorage.getItem('md-editor:ai-include-date-tags') !== '0'; } catch { /* Enabled by default. */ }
+        nodes.includeDateTags.addEventListener('change', () => {
+            refreshPromptPreview();
+            try { localStorage.setItem('md-editor:ai-include-date-tags', nodes.includeDateTags.checked ? '1' : '0'); } catch { /* Session preference still works. */ }
+        });
+    }
+    if (nodes.compactBullets) {
+        try { nodes.compactBullets.checked = localStorage.getItem('md-editor:ai-compact-bullets') !== '0'; } catch { /* Default stays enabled. */ }
+        nodes.compactBullets.addEventListener('change', () => {
+            refreshPromptPreview();
+            try { localStorage.setItem('md-editor:ai-compact-bullets', nodes.compactBullets.checked ? '1' : '0'); } catch { /* Works for this session. */ }
+        });
+    }
     nodes.save?.addEventListener('click', async () => {
         if (nodes.save.disabled || saving) return;
         saving = true;
@@ -716,6 +773,14 @@ export function initAiPanel(options) {
         paintSendAction();
         refreshCostPreview();
     };
+    nodes.copyMessage?.addEventListener('click', () => {
+        if (running || !lastInstruction || !nodes.instruction) return;
+        nodes.instruction.value = lastInstruction;
+        refreshPreview();
+        nodes.instruction.focus({ preventScroll: true });
+        nodes.instruction.setSelectionRange(lastInstruction.length, lastInstruction.length);
+        nodes.instruction.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    });
     nodes.instruction?.addEventListener('input', refreshPreview);
     nodes.selection?.addEventListener('input', refreshPreview);
     nodes.run.addEventListener('click', () => {
@@ -779,6 +844,7 @@ async function runProposal() {
         return;
     }
 
+    const requestBody = buildCurrentAiRequest();
     running = true;
     let receivedResponse = false;
     startRequestTimer();
@@ -808,18 +874,7 @@ async function runProposal() {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    provider,
-                    addOnly,
-                    task: sentTask,
-                    markdown: asking ? '' : source.content,
-                    selection: sentTask === 'expand' ? selection : '',
-                    instruction,
-                    contextFiles: contexts.map((file) => ({
-                        name: file.name,
-                        markdown: file.content,
-                    })),
-                }),
+                body: JSON.stringify(requestBody),
             });
         } catch {
             throw new Error('Could not reach the AI service.');

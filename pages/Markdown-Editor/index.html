@@ -360,6 +360,7 @@
                             <span id="ai-instruction-label">Input text box</span>
                             <textarea id="ai-instruction" rows="3" placeholder="Ask about this note, or say what to change"></textarea>
                         </label>
+                        <button type="button" id="ai-copy-message" class="btn btn-ghost ai-copy-message" aria-controls="ai-instruction" hidden>Copy back into input box</button>
                         <div id="ai-thread" class="ai-thread" hidden></div>
                         <p id="ai-cost-preview" class="ai-cost" hidden></p>
                         <p id="ai-cost" class="ai-cost" hidden></p>
@@ -383,8 +384,21 @@
                         <details class="ai-help">
                             <summary>Help and tips</summary>
                             <div class="ai-help-copy">
+                                <label class="ai-bullet-preference">
+                                    <input id="ai-compact-bullets" type="checkbox" checked>
+                                    <span>Keep bullet points together (no blank lines between items)</span>
+                                </label>
+                                <label class="ai-bullet-preference">
+                                    <input id="ai-include-date-tags" type="checkbox" checked>
+                                    <span>Include special date tags in new AI text</span>
+                                </label>
                                 <p>Open a markdown file from Finder or Pinned using Open in AI. Add only text is selected by default.</p>
                                 <p>Context answers questions without changing the note. Add only text preserves all existing lines and inserts new text. Add and subtract lines allows rewriting and removing lines. Review the proposal, then Save or Discard.</p>
+                                <details id="ai-prompt-details" class="ai-prompt-details">
+                                    <summary>Full API prompt preview</summary>
+                                    <p>Next request, including the full system instructions and note content. Authentication credentials are excluded. Previewing does not call the AI.</p>
+                                    <pre id="ai-prompt-preview" class="ai-prompt-preview" tabindex="0"></pre>
+                                </details>
                                 <aside class="ai-debug" aria-label="AI debug status">
                                     <span class="ai-debug-title">Debug / status</span>
                                     <div id="ai-debug-global"></div>
