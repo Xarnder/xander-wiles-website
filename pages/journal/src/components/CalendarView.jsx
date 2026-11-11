@@ -384,8 +384,8 @@ export default function CalendarView() {
                                                     >
                                                         {day}
 
-                                                        {/* Title Only Indicator - Red Dot on Left */}
-                                                        {isTitleOnly && (
+                                                        {/* Title-only markers follow the calendar dots preference too. */}
+                                                        {showTagDots && isTitleOnly && (
                                                             <div className="absolute top-1/2 left-0 w-1.5 h-1.5 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 ml-1"></div>
                                                         )}
 

@@ -746,7 +746,7 @@ export default function SettingsView() {
                             <span className="min-w-0">
                                 <span className="block text-sm font-bold text-white">Calendar tag dots</span>
                                 <span className="mt-1 block text-xs leading-snug text-text-muted">
-                                    Show coloured tag dots on calendar days. Off by default to keep the year view uncluttered.
+                                    Show coloured tag dots and red title-only markers on calendar days. Off by default to keep the year view uncluttered.
                                 </span>
                             </span>
                         </span>
