@@ -17,6 +17,7 @@ import ImageView from './components/ImageView';
 import MemoriesView from './components/MemoriesView';
 import TagsView from './components/TagsView';
 import SettingsView from './components/SettingsView';
+import SearchView from './components/SearchView';
 import EntryErrorBoundary from './components/EntryErrorBoundary';
 
 function PrivateRoute({ children }) {
@@ -61,6 +62,7 @@ function App() {
               <Route path="/pdf-export" element={<PdfExportView />} />
               <Route path="/clipboard" element={<ClipboardView />} />
               <Route path="/settings" element={<SettingsView />} />
+              <Route path="/search" element={<SearchView />} />
             </Route>
           </Routes>
         </BackupProvider>

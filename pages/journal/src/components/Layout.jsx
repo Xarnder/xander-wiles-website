@@ -5,7 +5,6 @@ import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
-import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
 import BackupOptions from './BackupOptions';
 import LeftArrowIcon from './LeftArrowIcon';
@@ -24,6 +23,7 @@ function getWorkspaceTitle(pathname) {
     if (pathname === '/pdf-export') return 'PDF Export';
     if (pathname === '/clipboard') return 'Clipboard';
     if (pathname === '/settings') return 'Settings';
+    if (pathname === '/search') return 'Search';
     if (pathname === '/') return 'Calendar';
     return 'Journal';
 }
@@ -34,6 +34,7 @@ function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
         <button
             type="button"
             onClick={() => onSelect(path)}
+            aria-current={isActive ? 'page' : undefined}
             className={`flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 ${isActive
                 ? 'bg-primary/20 text-white'
                 : 'text-text-muted hover:bg-white/5 hover:text-white'
@@ -60,8 +61,6 @@ export default function Layout() {
     const { isEditingEntry } = useEntryUi();
     const navigate = useNavigate();
     const location = useLocation();
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [searchInitialTab, setSearchInitialTab] = useState('search');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
     const [fillOldestEmptyDay, setFillOldestEmptyDay] = useState(isQuickWriteFillOldestEmptyEnabled);
@@ -156,21 +155,28 @@ export default function Layout() {
 
     // Global Search Shortcut (Cmd+K / Ctrl+K)
     useEffect(() => {
-        if (isEditingEntry) {
-            setIsSearchOpen(false);
-            return undefined;
-        }
+        if (isEditingEntry) return undefined;
 
         const handleKeyDown = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
                 e.preventDefault();
-                setSearchInitialTab('search');
-                setIsSearchOpen(prev => !prev);
+                setIsMobileMenuOpen(false);
+                if (location.pathname === '/search') {
+                    if (new URLSearchParams(location.search).get('tab') === 'date-offset') {
+                        const params = new URLSearchParams(location.search);
+                        params.delete('tab');
+                        navigate(`/search?${params}`);
+                    } else {
+                        document.getElementById('journal-search-input')?.focus();
+                    }
+                } else {
+                    navigate('/search');
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditingEntry]);
+    }, [isEditingEntry, location.pathname, location.search, navigate]);
 
     // Dynamic Tab Title
     useEffect(() => {
@@ -232,6 +238,8 @@ export default function Layout() {
 
     const isEntryView = location.pathname.startsWith('/entry/');
     const isCalendarView = location.pathname === '/';
+    const isSearchView = location.pathname === '/search';
+    const isTimeTravelView = isSearchView && new URLSearchParams(location.search).get('tab') === 'date-offset';
     const hasEntriesThisWeek = Object.values(recentEntries).some(entryHasContent);
     const showGetStartedHint = Boolean(
         currentUser
@@ -239,12 +247,14 @@ export default function Layout() {
         && !hasEntriesThisWeek
         && !getStartedHintDismissed
         && !isEntryView
+        && !isSearchView
     );
     const fromPath = location.state?.from;
     const isFromGallery = location.state?.fromGallery;
 
     function getEntryBackLabel() {
         if (isFromGallery) return 'Back to gallery';
+        if (fromPath?.split('?')[0] === '/search') return 'Back to search';
         if (fromPath === '/stats') return 'Back to stats';
         if (fromPath === '/tags') return 'Back to tags';
         if (fromPath === '/month') return 'Back to month view';
@@ -267,11 +277,6 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex flex-col font-body text-text">
-            <SearchModal
-                isOpen={isSearchOpen}
-                onClose={() => setIsSearchOpen(false)}
-                initialTab={searchInitialTab}
-            />
             <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
@@ -286,7 +291,7 @@ export default function Layout() {
                         <div ref={headerTitleContainerRef} className="min-w-0 flex-1 overflow-hidden">
                             <h1
                                 ref={headerTitleTextRef}
-                                className="inline-flex max-w-full items-center whitespace-nowrap font-serif font-bold leading-none bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70"
+                                className="inline-flex max-w-full items-center whitespace-nowrap font-serif font-bold leading-none text-text"
                                 style={{ fontSize: `${headerTitleFontSize}px` }}
                             >
                                 {workspaceTitle}
@@ -295,8 +300,8 @@ export default function Layout() {
                     </div>
 
                     {/* Desktop Actions */}
-                    <div className="hidden md:flex shrink-0 items-center space-x-3">
-                        <span className="text-sm text-text-muted border-r border-white/10 pr-4 mr-1">
+                    <div className="hidden lg:flex shrink-0 items-center space-x-3">
+                        <span className="max-w-48 truncate text-sm text-text-muted border-r border-white/10 pr-4 mr-1">
                             {currentUser?.email}
                         </span>
 
@@ -326,14 +331,11 @@ export default function Layout() {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setSearchInitialTab('search');
-                                            setIsSearchOpen(true);
-                                        }}
+                                        onClick={() => navigate('/search')}
                                         className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                         title="Search (Cmd+K)"
                                         aria-label="Search journal"
-                                        aria-expanded={isSearchOpen}
+                                        aria-current={isSearchView && !isTimeTravelView ? 'page' : undefined}
                                     >
                                         <Search className="h-5 w-5" />
                                     </button>
@@ -403,13 +405,11 @@ export default function Layout() {
 
                         <button
                             type="button"
-                            onClick={() => {
-                                setSearchInitialTab('date-offset');
-                                setIsSearchOpen(true);
-                            }}
-                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isSearchOpen && searchInitialTab === 'date-offset' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            onClick={() => navigate('/search?tab=date-offset')}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isTimeTravelView ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Time Travel (Jump by date offset)"
                             aria-label="Time travel by date offset"
+                            aria-current={isTimeTravelView ? 'page' : undefined}
                         >
                             <Clock className="h-5 w-5" />
                         </button>
@@ -455,7 +455,7 @@ export default function Layout() {
                     </div>
 
                     {/* Mobile Header Controls */}
-                    <div className="flex md:hidden shrink-0 items-center gap-2">
+                    <div className="flex lg:hidden shrink-0 items-center gap-2">
                         {isEntryView && (
                             <button
                                 type="button"
@@ -480,13 +480,10 @@ export default function Layout() {
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setSearchInitialTab('search');
-                                        setIsSearchOpen(true);
-                                    }}
+                                    onClick={() => navigate('/search')}
                                     className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                     aria-label="Search journal"
-                                    aria-expanded={isSearchOpen}
+                                    aria-current={isSearchView && !isTimeTravelView ? 'page' : undefined}
                                 >
                                     <Search className="h-5 w-5" />
                                 </button>
@@ -514,6 +511,7 @@ export default function Layout() {
                         navItems={
                             <>
                                 <NavItem path="/" icon={CalendarIcon} label="Calendar" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/search" icon={Search} label="Search" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/month" icon={List} label="Month View" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/images" icon={ImageIcon} label="Photos" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                                 <NavItem path="/stats" icon={BarChart} label="Stats" currentPath={location.pathname} onSelect={handleMobileNavigate} />
@@ -523,8 +521,7 @@ export default function Layout() {
                                     type="button"
                                     onClick={() => {
                                         setIsMobileMenuOpen(false);
-                                        setSearchInitialTab('date-offset');
-                                        setIsSearchOpen(true);
+                                        navigate('/search?tab=date-offset');
                                     }}
                                     className="flex items-center w-full px-4 py-3 rounded-lg text-text-muted hover:bg-white/5 hover:text-white transition-all duration-200"
                                 >
@@ -579,7 +576,7 @@ export default function Layout() {
             </main>
 
             {/* Floating Action Button (Quick Write) */}
-            {!location.pathname.startsWith('/entry/') && currentUser && (
+            {!isEntryView && !isSearchView && currentUser && (
                 <button
                     type="button"
                     onClick={handleQuickWrite}
