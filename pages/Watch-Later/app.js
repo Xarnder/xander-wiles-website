@@ -1458,11 +1458,15 @@ async function handleSingleAdd() {
     await proceedWithSingleAdd(url);
 }
 
-async function getMovieScores(title) {
+async function getMovieScores(title, { type, year } = {}) {
     try {
         const apiKey = "6fda8b50";
         logDebug(`Fetching OMDb scores for: "${title}" using key: ${apiKey}`);
-        const response = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`);
+        const params = new URLSearchParams({ t: title, apikey: apiKey });
+        if (type) params.set('type', type === 'tv' ? 'series' : 'movie');
+        if (year) params.set('y', year);
+        const response = await fetch(`https://www.omdbapi.com/?${params}`, { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) throw new Error('Score lookup unavailable');
         const data = await response.json();
         
         logDebug(`OMDb Response: ${JSON.stringify(data)}`, data.Response === "False");
@@ -2262,6 +2266,7 @@ window.markAsWatched = async (id) => {
 const sharedPrivateEditor = createPrivateEditor({
     getUser: () => currentUser, getItems: () => cachedWatches,
     getTiers: () => userTiers, getPeople: () => userPeople,
+    getScores: getMovieScores,
     save: (id, data, creating) => creating
         ? setDoc(doc(db, 'watches', id), { ...data, uid: currentUser.uid, timestamp: Date.now() })
         : updateDoc(doc(db, 'watches', id), data),
