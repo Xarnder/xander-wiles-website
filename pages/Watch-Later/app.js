@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRe
 import { getFirestore, collection, addDoc, setDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { firebaseConfig } from './firebase-config.js';
-import { isOwner } from './recommendations-model.mjs';
+import { isOwner, watchLaterRedirect } from './recommendations-model.mjs';
 import { createPrivateEditor } from './private-editor.mjs';
 import { cleanTitle, getVideoData } from './youtube-title.mjs';
 
@@ -1241,6 +1241,7 @@ onAuthStateChanged(auth, async (user) => {
             if (modeSelector) modeSelector.classList.add('hidden');
             if (document.getElementById('filter-bar')) document.getElementById('filter-bar').classList.add('hidden');
             document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+            window.location.replace(watchLaterRedirect({ user, page: 'private' }));
 
         }
     } catch (err) {

@@ -24,7 +24,7 @@ const youtubeSource = await readFile(new URL('youtube-title.mjs', root), 'utf8')
 
 async function setup(initialUser = null, fetchTitle) {
     const dom = new JSDOM(html, {
-        url: 'http://localhost/pages/Watch-Later/',
+        url: 'http://localhost/pages/Watch-Later/?view=recommendations',
         runScripts: 'outside-only',
     });
     const w = dom.window,
