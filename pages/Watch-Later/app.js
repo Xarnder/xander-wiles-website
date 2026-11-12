@@ -358,15 +358,30 @@ const batchMoveList = document.getElementById('batch-move-list');
 const batchPeopleToggles = document.getElementById('batch-people-toggles');
 const saveBatchPeopleBtn = document.getElementById('save-batch-people-btn');
 
+const modeDescriptions = {
+    watch: 'Open a title to watch its trailer.',
+    edit: 'Open a title to edit its details.',
+    organize: 'Drag titles between tiers.',
+    select: 'Select titles for bulk actions.',
+    'reorder-tiers': 'Drag tiers to change their order.',
+};
+function syncModeIndicator() {
+    modeBtns.forEach(button => {
+        const active = button.dataset.mode === appMode;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+    const activeButton = [...modeBtns].find(button => button.dataset.mode === appMode);
+    const status = document.getElementById('current-mode-status');
+    status.querySelector('strong').textContent = `${activeButton.textContent} mode`;
+    status.querySelector('span').textContent = modeDescriptions[appMode];
+    document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
+    document.body.classList.add(`mode-${appMode}`);
+}
 modeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        modeBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
         appMode = btn.dataset.mode;
-
-        // Update body class for cursors
-        document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
-        document.body.classList.add(`mode-${appMode}`);
+        syncModeIndicator();
 
         if (appMode !== 'select') {
             clearSelection();
@@ -1221,7 +1236,9 @@ onAuthStateChanged(auth, async (user) => {
             if (tierContainer) tierContainer.classList.remove('hidden');
             if (modeSelector) modeSelector.classList.remove('hidden');
             if (filterBar) filterBar.classList.remove('hidden');
-            document.body.classList.add('mode-watch');
+            appMode = 'watch';
+            syncModeIndicator();
+            updateSortableState();
 
             console.log("[Auth] UI transition complete, loading data...");
 
