@@ -1,4 +1,4 @@
-import { mountMediaEditor, bindTitleAutofill } from './media-editor.mjs';
+import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
 import { isOwner, youtubeId, safeImageUrl } from './recommendations-model.mjs';
 
 export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, save, remove }) {
@@ -72,7 +72,7 @@ export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, sa
             for (const name of ['genre','year','note','watchStatus','watchWith','imdbScore','rtScore']) values[name] = item?.[name] || (name === 'watchStatus' ? 'first-watch' : '');
             for (const [name, value] of Object.entries(values)) field(name).value = value ?? '';
             field('watched').checked = !!item?.watched;
-            $('editor-genres').replaceChildren(...[...new Set(getItems().map(i => i.genre).filter(Boolean))].map(g => new Option(g, g)));
+            populateGenrePicker(dialog, getItems().map(item => item.genre));
             $('editor-people').replaceChildren(...getPeople().map(p => new Option(p.name, p.name)));
             dialog.showModal(); field(item ? 'title' : 'trailerUrl').focus();
         },

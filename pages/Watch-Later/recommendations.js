@@ -32,7 +32,7 @@ import {
     filterRecommendations,
 } from './recommendations-model.mjs';
 
-import { mountMediaEditor, bindTitleAutofill } from './media-editor.mjs';
+import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
 mountMediaEditor();
 
 const app = initializeApp(firebaseConfig);
@@ -297,7 +297,7 @@ function openEditor(item = null) {
     ]) {
         form.elements.namedItem(key).value = initial[key] ?? '';
     }
-    $('editor-genres').replaceChildren(...[...new Set(items.map(i => i.genre).filter(Boolean))].map(genre => { const option = document.createElement('option'); option.value = genre; return option; }));
+    populateGenrePicker(editor, items.map(item => item.genre));
     editor.showModal();
     form.elements.namedItem(item ? 'title' : 'trailerUrl').focus();
 }

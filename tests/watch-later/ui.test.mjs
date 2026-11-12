@@ -322,7 +322,7 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
     let user = { email: model.OWNER_EMAIL, emailVerified: true }, fail = false;
     const writes = [];
     const editor = mod.namespace.createPrivateEditor({
-        getUser: () => user, getItems: () => [], getPeople: () => [{ name: 'Friend' }],
+        getUser: () => user, getItems: () => [{ genre: 'Drama', type: 'movie' }, { genre: 'Comedy', type: 'tv' }], getPeople: () => [{ name: 'Friend' }],
         getTiers: () => [{ id: 'later', name: 'Later' }, { id: 'next', name: 'Next' }],
         save: async (...args) => { if (fail) throw { code: 'unavailable' }; writes.push(args); },
         remove: async () => {},
@@ -332,11 +332,14 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
         editor.open(null, 'tv');
         assert.equal(form.elements.type.value, 'tv');
         assert.equal(form.elements.trailerUrl, w.document.activeElement);
+        assert.deepEqual([...w.document.querySelectorAll('#editor-genres button')].map(b => b.textContent), ['Comedy', 'Drama']);
+        w.document.querySelector('#editor-genres button').click();
         form.elements.title.value = 'My series';
         form.elements.tier.value = 'next';
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
         assert.equal(writes[0][1].movieTitle, 'My series');
         assert.equal(writes[0][1].tier, 'next');
+        assert.equal(writes[0][1].genre, 'Comedy');
         assert.equal(writes[0][2], true);
         assert.equal(dialog.open, false);
         editor.open({ id: 'existing', movieTitle: 'My series', type: 'tv', tier: 'next', watchWith: 'Friend', watched: true, watchedAt: 123 });
@@ -358,4 +361,41 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
         assert.equal(writes.length, 2);
     } finally { w.close(); }
+});
+
+test('genre picker lists all collection genres and supports selection, clearing, custom genres and edits', async () => {
+    const app = await setup({ email: model.OWNER_EMAIL, emailVerified: true });
+    try {
+        const { $, w } = app;
+        $('add-recommendation').click();
+        assert.equal($('editor-genres-empty').hidden, false);
+        $('close-editor').click();
+        app.seed([
+            { ...sample('film', 'Film'), genre: 'Drama' },
+            { ...sample('series', 'Series', 'tv'), genre: 'Comedy' },
+            { ...sample('other', 'Other'), genre: ' drama ' },
+        ]);
+        $('add-recommendation').click();
+        const form = $('recommendation-form');
+        const buttons = [...$('editor-genres').querySelectorAll('button')];
+        assert.deepEqual(buttons.map(b => b.textContent), ['Comedy', 'Drama']);
+        assert.equal($('editor-genres-empty').hidden, true);
+        buttons[0].click();
+        assert.equal(form.elements.genre.value, 'Comedy');
+        assert.equal(buttons[0].getAttribute('aria-pressed'), 'true');
+        assert.equal(app.writes.length, 0);
+        $('clear-editor-genre').click();
+        assert.equal(form.elements.genre.value, '');
+        assert.equal(buttons[0].getAttribute('aria-pressed'), 'false');
+        form.elements.genre.value = 'Mystery';
+        form.elements.genre.dispatchEvent(new w.Event('input'));
+        form.elements.title.value = 'A new title';
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(app.writes[0].payload.genre, 'Mystery');
+        $('add-recommendation').click();
+        assert.deepEqual([...$('editor-genres').querySelectorAll('button')].map(b => b.textContent), ['Comedy', 'Drama', 'Mystery']);
+        $('close-editor').click();
+        w.document.querySelector('[aria-label="Edit A new title"]').click();
+        assert.equal($('editor-genres').querySelector('[aria-pressed="true"]').textContent, 'Mystery');
+    } finally { app.close(); }
 });
