@@ -2,12 +2,12 @@
 	import { onMount } from 'svelte';
 	import { cubicInOut } from 'svelte/easing';
 	import { fade, type TransitionConfig } from 'svelte/transition';
-	import ThemeSelect from '$lib/components/ThemeSelect.svelte';
-	import '$lib/themes.css';
-	import BreathingPath from '$lib/components/BreathingPath.svelte';
-	import BreathingControls from '$lib/components/BreathingControls.svelte';
-	import WaterBackground from '$lib/components/WaterBackground.svelte';
-	import { BreathingSession, phases } from '$lib/breathing';
+	import ThemeSelect from '#lib/components/ThemeSelect.svelte';
+	import '#lib/themes.css';
+	import BreathingPath from '#lib/components/BreathingPath.svelte';
+	import BreathingControls from '#lib/components/BreathingControls.svelte';
+	import WaterBackground from '#lib/components/WaterBackground.svelte';
+	import { BreathingSession, phases } from '#lib/breathing';
 
 	let session = new BreathingSession();
 	let running = $state(false),

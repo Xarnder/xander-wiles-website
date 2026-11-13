@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { pathData, nearestPosition, type PathPoint } from '$lib/geometry';
-	import { signedDistance, wrap } from '$lib/breathing';
+	import { pathData, nearestPosition, type PathPoint } from '#lib/geometry';
+	import { signedDistance, wrap } from '#lib/breathing';
 	import DragHint from './DragHint.svelte';
 	let { user, guide, running, calibrated, cycles, atTarget = false, onmove, onbegin, onend } =
 		$props<{

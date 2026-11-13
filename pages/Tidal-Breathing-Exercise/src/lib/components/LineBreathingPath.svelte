@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { phases, signedDistance, wrap } from '$lib/breathing';
-	import { lineHeight, lineProgress, LineProgressTracker } from '$lib/line';
+	import { phases, signedDistance, wrap } from '#lib/breathing';
+	import { lineHeight, lineProgress, LineProgressTracker } from '#lib/line';
 	import DragHint from './DragHint.svelte';
 	import GuideHint from './GuideHint.svelte';
 	let { user, guide, running, calibrated, cycles, atTarget = false, onmove, onbegin, onend } =
