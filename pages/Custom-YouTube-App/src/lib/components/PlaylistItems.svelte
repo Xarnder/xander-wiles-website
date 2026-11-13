@@ -1,12 +1,12 @@
 <script lang="ts">
-	import EmptyState from '$lib/components/EmptyState.svelte';
-	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
-	import { auth } from '$lib/state/auth.svelte';
-	import { player } from '$lib/state/player.svelte';
-	import { YouTubeApiError, type YtPlaylist, type YtPlaylistItem } from '$lib/types/youtube';
-	import { errorMessage } from '$lib/utils/format';
-	import { movedItemAfterReorder, moveItem } from '$lib/youtube/playlist-reorder';
-	import { listPlaylistItems, updatePlaylistItemPosition } from '$lib/youtube/playlists';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ErrorBanner from '#lib/components/ErrorBanner.svelte';
+	import { auth } from '#lib/state/auth.svelte';
+	import { player } from '#lib/state/player.svelte';
+	import { YouTubeApiError, type YtPlaylist, type YtPlaylistItem } from '#lib/types/youtube';
+	import { errorMessage } from '#lib/utils/format';
+	import { movedItemAfterReorder, moveItem } from '#lib/youtube/playlist-reorder';
+	import { listPlaylistItems, updatePlaylistItemPosition } from '#lib/youtube/playlists';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { dragHandle, dragHandleZone, type DndEvent } from 'svelte-dnd-action';

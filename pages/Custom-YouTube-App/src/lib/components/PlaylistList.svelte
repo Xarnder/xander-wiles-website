@@ -1,10 +1,10 @@
 <script lang="ts">
-	import EmptyState from '$lib/components/EmptyState.svelte';
-	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
-	import { auth } from '$lib/state/auth.svelte';
-	import type { YtPlaylist } from '$lib/types/youtube';
-	import { errorMessage } from '$lib/utils/format';
-	import { listMyPlaylists } from '$lib/youtube/playlists';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ErrorBanner from '#lib/components/ErrorBanner.svelte';
+	import { auth } from '#lib/state/auth.svelte';
+	import type { YtPlaylist } from '#lib/types/youtube';
+	import { errorMessage } from '#lib/utils/format';
+	import { listMyPlaylists } from '#lib/youtube/playlists';
 	import { onMount } from 'svelte';
 
 	let { onSelect }: { onSelect: (playlist: YtPlaylist) => void } = $props();

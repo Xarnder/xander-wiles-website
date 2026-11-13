@@ -1,18 +1,18 @@
-import { isEmailAllowed, parseAllowlist } from '$lib/auth/allowlist';
-import type { FeedItem, YtPlaylistItem } from '$lib/types/youtube';
+import { isEmailAllowed, parseAllowlist } from '#lib/auth/allowlist';
+import type { FeedItem, YtPlaylistItem } from '#lib/types/youtube';
 import {
 	buildPlaylistItemUpdateBody,
 	isSpecialPlaylist,
 	movedItemAfterReorder,
 	moveItem
-} from '$lib/youtube/playlist-reorder';
+} from '#lib/youtube/playlist-reorder';
 import {
 	canFetchNextPage,
 	estimateSubscriptionRefreshUnits,
 	firstLoadPageCap,
 	QUOTA
-} from '$lib/youtube/quota';
-import { mergeSubscriptionFeed, takeTopSubscriptions } from '$lib/youtube/subscriptions-feed';
+} from '#lib/youtube/quota';
+import { mergeSubscriptionFeed, takeTopSubscriptions } from '#lib/youtube/subscriptions-feed';
 import { describe, expect, it } from 'vitest';
 
 describe('allowlist', () => {

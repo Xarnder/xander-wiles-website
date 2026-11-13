@@ -1,4 +1,4 @@
-import type { FeedItem } from '$lib/types/youtube';
+import type { FeedItem } from '#lib/types/youtube';
 import { QUOTA } from './quota';
 
 export function takeTopSubscriptions<T>(items: T[], limit = QUOTA.maxSubscriptions): T[] {

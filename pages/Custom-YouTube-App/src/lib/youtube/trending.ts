@@ -1,4 +1,4 @@
-import type { FeaturedVideo } from '$lib/types/youtube';
+import type { FeaturedVideo } from '#lib/types/youtube';
 import { youtubeRequest } from './client';
 import { DEFAULT_REGION } from './featured';
 import { QUOTA } from './quota';

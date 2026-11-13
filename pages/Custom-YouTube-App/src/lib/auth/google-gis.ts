@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import * as env from '$app/env/public';
 import { isEmailAllowed, parseAllowlist } from './allowlist';
 
 export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube';

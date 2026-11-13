@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tabs, type AppTab } from '$lib/state/tabs.svelte';
+	import { tabs, type AppTab } from '#lib/state/tabs.svelte';
 
 	const items: { id: AppTab; label: string }[] = [
 		{ id: 'playlists', label: 'Playlists' },

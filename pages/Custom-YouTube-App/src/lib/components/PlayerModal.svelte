@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { player } from '$lib/state/player.svelte';
+	import { player } from '#lib/state/player.svelte';
 
 	const IFRAME_API = 'https://www.youtube.com/iframe_api';
 

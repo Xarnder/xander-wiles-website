@@ -1,6 +1,6 @@
 <script lang="ts">
-	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
-	import { auth } from '$lib/state/auth.svelte';
+	import ErrorBanner from '#lib/components/ErrorBanner.svelte';
+	import { auth } from '#lib/state/auth.svelte';
 
 	const setup = $derived(auth.status === 'setup');
 </script>

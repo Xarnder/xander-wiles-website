@@ -1,6 +1,6 @@
 <script lang="ts">
-	import BottomTabBar from '$lib/components/BottomTabBar.svelte';
-	import { auth } from '$lib/state/auth.svelte';
+	import BottomTabBar from '#lib/components/BottomTabBar.svelte';
+	import { auth } from '#lib/state/auth.svelte';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children?: Snippet } = $props();

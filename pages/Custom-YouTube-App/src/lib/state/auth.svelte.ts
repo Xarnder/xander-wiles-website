@@ -5,7 +5,7 @@ import {
 	googleClientId,
 	requestGoogleAccessToken,
 	revokeGoogleToken
-} from '$lib/auth/google-gis';
+} from '#lib/auth/google-gis';
 
 const SESSION_KEY = 'playlist-deck-session';
 

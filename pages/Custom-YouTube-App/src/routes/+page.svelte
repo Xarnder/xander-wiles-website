@@ -1,10 +1,10 @@
 <script lang="ts">
-	import FeaturedGrid from '$lib/components/FeaturedGrid.svelte';
-	import PlaylistItems from '$lib/components/PlaylistItems.svelte';
-	import PlaylistList from '$lib/components/PlaylistList.svelte';
-	import SubscriptionsFeed from '$lib/components/SubscriptionsFeed.svelte';
-	import { tabs } from '$lib/state/tabs.svelte';
-	import type { YtPlaylist } from '$lib/types/youtube';
+	import FeaturedGrid from '#lib/components/FeaturedGrid.svelte';
+	import PlaylistItems from '#lib/components/PlaylistItems.svelte';
+	import PlaylistList from '#lib/components/PlaylistList.svelte';
+	import SubscriptionsFeed from '#lib/components/SubscriptionsFeed.svelte';
+	import { tabs } from '#lib/state/tabs.svelte';
+	import type { YtPlaylist } from '#lib/types/youtube';
 	import { onMount } from 'svelte';
 
 	let selectedPlaylist = $state<YtPlaylist | null>(null);

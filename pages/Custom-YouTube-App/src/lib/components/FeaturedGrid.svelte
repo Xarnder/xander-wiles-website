@@ -1,14 +1,14 @@
 <script lang="ts">
-	import EmptyState from '$lib/components/EmptyState.svelte';
-	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
-	import RegionPicker from '$lib/components/RegionPicker.svelte';
-	import VideoCard from '$lib/components/VideoCard.svelte';
-	import { auth } from '$lib/state/auth.svelte';
-	import { player } from '$lib/state/player.svelte';
-	import type { FeaturedVideo } from '$lib/types/youtube';
-	import { errorMessage } from '$lib/utils/format';
-	import { readStoredRegion, writeStoredRegion } from '$lib/youtube/featured';
-	import { listFeaturedVideos } from '$lib/youtube/trending';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ErrorBanner from '#lib/components/ErrorBanner.svelte';
+	import RegionPicker from '#lib/components/RegionPicker.svelte';
+	import VideoCard from '#lib/components/VideoCard.svelte';
+	import { auth } from '#lib/state/auth.svelte';
+	import { player } from '#lib/state/player.svelte';
+	import type { FeaturedVideo } from '#lib/types/youtube';
+	import { errorMessage } from '#lib/utils/format';
+	import { readStoredRegion, writeStoredRegion } from '#lib/youtube/featured';
+	import { listFeaturedVideos } from '#lib/youtube/trending';
 	import { onMount } from 'svelte';
 
 	let region = $state(readStoredRegion());

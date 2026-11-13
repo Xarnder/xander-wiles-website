@@ -1,4 +1,4 @@
-import type { PlaylistItemsPage, YtPlaylist, YtPlaylistItem } from '$lib/types/youtube';
+import type { PlaylistItemsPage, YtPlaylist, YtPlaylistItem } from '#lib/types/youtube';
 import { youtubeRequest } from './client';
 import { isSpecialPlaylist } from './playlist-reorder';
 import { canFetchNextPage, QUOTA } from './quota';

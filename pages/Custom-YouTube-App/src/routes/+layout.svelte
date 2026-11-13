@@ -1,12 +1,12 @@
 <script lang="ts">
 	import '../app.css';
-	import AccessDenied from '$lib/components/AccessDenied.svelte';
-	import AppShell from '$lib/components/AppShell.svelte';
-	import PlayerModal from '$lib/components/PlayerModal.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import { auth } from '$lib/state/auth.svelte';
-	import { player } from '$lib/state/player.svelte';
-	import { tabs } from '$lib/state/tabs.svelte';
+	import AccessDenied from '#lib/components/AccessDenied.svelte';
+	import AppShell from '#lib/components/AppShell.svelte';
+	import PlayerModal from '#lib/components/PlayerModal.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import { auth } from '#lib/state/auth.svelte';
+	import { player } from '#lib/state/player.svelte';
+	import { tabs } from '#lib/state/tabs.svelte';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';

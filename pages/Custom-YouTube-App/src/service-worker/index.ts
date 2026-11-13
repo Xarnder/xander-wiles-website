@@ -1,8 +1,12 @@
 /// <reference types="@sveltejs/kit" />
-import { build, files, version } from '$service-worker';
+import { version } from '$app/env';
+import { assets, immutable, prerendered } from '$app/manifest';
+import { self } from '$app/service-worker';
 
 const CACHE = `playlist-deck-${version}`;
-const ASSETS = [...build, ...files];
+const ASSETS = [...immutable, ...assets, ...prerendered].map(
+	({ path }) => new URL(path.replace(/^\//, ''), self.registration.scope).href
+);
 const BYPASS_HOSTS = [
 	'googleapis.com',
 	'gstatic.com',

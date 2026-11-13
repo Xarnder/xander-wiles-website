@@ -1,4 +1,4 @@
-import type { YtPlaylistItem } from '$lib/types/youtube';
+import type { YtPlaylistItem } from '#lib/types/youtube';
 
 export function isSpecialPlaylist(id: string, title?: string): boolean {
 	if (id === 'WL' || id === 'LL') return true;

@@ -1,4 +1,4 @@
-import type { FeedItem } from '$lib/types/youtube';
+import type { FeedItem } from '#lib/types/youtube';
 import { youtubeRequest } from './client';
 import { pickThumbnail } from './thumbnails';
 import { QUOTA } from './quota';

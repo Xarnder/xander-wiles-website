@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { FEATURED_REGIONS } from '$lib/youtube/featured';
+	import { FEATURED_REGIONS } from '#lib/youtube/featured';
 
 	let {
 		value = $bindable(),

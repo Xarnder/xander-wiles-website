@@ -1,12 +1,12 @@
 <script lang="ts">
-	import EmptyState from '$lib/components/EmptyState.svelte';
-	import ErrorBanner from '$lib/components/ErrorBanner.svelte';
-	import VideoCard from '$lib/components/VideoCard.svelte';
-	import { auth } from '$lib/state/auth.svelte';
-	import { player } from '$lib/state/player.svelte';
-	import type { FeedItem } from '$lib/types/youtube';
-	import { errorMessage } from '$lib/utils/format';
-	import { loadSubscriptionsFeed } from '$lib/youtube/subscriptions';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ErrorBanner from '#lib/components/ErrorBanner.svelte';
+	import VideoCard from '#lib/components/VideoCard.svelte';
+	import { auth } from '#lib/state/auth.svelte';
+	import { player } from '#lib/state/player.svelte';
+	import type { FeedItem } from '#lib/types/youtube';
+	import { errorMessage } from '#lib/utils/format';
+	import { loadSubscriptionsFeed } from '#lib/youtube/subscriptions';
 	import { onMount } from 'svelte';
 
 	let items = $state.raw<FeedItem[]>([]);

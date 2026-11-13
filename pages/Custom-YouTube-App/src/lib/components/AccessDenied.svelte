@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { auth } from '$lib/state/auth.svelte';
+	import { auth } from '#lib/state/auth.svelte';
 </script>
 
 <section class="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-5 py-10 text-ink">

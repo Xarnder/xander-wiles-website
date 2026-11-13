@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatViews, relativeTime } from '$lib/utils/format';
+	import { formatViews, relativeTime } from '#lib/utils/format';
 
 	let {
 		title,

@@ -1,4 +1,4 @@
-import { YouTubeApiError } from '$lib/types/youtube';
+import { YouTubeApiError } from '#lib/types/youtube';
 
 export function errorMessage(error: unknown, fallback = 'Something went wrong.'): string {
 	if (error instanceof YouTubeApiError) {

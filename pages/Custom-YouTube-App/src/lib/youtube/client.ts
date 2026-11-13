@@ -1,4 +1,4 @@
-import { YouTubeApiError, type YouTubeErrorReason } from '$lib/types/youtube';
+import { YouTubeApiError, type YouTubeErrorReason } from '#lib/types/youtube';
 
 const API_ROOT = 'https://www.googleapis.com/youtube/v3';
 
