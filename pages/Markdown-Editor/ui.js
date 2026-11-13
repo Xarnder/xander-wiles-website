@@ -266,12 +266,22 @@ export function getEls() {
     return els;
 }
 
+/** Expand the AI diagnostics only when an error needs attention. */
+export function revealAiError(statusNode) {
+    const debug = statusNode?.closest('.ai-debug');
+    const help = debug?.closest('details');
+    if (!help || debug.closest('[hidden]')) return;
+    help.open = true;
+    statusNode.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+}
+
 export function setStatus(message, kind = '') {
     els.status.textContent = message || '';
     els.status.classList.remove('is-error', 'is-ok', 'is-warn');
     if (kind === 'error') els.status.classList.add('is-error');
     if (kind === 'ok') els.status.classList.add('is-ok');
     if (kind === 'warn') els.status.classList.add('is-warn');
+    if (message && kind === 'error') revealAiError(els.status);
 }
 
 /** @type {ReturnType<typeof setTimeout> | null} */
@@ -489,6 +499,11 @@ function syncNavActions(mode, options = {}) {
  * @param {{ hasOpenFile?: boolean, loading?: boolean }} [options]
  */
 export function showView(name, options = {}) {
+    // Keep the shared live status in the AI debug area while this tab is open.
+    els.app?.classList.toggle('is-ai-view', name === 'ai');
+    const aiDebug = document.getElementById('ai-debug-global');
+    if (name === 'ai' && aiDebug && els.status) aiDebug.append(els.status);
+    else if (els.status && els.viewTitle) els.viewTitle.after(els.status);
     const hasOpenFile = Boolean(options.hasOpenFile);
 
     els.viewLogin.hidden = name !== 'login';

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v180';
+const CACHE_NAME = 'md-editor-shell-v209';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -14,6 +14,8 @@ const ASSETS = [
     './ui.js',
     './view-mode-picker.js',
     './ai.js',
+    './ai-insertions.js',
+    './ai-prompts.js',
     './ai-panel.js',
     './ai-usage.js',
     './lists.js',

@@ -1,3 +1,4 @@
+import { buildAiProviderRequest } from './ai-prompts.js';
 /**
  * AI tab. Finder / Pinned can drop a note into the composer as context or as the only file to edit.
  * An edit is reviewed as the previous text beside the proposal, with changed lines highlighted.
@@ -5,7 +6,7 @@
 
 import { annotateDiff, applyAiProposal, formatDiffCounts, formatAiCost, previewAiCost } from './ai.js';
 import { recordAiCall, renderAiUsage } from './ai-usage.js';
-import { displayNoteTitle } from './ui.js';
+import { displayNoteTitle, revealAiError } from './ui.js';
 
 const TASK_COPY = {
     expand: {
@@ -25,7 +26,7 @@ const TASK_COPY = {
     },
     revise: {
         instructionLabel: 'Message',
-        instructionPlaceholder: 'Say what to change in the file marked Edit',
+        instructionPlaceholder: 'Describe what to add or change in the selected note',
         instructionRequired: true,
     },
 };
@@ -36,10 +37,11 @@ let nodes = null;
  *   getDocument: Function,
  *   getToken: Function,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
+ *   onSave: () => Promise<void>,
  *   onGoFinder: Function,
  * }} */
 let deps = null;
-/** @type {Array<{ id: string, name: string, content: string, role: 'context' | 'edit' }>} */
+/** @type {Array<{ id: string, name: string, content: string, role: 'context' | 'add' | 'edit' }>} */
 let attachments = [];
 /** @type {null | {
  *   kind: 'edit' | 'reply',
@@ -52,38 +54,104 @@ let attachments = [];
  *   markdown: string,
  * }} */
 let pending = null;
+let lastEdit = null;
+let accepting = false;
+let saving = false;
 let running = false;
 let task = 'revise';
+let lastInstruction = '';
+let requestStartedAt = null;
+let requestTimer = null;
 
 function readEls() {
     return {
+        contentPane: document.querySelector('.ai-content-scroll'),
+        timer: document.getElementById('ai-wait-timer'),
+        reset: document.getElementById('ai-reset'),
+        resetDialog: document.getElementById('ai-reset-dialog'),
+        resetStatus: document.getElementById('ai-reset-status'),
+        resetSlider: document.getElementById('ai-reset-slider'),
+        resetCancel: document.getElementById('ai-reset-cancel'),
+        help: document.querySelector('.ai-help'),
         provider: document.getElementById('ai-provider'),
+        compactBullets: document.getElementById('ai-compact-bullets'),
+        includeDateTags: document.getElementById('ai-include-date-tags'),
         empty: document.getElementById('ai-empty'),
         active: document.getElementById('ai-active'),
         title: document.getElementById('ai-file-title'),
         attachments: document.getElementById('ai-attachments'),
+        modeControls: document.getElementById('ai-mode-controls'),
         useOpen: document.getElementById('ai-use-open'),
         thread: document.getElementById('ai-thread'),
+        copyMessage: document.getElementById('ai-copy-message'),
         selectionField: document.getElementById('ai-selection-field'),
         selection: document.getElementById('ai-selection'),
         instructionLabel: document.getElementById('ai-instruction-label'),
         instruction: document.getElementById('ai-instruction'),
         run: document.getElementById('ai-run'),
+        save: document.getElementById('ai-save'),
         preview: document.getElementById('ai-cost-preview'),
+        promptPreview: document.getElementById('ai-prompt-preview'),
+        promptDetails: document.getElementById('ai-prompt-details'),
         status: document.getElementById('ai-status'),
+        error: document.getElementById('ai-error'),
         cost: document.getElementById('ai-cost'),
         resultWrap: document.getElementById('ai-result-wrap'),
         reply: document.getElementById('ai-reply'),
         diff: document.getElementById('ai-diff'),
-        accept: document.getElementById('ai-accept'),
         discard: document.getElementById('ai-discard'),
         goFinder: document.getElementById('ai-go-edit'),
         tasks: document.querySelectorAll('[data-ai-task]'),
     };
 }
 
+/** The current draft always wins; an empty draft repeats the last sent instruction. */
+export function chooseAiInstruction(draft, previous) {
+    return String(draft ?? '').trim() || String(previous ?? '').trim();
+}
+
+function paintSendAction() {
+    if (!nodes?.run) return;
+    const hasPrevious = Boolean(lastInstruction);
+    const hasDraft = Boolean(nodes.instruction?.value.trim());
+    nodes.run.textContent = running ? 'Sending to AI…'
+        : hasPrevious && hasDraft ? 'Send new message'
+        : hasPrevious ? 'Send Again' : 'Send';
+    nodes.run.title = hasDraft ? 'Send the message currently in the input box.'
+        : hasPrevious ? 'Input is empty: resend the last sent message.' : 'Send your message.';
+}
+
+export function formatAiWaitTime(milliseconds) {
+    const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function paintRequestTime(label = 'Waiting for AI') {
+    if (!nodes?.timer || requestStartedAt === null) return;
+    nodes.timer.hidden = false;
+    nodes.timer.textContent = `${label} · ${formatAiWaitTime(Date.now() - requestStartedAt)}`;
+}
+
+function startRequestTimer() {
+    clearInterval(requestTimer);
+    requestStartedAt = Date.now();
+    paintRequestTime();
+    requestTimer = setInterval(() => paintRequestTime(), 1000);
+}
+
+function finishRequestTimer(receivedResponse) {
+    clearInterval(requestTimer);
+    requestTimer = null;
+    paintRequestTime(receivedResponse ? 'Response received in' : 'Request ended after');
+}
+
 function setStatus(message, kind = '') {
     if (!nodes?.status) return;
+    if (kind !== 'error' && nodes.help) nodes.help.open = false;
+    if (nodes.error) {
+        nodes.error.hidden = !message || kind !== 'error';
+        nodes.error.textContent = kind === 'error' ? message : '';
+    }
     if (!message) {
         nodes.status.hidden = true;
         nodes.status.textContent = '';
@@ -94,6 +162,7 @@ function setStatus(message, kind = '') {
     nodes.status.textContent = message;
     nodes.status.classList.toggle('is-error', kind === 'error');
     nodes.status.classList.toggle('is-ok', kind === 'ok');
+    if (kind === 'error') revealAiError(nodes.status);
 }
 
 function paintTask() {
@@ -105,7 +174,7 @@ function paintTask() {
         btn.setAttribute('aria-checked', active ? 'true' : 'false');
     }
     if (nodes.selectionField) nodes.selectionField.hidden = task !== 'expand';
-    if (nodes.instructionLabel) nodes.instructionLabel.textContent = copy.instructionLabel;
+    if (nodes.instructionLabel) nodes.instructionLabel.textContent = 'Input text box';
     if (nodes.instruction) nodes.instruction.placeholder = copy.instructionPlaceholder;
 }
 
@@ -136,7 +205,39 @@ function showCost(usage) {
     nodes.cost.textContent = text ? `${usage.provider === 'openai' ? 'OpenAI' : 'Gemini'} · ${text}` : '';
 }
 
+function buildCurrentAiRequest() {
+    const editing = editAttachment();
+    const contexts = attachments.filter(file => file.role === 'context');
+    const asking = contexts.length > 0 && !editing;
+    const addOnly = !asking && (editing?.role || 'add') === 'add';
+    const sentTask = asking ? 'context' : addOnly ? 'revise' : task;
+    return {
+        provider: nodes.provider?.value || 'gemini',
+        addOnly,
+        compactBullets: nodes.compactBullets?.checked !== false,
+        includeDateTags: nodes.includeDateTags?.checked !== false,
+        task: sentTask,
+        markdown: asking ? '' : targetFile()?.content || '',
+        selection: sentTask === 'expand' ? nodes.selection?.value || '' : '',
+        instruction: chooseAiInstruction(nodes.instruction?.value, lastInstruction),
+        contextFiles: contexts.map(file => ({ name: file.name, markdown: file.content })),
+    };
+}
+
+function refreshPromptPreview() {
+    if (!nodes?.promptPreview || !nodes.promptDetails?.open || !deps) return;
+    const request = buildCurrentAiRequest();
+    nodes.promptPreview.textContent = JSON.stringify({
+        editorApi: { endpoint: '/api/markdown-gemini', body: request },
+        providerApi: {
+            endpoint: request.provider === 'openai' ? 'https://api.openai.com/v1/responses' : 'https://generativelanguage.googleapis.com/v1beta/interactions',
+            body: buildAiProviderRequest(request),
+        },
+    }, null, 2);
+}
+
 function refreshCostPreview() {
+    refreshPromptPreview();
     if (!nodes?.preview || !deps) return;
     const doc = deps.getDocument();
     const editing = editAttachment();
@@ -145,10 +246,11 @@ function refreshCostPreview() {
     const source = asking ? null : editing || (doc?.fileId ? doc : null);
     const text = previewAiCost({
         provider: nodes.provider?.value,
+        addOnly: !asking && (editing?.role || 'add') === 'add',
         task: asking ? 'context' : task,
         markdown: source?.content || '',
         selection: nodes.selection?.value || '',
-        instruction: nodes.instruction?.value || '',
+        instruction: chooseAiInstruction(nodes.instruction?.value, lastInstruction),
         contextFiles: contexts.map((file) => ({ name: file.name, markdown: file.content })),
     });
     nodes.preview.hidden = !text;
@@ -156,7 +258,7 @@ function refreshCostPreview() {
 }
 
 function editAttachment() {
-    return attachments.find((file) => file.role === 'edit') || null;
+    return attachments.find((file) => file.role !== 'context') || null;
 }
 
 /** Remember a Raw selection so Expand can use it after the user opens the AI tab. */
@@ -167,16 +269,16 @@ export function captureAiSelection(text) {
 }
 
 /**
- * @param {{ id: string, name?: string, content: string, role?: 'context' | 'edit' }} file
+ * @param {{ id: string, name?: string, content: string, role?: 'context' | 'add' | 'edit' }} file
  */
 export function attachAiFile(file) {
     const id = String(file?.id || '');
     const content = String(file?.content ?? '');
     if (!id) return;
-    const role = file.role === 'context' ? 'context' : 'edit';
-    if (role === 'edit') {
+    const role = file.role === 'context' ? 'context' : file.role === 'edit' ? 'edit' : 'add';
+    if (role !== 'context') {
         for (const existing of attachments) {
-            if (existing.role === 'edit' && existing.id !== id) existing.role = 'context';
+            if (existing.role !== 'context' && existing.id !== id) existing.role = 'context';
         }
     }
     const current = attachments.find((entry) => entry.id === id);
@@ -193,7 +295,7 @@ export function attachAiFile(file) {
         });
     }
     if (attachments.length > 4) attachments = attachments.slice(-4);
-    task = role === 'edit' ? 'revise' : task;
+    task = role !== 'context' ? 'revise' : task;
     clearProposal();
     paintTask();
     syncAiPanel();
@@ -203,8 +305,8 @@ export function attachAiFile(file) {
 function setAttachmentRole(id, role) {
     const file = attachments.find((entry) => entry.id === id);
     if (!file) return;
-    if (role === 'edit') {
-        for (const entry of attachments) entry.role = entry.id === id ? 'edit' : 'context';
+    if (role !== 'context') {
+        for (const entry of attachments) entry.role = entry.id === id ? role : 'context';
         task = 'revise';
         paintTask();
     } else {
@@ -220,10 +322,42 @@ function removeAttachment(id) {
     syncAiPanel();
 }
 
+function buildModeToggle(file) {
+        const modes = document.createElement('div');
+        modes.className = 'ai-chip-modes';
+        modes.setAttribute('role', 'radiogroup');
+        modes.setAttribute('aria-label', `How to use ${file.name}`);
+
+        for (const role of ['context', 'add', 'edit']) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-chip-mode';
+            btn.textContent = role === 'context' ? 'Context' : role === 'add' ? 'Add only' : 'Subtract and add';
+            const active = file.role === role;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('role', 'radio');
+            btn.setAttribute('aria-checked', active ? 'true' : 'false');
+            btn.addEventListener('click', () => {
+                if (running) return;
+                if (attachments.some(entry => entry.id === file.id)) setAttachmentRole(file.id, role);
+                else attachAiFile({ ...file, role });
+            });
+            modes.append(btn);
+        }
+
+    return modes;
+}
+
 function renderAttachments() {
     const host = nodes?.attachments;
     if (!host) return;
     host.replaceChildren();
+    const doc = deps?.getDocument();
+    const primary = editAttachment() || attachments[0] || (doc?.fileId ? {
+        id: doc.fileId, name: doc.fileName, content: doc.content || '', role: 'add',
+    } : null);
+    nodes.modeControls?.replaceChildren();
+    if (primary) nodes.modeControls?.append(buildModeToggle(primary));
     host.hidden = attachments.length === 0;
     for (const file of attachments) {
         const chip = document.createElement('div');
@@ -234,43 +368,42 @@ function renderAttachments() {
         name.textContent = displayNoteTitle(file.name);
         name.title = file.name;
 
-        const modes = document.createElement('div');
-        modes.className = 'ai-chip-modes';
-        modes.setAttribute('role', 'radiogroup');
-        modes.setAttribute('aria-label', `How to use ${file.name}`);
-
-        for (const role of ['context', 'edit']) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'ai-chip-mode';
-            btn.textContent = role === 'context' ? 'Context' : 'Edit';
-            const active = file.role === role;
-            btn.classList.toggle('is-active', active);
-            btn.setAttribute('role', 'radio');
-            btn.setAttribute('aria-checked', active ? 'true' : 'false');
-            btn.addEventListener('click', () => setAttachmentRole(file.id, role));
-            modes.append(btn);
-        }
-
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'ai-chip-remove';
         remove.textContent = 'Remove';
         remove.addEventListener('click', () => removeAttachment(file.id));
 
-        chip.append(name, modes, remove);
+        if (file.id === primary?.id) chip.append(name, remove);
+        else chip.append(name, buildModeToggle(file), remove);
         host.append(chip);
     }
 }
 
-function appendTurn(text, kind) {
+function showSentMessage(text) {
     if (!nodes?.thread || !text) return;
+    const title = document.createElement('h3');
+    title.className = 'ai-sent-title';
+    title.textContent = 'Message sent:';
+    const message = document.createElement('p');
+    message.className = 'ai-sent-message';
+    message.textContent = text;
+    nodes.thread.replaceChildren(title, message);
     nodes.thread.hidden = false;
-    const bubble = document.createElement('p');
-    bubble.className = `ai-bubble ai-bubble--${kind}`;
-    bubble.textContent = text;
-    nodes.thread.append(bubble);
-    bubble.scrollIntoView({ block: 'nearest' });
+}
+
+/** Scroll only the AI content pane, leaving the PWA shell and Send dock in place. */
+export function scrollAiReviewIntoView(review) {
+    const pane = review?.closest('.ai-content-scroll');
+    if (!pane) return;
+    // Wait for the result and the finished-request controls to settle before measuring.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!review.isConnected || review.closest('[hidden]')) return;
+        const top = pane.scrollTop + review.getBoundingClientRect().top
+            - pane.getBoundingClientRect().top - pane.clientTop - 8;
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        pane.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'auto' : 'smooth' });
+    }));
 }
 
 const AI_DIFF_JUMP_LIMIT = 4;
@@ -432,8 +565,48 @@ function diffCell(kind, text, lineNo) {
     return cell;
 }
 
+function refreshResetStatus() {
+    const doc = deps?.getDocument();
+    if (lastEdit && doc?.fileId === lastEdit.fileId && doc.savedContent === lastEdit.markdown) {
+        lastEdit.saved = true;
+    }
+    if (!nodes?.resetStatus) return;
+    nodes.resetStatus.textContent = pending?.kind === 'edit'
+        ? 'Last AI edits: not saved — this proposal has not been accepted. Reset will discard it.'
+        : !lastEdit ? 'No AI edits to save in this session.'
+        : lastEdit.saved ? 'Last AI edits: saved to Drive.'
+        : doc?.fileId === lastEdit.fileId && doc.status === 'saving'
+            ? 'Last AI edits: saving to Drive. Reset will not interrupt the save.'
+            : 'Last AI edits: not confirmed saved to Drive. Reset keeps accepted edits in the document; save the note to keep them in Drive.';
+}
+
+function resetAiSession() {
+    if (running || accepting) return;
+    attachments = [];
+    clearProposal();
+    lastEdit = null;
+    lastInstruction = '';
+    requestStartedAt = null;
+    if (nodes.timer) nodes.timer.hidden = true;
+    nodes.thread?.replaceChildren();
+    if (nodes.thread) nodes.thread.hidden = true;
+    if (nodes.instruction) nodes.instruction.value = '';
+    if (nodes.selection) nodes.selection.value = '';
+    task = 'revise';
+    paintTask();
+    setStatus('AI session reset.');
+    nodes.resetDialog.close();
+    syncAiPanel();
+}
+
 export function syncAiPanel() {
     if (!nodes || !deps) return;
+    refreshResetStatus();
+    if (nodes.copyMessage) {
+        nodes.copyMessage.hidden = !lastInstruction;
+        nodes.copyMessage.disabled = running;
+    }
+    if (nodes.reset) nodes.reset.disabled = running || accepting || saving;
     const doc = deps.getDocument();
     const open = Boolean(doc?.fileId);
     const ready = attachments.length > 0 || open;
@@ -446,12 +619,15 @@ export function syncAiPanel() {
             (attachments.length === 1 ? attachments[0].name : '') ||
             doc?.fileName ||
             '';
-        const title = named ? displayNoteTitle(named) : '';
+        const title = named ? `Opened note: ${named}` : '';
         nodes.title.textContent = title;
         nodes.title.hidden = !title;
         nodes.title.title = named || title;
     }
     renderAttachments();
+    const editingRole = editAttachment()?.role || 'add';
+    if (nodes.tasks[0]?.parentElement) nodes.tasks[0].parentElement.hidden = editingRole !== 'edit';
+    if (nodes.selectionField && editingRole !== 'edit') nodes.selectionField.hidden = true;
     if (nodes.useOpen) {
         const already = Boolean(doc?.fileId && attachments.some((file) => file.id === doc.fileId));
         nodes.useOpen.hidden = !open || already;
@@ -459,13 +635,45 @@ export function syncAiPanel() {
     if (pending && editAttachment() && pending.fileId !== editAttachment().id) clearProposal();
     const target = editAttachment();
     const blocked =
-        running ||
+        running || accepting || saving ||
         (target &&
             doc?.fileId === target.id &&
             (doc.status === 'saving' || doc.status === 'conflict'));
-    if (nodes.run) nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
-    if (nodes.accept) nodes.accept.disabled = Boolean(blocked) || pending?.kind !== 'edit';
-    if (nodes.accept) nodes.accept.hidden = pending?.kind === 'reply';
+    const hasResponse = Boolean(pending || lastEdit);
+    nodes.run?.closest('.ai-send-dock')?.classList.toggle('has-response', hasResponse);
+    if (nodes.run) {
+        nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
+        nodes.run.classList.toggle('is-loading', running);
+        nodes.run.setAttribute('aria-busy', String(running));
+        paintSendAction();
+    }
+    if (nodes.save) {
+        nodes.save.hidden = !hasResponse;
+        const busy = saving || doc?.status === 'saving';
+        nodes.save.disabled = running || accepting || busy || doc?.status === 'conflict' ||
+            (pending?.kind !== 'edit' && (!open || !doc?.dirty));
+        nodes.save.textContent = busy ? 'Saving…' : 'Save';
+        nodes.save.setAttribute('aria-busy', String(busy));
+        nodes.save.title = pending?.kind === 'edit'
+            ? 'Apply the proposed edits and save this note to Drive.'
+            : !open ? 'Generate an AI edit or open a note to save.'
+            : !doc?.dirty ? 'All document changes are saved.' : 'Save this note to Drive';
+    }
+    if (nodes.instruction) {
+        nodes.instruction.disabled = running;
+        nodes.instruction.setAttribute('aria-busy', String(running));
+    }
+    if (nodes.selection) nodes.selection.disabled = running;
+    if (nodes.discard) nodes.discard.disabled = running || accepting || saving;
+    if (nodes.contentPane) {
+        nodes.contentPane.inert = running;
+        nodes.contentPane.classList.toggle('is-processing', running);
+        nodes.contentPane.setAttribute('aria-busy', String(running));
+        for (const control of nodes.contentPane.querySelectorAll('button, select, input')) {
+            if (control === nodes.reset || control === nodes.discard) continue;
+            control.disabled = running;
+        }
+    }
     refreshCostPreview();
 }
 
@@ -474,6 +682,7 @@ export function syncAiPanel() {
  *   getDocument: () => { fileId?: string, fileName?: string, content?: string, status?: string },
  *   getToken: () => Promise<string | null>,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
+ *   onSave: () => Promise<void>,
  *   onGoFinder: () => void,
  * }} options
  */
@@ -485,6 +694,48 @@ export function initAiPanel(options) {
         return;
     }
     nodes.run.dataset.bound = '1';
+    nodes.promptDetails?.addEventListener('toggle', refreshPromptPreview);
+    if (nodes.includeDateTags) {
+        try { nodes.includeDateTags.checked = localStorage.getItem('md-editor:ai-include-date-tags') !== '0'; } catch { /* Enabled by default. */ }
+        nodes.includeDateTags.addEventListener('change', () => {
+            refreshPromptPreview();
+            try { localStorage.setItem('md-editor:ai-include-date-tags', nodes.includeDateTags.checked ? '1' : '0'); } catch { /* Session preference still works. */ }
+        });
+    }
+    if (nodes.compactBullets) {
+        try { nodes.compactBullets.checked = localStorage.getItem('md-editor:ai-compact-bullets') !== '0'; } catch { /* Default stays enabled. */ }
+        nodes.compactBullets.addEventListener('change', () => {
+            refreshPromptPreview();
+            try { localStorage.setItem('md-editor:ai-compact-bullets', nodes.compactBullets.checked ? '1' : '0'); } catch { /* Works for this session. */ }
+        });
+    }
+    nodes.save?.addEventListener('click', async () => {
+        if (nodes.save.disabled || saving) return;
+        saving = true;
+        syncAiPanel();
+        try {
+            if (pending?.kind === 'edit' && !(await acceptProposal())) return;
+            await deps.onSave();
+            refreshResetStatus();
+            setStatus('Saved to Drive.', 'ok');
+        } catch (err) {
+            setStatus(err?.message || 'Could not save the note.', 'error');
+        } finally {
+            saving = false;
+            syncAiPanel();
+        }
+    });
+    if (nodes.help) nodes.help.open = false;
+    nodes.reset?.addEventListener('click', () => {
+        refreshResetStatus();
+        nodes.resetSlider.value = '0';
+        nodes.resetDialog.showModal();
+    });
+    nodes.resetCancel?.addEventListener('click', () => nodes.resetDialog.close());
+    nodes.resetSlider?.addEventListener('change', () => {
+        if (Number(nodes.resetSlider.value) === 100) resetAiSession();
+        nodes.resetSlider.value = '0';
+    });
     nodes.provider?.addEventListener('change', () => {
         hideCost();
         refreshCostPreview();
@@ -509,24 +760,31 @@ export function initAiPanel(options) {
             id: doc.fileId,
             name: doc.fileName,
             content: doc.content || '',
-            role: 'edit',
+            role: 'add',
         });
     });
     nodes.discard?.addEventListener('click', () => {
+        if (accepting || saving) return;
         clearProposal();
-        setStatus('');
+        setStatus('Proposal discarded. The note was not changed.', 'ok');
         syncAiPanel();
     });
-    nodes.accept?.addEventListener('click', () => {
-        acceptProposal().catch((err) => setStatus(err?.message || 'Could not apply the edit', 'error'));
+    const refreshPreview = () => {
+        paintSendAction();
+        refreshCostPreview();
+    };
+    nodes.copyMessage?.addEventListener('click', () => {
+        if (running || !lastInstruction || !nodes.instruction) return;
+        nodes.instruction.value = lastInstruction;
+        refreshPreview();
+        nodes.instruction.focus({ preventScroll: true });
+        nodes.instruction.setSelectionRange(lastInstruction.length, lastInstruction.length);
+        nodes.instruction.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     });
-    const refreshPreview = () => refreshCostPreview();
     nodes.instruction?.addEventListener('input', refreshPreview);
     nodes.selection?.addEventListener('input', refreshPreview);
     nodes.run.addEventListener('click', () => {
         runProposal().catch((err) => {
-            running = false;
-            if (nodes.run) nodes.run.textContent = 'Send';
             setStatus(err?.message || 'AI request failed', 'error');
             syncAiPanel();
         });
@@ -536,14 +794,14 @@ export function initAiPanel(options) {
 
 function targetFile() {
     const edit = editAttachment();
-    if (edit) return edit;
     const doc = deps?.getDocument();
+    if (edit) return doc?.fileId === edit.id ? { ...edit, content: doc.content || '' } : edit;
     if (!doc?.fileId) return null;
     return {
         id: doc.fileId,
         name: doc.fileName || 'note.md',
         content: doc.content || '',
-        role: 'edit',
+        role: 'add',
     };
 }
 
@@ -567,10 +825,11 @@ async function runProposal() {
     }
 
     const copy = TASK_COPY[task] || TASK_COPY.revise;
-    const instruction = nodes.instruction?.value.trim() || '';
+    const instruction = chooseAiInstruction(nodes.instruction?.value, lastInstruction);
     const selection = nodes.selection?.value ?? '';
-    const sentTask = asking ? 'context' : task;
-    if ((asking || copy.instructionRequired) && !instruction) {
+    const addOnly = !asking && (editing?.role || 'add') === 'add';
+    const sentTask = asking ? 'context' : addOnly ? 'revise' : task;
+    if ((asking || addOnly || copy.instructionRequired) && !instruction) {
         setStatus(asking ? 'Ask something about the attached note.' : 'Say what should change.', 'error');
         return;
     }
@@ -585,139 +844,151 @@ async function runProposal() {
         return;
     }
 
-    const token = await deps.getToken();
-    if (!token) {
-        setStatus('Sign in again to use AI.', 'error');
-        return;
-    }
-
+    const requestBody = buildCurrentAiRequest();
     running = true;
-    clearProposal();
-    nodes.run.textContent = 'Working…';
-    setStatus(asking ? 'Reading the note…' : 'Editing the note…');
+    let receivedResponse = false;
+    startRequestTimer();
+    setStatus('Preparing AI request…');
     syncAiPanel();
-    appendTurn(instruction || TASK_COPY[task]?.instructionLabel || 'Edit', 'user');
-
-    const provider = nodes.provider?.value || 'gemini';
-    let response;
     try {
-        response = await fetch('/api/markdown-gemini', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                provider,
-                task: sentTask,
-                markdown: asking ? '' : source.content,
-                selection: sentTask === 'expand' ? selection : '',
-                instruction,
-                contextFiles: contexts.map((file) => ({
-                    name: file.name,
-                    markdown: file.content,
-                })),
-            }),
-        });
-    } catch {
-        throw new Error('Could not reach the AI service.');
-    } finally {
-        running = false;
-        if (nodes.run) nodes.run.textContent = 'Send';
-    }
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-        if (response.status === 404) {
-            throw new Error(
-                'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
-            );
+        const token = await deps.getToken();
+        if (!token) {
+            setStatus('Sign in again to use AI.', 'error');
+            return;
         }
-        throw new Error(payload.error || `AI request failed (${response.status})`);
-    }
 
-    const usage = { ...payload.usage, provider };
-    recordAiCall({
-        ...usage,
-        at: Date.now(),
-        task: sentTask,
-        fileName: source.name,
-    });
-    renderAiUsage();
+        lastInstruction = instruction;
+        clearProposal();
+        setStatus(asking ? 'Reading the note…' : 'Editing the note…');
+        syncAiPanel();
+        showSentMessage(instruction || `${sentTask.charAt(0).toUpperCase()}${sentTask.slice(1)} (no additional instructions)`);
+        if (nodes.instruction) nodes.instruction.value = '';
+        refreshCostPreview();
 
-    if (sentTask === 'context') {
-        const reply = String(payload.reply || '').trim();
-        if (!reply) throw new Error('The AI provider returned an empty answer.');
-        if (nodes.reply) {
-            nodes.reply.hidden = false;
-            nodes.reply.textContent = reply;
+        const provider = nodes.provider?.value || 'gemini';
+        let response;
+        try {
+            response = await fetch('/api/markdown-gemini', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody),
+            });
+        } catch {
+            throw new Error('Could not reach the AI service.');
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            if (payload.usage) {
+                recordAiCall({ ...payload.usage, provider, at: Date.now(), task: sentTask, fileName: source.name });
+                renderAiUsage();
+                showCost({ ...payload.usage, provider });
+            }
+            if (response.status === 404) {
+                throw new Error(
+                    'AI service is not running on this server. Deploy the API on Vercel, or run npm run dev locally.'
+                );
+            }
+            throw new Error(payload.error || `AI request failed (${response.status})`);
+        }
+
+        receivedResponse = true;
+        const usage = { ...payload.usage, provider };
+        recordAiCall({
+            ...usage,
+            at: Date.now(),
+            task: sentTask,
+            fileName: source.name,
+        });
+        renderAiUsage();
+
+        if (sentTask === 'context') {
+            const reply = String(payload.reply || '').trim();
+            if (!reply) throw new Error('The AI provider returned an empty answer.');
+            if (nodes.reply) {
+                nodes.reply.hidden = false;
+                nodes.reply.textContent = reply;
+            }
+            if (nodes.resultWrap) nodes.resultWrap.hidden = false;
+            pending = {
+                kind: 'reply',
+                task: 'context',
+                fileId: source.id,
+                fileName: source.name,
+                original: source.content,
+                selection: '',
+                proposal: reply,
+                markdown: '',
+            };
+            setStatus('Answered from the attached note. The file was not changed.', 'ok');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const live = targetFile();
+        if (!live || live.id !== source.id || live.content !== source.content) {
+            setStatus('That note changed. Send again.', 'error');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const applied = applyAiProposal({
+            task: sentTask,
+            addOnly,
+            original: source.content,
+            selection,
+            proposal: payload.markdown,
+            additions: payload.additions,
+        });
+        if (!applied.ok) {
+            if (nodes.instruction) nodes.instruction.value = instruction;
+            setStatus(applied.error, 'error');
+            showCost(usage);
+            syncAiPanel();
+            return;
+        }
+
+        const hasChanges = renderDiff(source.content, applied.markdown);
+        if (!hasChanges) {
+            setStatus('The model returned the same text.', 'ok');
+            showCost(usage);
+            syncAiPanel();
+            return;
         }
         if (nodes.resultWrap) nodes.resultWrap.hidden = false;
-        if (nodes.accept) nodes.accept.hidden = true;
         pending = {
-            kind: 'reply',
-            task: 'context',
+            kind: 'edit',
+            addOnly,
+            task: sentTask,
             fileId: source.id,
             fileName: source.name,
             original: source.content,
-            selection: '',
-            proposal: reply,
-            markdown: '',
+            selection,
+            proposal: payload.markdown,
+            additions: payload.additions,
+            markdown: applied.markdown,
         };
-        appendTurn(reply, 'assistant');
-        setStatus('Answered from the attached note. The file was not changed.', 'ok');
+        setStatus('Removed lines are struck through. Added lines are highlighted. Save applies and saves this note. Discard leaves it unchanged.', 'ok');
         showCost(usage);
         syncAiPanel();
-        return;
-    }
-
-    const live = targetFile();
-    if (!live || live.id !== source.id || live.content !== source.content) {
-        setStatus('That note changed. Send again.', 'error');
-        showCost(usage);
+        scrollAiReviewIntoView(nodes.resultWrap);
+    } catch (err) {
+        if (nodes.instruction && !nodes.instruction.value.trim()) nodes.instruction.value = instruction;
+        throw err;
+    } finally {
+        running = false;
+        finishRequestTimer(receivedResponse);
         syncAiPanel();
-        return;
     }
-
-    const applied = applyAiProposal({
-        task: sentTask,
-        original: source.content,
-        selection,
-        proposal: payload.markdown,
-    });
-    if (!applied.ok) {
-        setStatus(applied.error, 'error');
-        showCost(usage);
-        syncAiPanel();
-        return;
-    }
-
-    const hasChanges = renderDiff(source.content, applied.markdown);
-    if (!hasChanges) {
-        setStatus('The model returned the same text.', 'ok');
-        showCost(usage);
-        syncAiPanel();
-        return;
-    }
-    if (nodes.resultWrap) nodes.resultWrap.hidden = false;
-    if (nodes.accept) nodes.accept.hidden = false;
-    pending = {
-        kind: 'edit',
-        task: sentTask,
-        fileId: source.id,
-        fileName: source.name,
-        original: source.content,
-        selection,
-        proposal: payload.markdown,
-        markdown: applied.markdown,
-    };
-    setStatus('Removed lines are struck through. Added lines are highlighted. Accept writes this note.', 'ok');
-    showCost(usage);
-    syncAiPanel();
 }
 
 async function acceptProposal() {
-    if (!deps || pending?.kind !== 'edit') return;
+    if (!deps || accepting || pending?.kind !== 'edit') return;
     const live = targetFile();
     if (!live || live.id !== pending.fileId || live.content !== pending.original) {
         setStatus('That note changed. Send again.', 'error');
@@ -727,23 +998,37 @@ async function acceptProposal() {
     }
     const applied = applyAiProposal({
         task: pending.task,
+        addOnly: pending.addOnly,
         original: pending.original,
         selection: pending.selection,
         proposal: pending.proposal,
+        additions: pending.additions,
     });
     if (!applied.ok) {
         setStatus(applied.error, 'error');
         return;
     }
-    const ok = await deps.onAcceptFile({
-        fileId: pending.fileId,
-        fileName: pending.fileName,
-        markdown: applied.markdown,
-    });
+    const proposal = pending;
+    accepting = true;
+    syncAiPanel();
+    let ok;
+    try {
+        ok = await deps.onAcceptFile({
+            fileId: proposal.fileId,
+            fileName: proposal.fileName,
+            markdown: applied.markdown,
+            original: proposal.original,
+        });
+    } finally {
+        accepting = false;
+        syncAiPanel();
+    }
     if (!ok) return;
-    const chip = attachments.find((file) => file.id === pending.fileId);
+    lastEdit = { fileId: proposal.fileId, markdown: applied.markdown, saved: false };
+    const chip = attachments.find((file) => file.id === proposal.fileId);
     if (chip) chip.content = applied.markdown;
     clearProposal();
-    setStatus('Applied. Autosave will write this to Drive.', 'ok');
+    setStatus('Applying changes and saving to Drive…', 'ok');
     syncAiPanel();
+    return true;
 }

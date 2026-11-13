@@ -8,7 +8,8 @@ export const GOOGLE_CLIENT_ID =
     '612823513285-gmu8cbi8atisicv1ommjc11rbnijo9g0.apps.googleusercontent.com';
 
 /** Full Drive scope — enables in-app folder browsing of existing files (Option 2C). */
-export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
+export const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+export const DRIVE_SCOPE = `https://www.googleapis.com/auth/drive ${DRIVE_APPDATA_SCOPE}`;
 
 export const ROOT_FOLDER_ID = 'root';
 export const ROOT_FOLDER_NAME = 'My Drive';
