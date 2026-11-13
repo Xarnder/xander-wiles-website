@@ -13,6 +13,7 @@ import type {
 import { resolveSpeciesForm } from '../CreatureForm';
 import { resolveCreaturePalette, type ResolvedCreaturePalette } from './CreaturePaletteGenerator';
 import { sampleCreatureNoise } from './CreatureSurfaceNoise';
+import { coatDetailFor, type CoatDetail } from './CreatureCoatDetail';
 
 /**
  * Species surface identity and its individual variation. A species gets ONE signature pattern
@@ -318,6 +319,8 @@ export interface CreatureSurfaceDefinition {
 	roughnessVariation: number;
 	glossVariation: number;
 	seed: number;
+	/** Coat micro-texture (Phase 2): fur, hide, scales, chitin or skin. */
+	coat: CoatDetail;
 }
 export function resolveCreatureSurface(
 	species: SpeciesGenome,
@@ -351,7 +354,8 @@ export function resolveCreatureSurface(
 		roughness: genome.roughness,
 		roughnessVariation: genome.roughnessVariation,
 		glossVariation: genome.gloss,
-		seed: genome.seed
+		seed: genome.seed,
+		coat: coatDetailFor(species)
 	};
 }
 

@@ -1,7 +1,7 @@
 # Forest Drift — Biome-Specific Creatures: Technical Plan
 
 **Feature cycle:** 2026-11-12 (written 2026-11-13)
-**Status:** **Revision 4: Phases 0–1 built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md).
+**Status:** **Revision 5: Phases 0–2 built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md).
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biomes plan](../../Biomes-and-Enviroments/feature-plan/02-technical-plan.md) · [`docs/creature-system.md`](../../../../creature-system.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -30,6 +30,12 @@ Paths are relative to `pages/Forest-Drift/`.
 12. **`CreatureRuntimeManager.regenerateAmbient()`** respawns only ambient herds on biome changes. `settingsChanged()` would also drop carried and ridden creatures.
 13. **The Main World turns biomes on when its bundled package is decoded**, with no new binary package. The revision marker is a `localStorage` key, `forest-drift.main-world-revision`, because the world validator would strip an unknown field. If storage can't be read, the stored copy counts as current.
 14. **`biomeCreatures` was added to the golden without a generator bump** (Q17): the existing sections are unchanged.
+
+**Phase 2 (2026-11-13):**
+
+15. **The coat uses texel 7's three spare values** (type, strength, cycles per metre), so the surface table stays 8 texels wide rather than growing to 9 (§6.4).
+16. **Noise coats sample at the coat frequency × 12** (the noise volume's blob spacing). **Fading uses features per pixel along each screen direction**, and hard-edged coats (scales, chitin) fade earlier than soft ones.
+17. **The Creature Lab reads `?creatureDetail=off` and `?creatureCoats=off`**, for A/B review.
 
 ## 1. Summary
 
@@ -250,7 +256,7 @@ Horns, ears, fins, spikes, plates, antennae and tail tips get a base-to-tip vert
 
 ### 6.4 Shader data
 
-- The surface table row grows from **8 to 9 texels**: coat type, coat strength, coat scale (from thickness and length), and gloss boost. That's 144 KB in place of 128 KB, still one texture.
+- **Built (Phase 2):** the coat fits texel 7's three spare values (coat type, strength, cycles per metre), so the table stays **8 texels** wide and 128 KB. There's no separate gloss boost: profile gloss already flows through the surface genome.
 - **No new vertex attributes.** Feature colour is in vertex colours, and coat region masks reuse the `surface` region id (no detail on eyes, claws or horns).
 - One program: coat branches are switches on table values, not new programs. The `creature-surface-v2` hook key becomes `v3`.
 

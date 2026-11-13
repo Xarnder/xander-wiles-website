@@ -1,0 +1,84 @@
+[
+	{
+		"detail": "on",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2004
+	},
+	{
+		"detail": "on",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1986
+	},
+	{
+		"detail": "on",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1923
+	},
+	{
+		"detail": "on",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1929
+	},
+	{
+		"detail": "on",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1922
+	},
+	{
+		"detail": "on",
+		"scene": "stress 25",
+		"fps": 49.26108374384413,
+		"frameMs": 20.299999999999272
+	},
+	{
+		"detail": "off",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2018
+	},
+	{
+		"detail": "off",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1983
+	},
+	{
+		"detail": "off",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1993
+	},
+	{
+		"detail": "off",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1943
+	},
+	{
+		"detail": "off",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 1952
+	},
+	{
+		"detail": "off",
+		"scene": "stress 25",
+		"fps": 47.61904761904762,
+		"frameMs": 21
+	}
+]

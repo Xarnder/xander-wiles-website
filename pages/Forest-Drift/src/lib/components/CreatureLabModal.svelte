@@ -142,6 +142,7 @@
 		'underbelly',
 		'primaryMask',
 		'secondaryMask',
+		'coatDetail',
 		'accent'
 	];
 	function applySurface() {

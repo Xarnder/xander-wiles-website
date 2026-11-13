@@ -50,6 +50,60 @@ float creaturePatternMask(int type, vec4 p1, vec4 p2, float oz, vec3 pos, float 
 	if (type == 8) return smoothstep(-0.3, 1.0, radial);
 	return 0.0;
 }
+// Coat micro-texture (biome-specific creatures Phase 2). Mirrors surface/CreatureCoatDetail.ts.
+// q counts coat features; the noise volume has one blob per ~12 texels (NOISE_FEATURE_TEXELS).
+const float CREATURE_NOISE_FEATURE = 12.0;
+float creatureCoatRegion(int r) {
+	if (r == 21 || r == 22 || r == 17 || r == 24 || r == 25 || r == 27) return 0.0;
+	if (r == 19 || r == 20) return 0.4;
+	if (r == 16 || r == 18 || r == 26 || r == 28) return 0.6;
+	return 1.0;
+}
+// Coat height 0..1 at bind position q (already in detail cycles) for the given coat type.
+float creatureCoatHeight(int type, vec3 q, float u, int region) {
+	if (type == 1) {
+		// Fur: grain stretched along the part's main axis (limbs run along Y, bodies along Z).
+		bool limb = (region >= 7 && region <= 14) || region == 19 || region == 20;
+		vec3 s = q * CREATURE_NOISE_FEATURE * (limb ? vec3(1.0, 0.14, 1.0) : vec3(1.0, 1.0, 0.14));
+		return creatureNoiseAt(s) * 0.75 + creatureNoiseAt(s * 2.2 + 7.1) * 0.25;
+	}
+	if (type == 2) {
+		// Hide: soft folds (noise ridges) with a little grain.
+		float n = creatureNoiseAt(q * CREATURE_NOISE_FEATURE * 0.5);
+		return (1.0 - abs(2.0 * n - 1.0)) * 0.8 + creatureNoiseAt(q * CREATURE_NOISE_FEATURE * 2.1 + 3.7) * 0.2;
+	}
+	if (type == 3) {
+		// Scales: offset rows of rounded scales, grooves between them.
+		vec2 g = vec2(q.z, q.y * 1.3 + q.x * 0.7);
+		float row = floor(g.y);
+		g.x += 0.5 * mod(row, 2.0);
+		vec2 f = fract(g) - vec2(0.5, 0.15);
+		return 1.0 - smoothstep(0.3, 0.72, length(vec2(f.x, f.y * 0.9)));
+	}
+	if (type == 4) {
+		// Chitin: smooth plates along the part (bodies along Z, legs along Y), seams between them.
+		bool limb = (region >= 7 && region <= 14) || region == 19 || region == 20;
+		float t = fract(limb ? q.y : q.z);
+		float seam = smoothstep(0.0, 0.07, t) * smoothstep(1.0, 0.93, t);
+		return seam * (0.9 + creatureNoiseAt(q * CREATURE_NOISE_FEATURE * 0.35) * 0.1);
+	}
+	if (type == 5) {
+		// Skin: fine pores.
+		return 1.0 - smoothstep(0.62, 0.8, creatureNoiseAt(q * CREATURE_NOISE_FEATURE));
+	}
+	return 0.5;
+}
+float creatureCoatH = 0.5;
+float creatureCoatAmount = 0.0;
+vec3 creaturePerturbNormal(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
+	vec3 sx = normalize(dFdx(surfPos));
+	vec3 sy = normalize(dFdy(surfPos));
+	vec3 r1 = cross(sy, surfNorm);
+	vec3 r2 = cross(surfNorm, sx);
+	float det = dot(sx, r1) * faceDir;
+	vec3 grad = sign(det) * (dHdxy.x * r1 + dHdxy.y * r2);
+	return normalize(abs(det) * surfNorm - grad);
+}
 `;
 const PATTERN_APPLY = /* glsl */ `
 {
@@ -59,8 +113,25 @@ const PATTERN_APPLY = /* glsl */ `
 	int debugMode = int(a3.w + 0.5);
 	vec3 pos = vCreatureBind * a3.y;
 	float u = vCreaturePattern.x, radial = vCreaturePattern.y;
+	// Coat micro-texture: a height per pixel, faded by LOD and by its on-screen frequency.
+	{
+		vec4 coat = texelFetch(creatureSurfaceTable, ivec2(7, slot), 0);
+		int coatType = int(coat.y + 0.5);
+		if (coatType > 0 && lodMode < 2 && coat.w > 0.0) {
+			vec3 q = vCreatureBind * coat.w;
+			// Features per pixel along the screen's steeper direction: fade before they alias.
+			float perPixel = max(length(dFdx(q)), length(dFdy(q)));
+			// Hard-edged cells (scales, chitin seams) alias sooner than soft noise coats.
+			float limit = coatType == 3 ? 0.13 : coatType == 4 ? 0.18 : 0.26;
+			float fade = (1.0 - smoothstep(limit, limit * 2.0, perPixel)) * (lodMode == 0 ? 1.0 : 0.35);
+			creatureCoatAmount = coat.z * fade * creatureCoatRegion(int(vCreatureSurface.w + 0.5));
+			creatureCoatH = creatureCoatHeight(coatType, q, u, int(vCreatureSurface.w + 0.5));
+		}
+	}
 	if (debugMode == 1) {
 		// vertex colours only
+	} else if (debugMode == 4) {
+		diffuseColor.rgb = vec3(mix(0.5, creatureCoatH, min(1.0, creatureCoatAmount * 1.6)));
 	} else if (debugMode >= 2) {
 		int base = debugMode == 2 ? 0 : 4;
 		float weight = debugMode == 2 ? vCreaturePattern.z : vCreaturePattern.w;
@@ -86,7 +157,17 @@ const PATTERN_APPLY = /* glsl */ `
 			float m = creaturePatternMask(int(c0.w + 0.5), c1, c2, c3.x, pos, u, radial);
 			diffuseColor.rgb = mix(diffuseColor.rgb, c0.rgb, m * c1.z * vCreaturePattern.w);
 		}
+		// Faint albedo grain: the coat reads even under flat light.
+		diffuseColor.rgb *= 1.0 + (creatureCoatH - 0.5) * 0.22 * creatureCoatAmount;
 	}
+}
+`;
+// Derivatives are taken outside any per-pixel branch (they are undefined in divergent flow).
+const COAT_NORMAL = /* glsl */ `
+{
+	vec2 dH = vec2(dFdx(creatureCoatH), dFdy(creatureCoatH)) * creatureCoatAmount;
+	vec3 coatNormal = creaturePerturbNormal(-vViewPosition, normal, dH, faceDirection);
+	if (creatureCoatAmount > 0.001) normal = coatNormal;
 }
 `;
 const uniforms = {
@@ -116,6 +197,7 @@ vCreatureBind = position;`
 	shader.fragmentShader = shader.fragmentShader
 		.replace('#include <common>', `#include <common>\n${PATTERN_GLSL}`)
 		.replace('#include <color_fragment>', `#include <color_fragment>\n${PATTERN_APPLY}`)
+		.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${COAT_NORMAL}`)
 		.replace(
 			'#include <roughnessmap_fragment>',
 			'#include <roughnessmap_fragment>\nroughnessFactor = clamp(vCreatureSurface.x, 0.04, 1.0);'
@@ -129,7 +211,7 @@ vCreatureBind = position;`
 export function createCreatureMaterial(): MeshStandardMaterial {
 	const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
 	material.name = 'CreatureSurface';
-	setOwnShaderHook(material, creatureSurfaceHook, 'creature-surface-v2', uniforms);
+	setOwnShaderHook(material, creatureSurfaceHook, 'creature-surface-v3', uniforms);
 	return material;
 }
 

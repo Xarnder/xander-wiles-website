@@ -8,6 +8,7 @@ import {
 	type IndividualPattern
 } from './CreaturePatternGenerator';
 import { patternColor } from './CreatureSurfaceClassifier';
+import { COAT_CODES, coatFrequency } from './CreatureCoatDetail';
 
 /**
  * Per-creature pattern parameters for the ONE shared creature material. Uniforms on a shared
@@ -19,13 +20,16 @@ import { patternColor } from './CreatureSurfaceClassifier';
  *   0 A colour.rgb, A type     1 A scale, density, contrast, stretch
  *   2 A freq, phase, off.x, y  3 A off.z, 1/bodyScale, lodMode, debugMode
  *   4 B colour.rgb, B type     5 B scale, density, contrast, stretch
- *   6 B freq, phase, off.x, y  7 B off.z, unused…
+ *   6 B freq, phase, off.x, y  7 B off.z, coat type, coat strength, coat cycles/metre
  * Row 0 is reserved as "plain" (no pattern) for creatures without a surface (legacy compare).
  */
 export const SURFACE_TABLE_WIDTH = 8;
 export const SURFACE_TABLE_ROWS = 1024;
-/** Debug modes: 0 normal, 1 vertex colours only, 2 primary-pattern mask, 3 secondary mask. */
-export type SurfaceDebugMode = 0 | 1 | 2 | 3;
+/**
+ * Debug modes: 0 normal, 1 vertex colours only, 2 primary-pattern mask, 3 secondary mask, 4 coat
+ * detail height.
+ */
+export type SurfaceDebugMode = 0 | 1 | 2 | 3 | 4;
 
 class SurfaceTable {
 	readonly data = new Float32Array(SURFACE_TABLE_WIDTH * SURFACE_TABLE_ROWS * 4);
@@ -101,6 +105,12 @@ class SurfaceTable {
 			lod,
 			debug
 		]);
+		// Coat micro-texture (Phase 2) shares texel 7 with the secondary pattern's offset.
+		const coat = surface.coat;
+		const at = (slot * SURFACE_TABLE_WIDTH + 7) * 4;
+		this.data[at + 1] = coat ? COAT_CODES[coat.type] : 0;
+		this.data[at + 2] = coat?.strength ?? 0;
+		this.data[at + 3] = coat ? coatFrequency(coat, bodyScale) : 0;
 		this.texture.needsUpdate = true;
 	}
 	setDebug(slot: number, debug: SurfaceDebugMode) {

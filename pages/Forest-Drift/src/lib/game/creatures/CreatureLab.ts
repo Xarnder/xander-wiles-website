@@ -23,6 +23,7 @@ import { generateCreaturePalette } from './surface/CreaturePaletteGenerator';
 import { creatureSurfaceTable, type SurfaceDebugMode } from './surface/CreatureSurfaceTable';
 import { createMulberry32 } from '../terrain/seededRandom';
 import { coatRegionSpecies } from './biome/CreatureBiomeCoat';
+import { readCreatureCoatSwitches } from './biome/creatureCoatSwitches';
 import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
 import { regionSpecies } from './CreaturePopulationSystem';
 import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
@@ -96,6 +97,7 @@ export type CreatureSurfaceDebugView =
 	| 'underbelly'
 	| 'primaryMask'
 	| 'secondaryMask'
+	| 'coatDetail'
 	| 'accent';
 type LegacyCompile = (definition: CreatureDefinition, lod?: 0 | 1) => CreatureCompilation;
 const PLANS = ['quadruped', 'biped', 'hexapod', 'serpentine'] as const;
@@ -165,6 +167,8 @@ export class CreatureLab {
 	private frameCount = 0;
 	private frameStart = performance.now();
 	constructor(readonly container: HTMLElement) {
+		// `?creatureDetail=off` / `?creatureCoats=off` work in the Lab too (A/B review).
+		readCreatureCoatSwitches(location.search);
 		this.scene.background = new THREE.Color('#171310');
 		this.scene.add(new THREE.HemisphereLight(0xe9f6ff, 0x5b6144, 2.4));
 		const light = new THREE.DirectionalLight(0xfff0d4, 3);
@@ -777,9 +781,11 @@ export class CreatureLab {
 				? 2
 				: this.surfaceDebug === 'secondaryMask'
 					? 3
-					: this.surfaceDebug === 'none' || this.weights
-						? 0
-						: 1;
+					: this.surfaceDebug === 'coatDetail'
+						? 4
+						: this.surfaceDebug === 'none' || this.weights
+							? 0
+							: 1;
 		creatureSurfaceTable().setDebug(c.surfaceSlot, this.weights ? 1 : mode);
 		const rig = c.compilation.skeleton,
 			b = c.compilation.bounds;
@@ -939,7 +945,13 @@ export class CreatureLab {
 	private surfaceDebugColors(c: CompiledCreature): Float32Array | undefined {
 		const view = this.surfaceDebug,
 			g = c.compilation.geometry;
-		if (view === 'none' || view === 'primaryMask' || view === 'secondaryMask') return;
+		if (
+			view === 'none' ||
+			view === 'primaryMask' ||
+			view === 'secondaryMask' ||
+			view === 'coatDetail'
+		)
+			return;
 		const count = g.positions.length / 3,
 			out = new Float32Array(count * 3),
 			tint = new THREE.Color();
