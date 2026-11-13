@@ -30,12 +30,14 @@
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.12",
     "workbox-window": "^7.4.1",
-    "deepmerge": "file:../../vendor/deepmerge"
+    "deepmerge": "file:../../vendor/deepmerge",
+    "@ricky0123/vad-web": "file:../../vendor/vad-web-unused"
   },
   "overrides": {
     "minimatch": "^11.0.4",
     "glob": "^14.0.3",
     "sharp": "^0.35.5",
-    "deepmerge": "$deepmerge"
+    "deepmerge": "$deepmerge",
+    "@ricky0123/vad-web": "$@ricky0123/vad-web"
   }
 }

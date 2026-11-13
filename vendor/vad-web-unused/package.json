@@ -1,0 +1,8 @@
+{
+  "name": "@ricky0123/vad-web",
+  "version": "0.0.24-unused",
+  "private": true,
+  "description": "Placeholder for @moonshine-ai/moonshine-js's broken 'file:../vad-moonshine/packages/web' dependency. moonshine-js bundles its voice-activity code and loads model assets from a CDN, so nothing imports this package. Remove the Teleprompter override when moonshine-js publishes a fixed dependency.",
+  "license": "MIT",
+  "main": "index.js"
+}
