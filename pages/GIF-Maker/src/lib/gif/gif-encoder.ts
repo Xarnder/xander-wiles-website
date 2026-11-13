@@ -1,3 +1,5 @@
+import { memeTextPng } from './meme-text';
+import { encoderOperation } from './encoder-operation';
 import { FFFSType, type FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import { fileExtension } from './format';
@@ -25,7 +27,12 @@ export async function prepareInput(ffmpeg: FFmpeg, file: File): Promise<Prepared
 	}
 
 	try {
-		await ffmpeg.mount(FFFSType.WORKERFS, { blobs: [{ name: fileName, data: file }] }, INPUT_MOUNT);
+		const mounted = await ffmpeg.mount(
+			FFFSType.WORKERFS,
+			{ blobs: [{ name: fileName, data: file }] },
+			INPUT_MOUNT
+		);
+		if (!mounted) throw new Error('WORKERFS unavailable');
 		return { ffmpeg, inputPath: `${INPUT_MOUNT}/${fileName}`, mounted: true, fileName };
 	} catch {
 		await ffmpeg.writeFile(fileName, await fetchFile(file));
@@ -52,7 +59,14 @@ export async function encodeGif(
 	signal?: AbortSignal
 ): Promise<EncodeResult> {
 	if (request.mode === 'sample' && request.windows && request.windows.length > 0) {
-		return encodeSample(prepared, request.settings, request.windows, onFfmpegProgress, signal);
+		return encodeSample(
+			prepared,
+			request.settings,
+			request.windows,
+			onFfmpegProgress,
+			signal,
+			request.memeText
+		);
 	}
 	return encodeRange(
 		prepared,
@@ -62,7 +76,8 @@ export async function encodeGif(
 		onFfmpegProgress,
 		signal,
 		request.bounce === true,
-		request.speed ?? 1
+		request.speed ?? 1,
+		request.memeText
 	);
 }
 
@@ -71,14 +86,25 @@ async function encodeSample(
 	settings: GifSettings,
 	windows: SampleWindow[],
 	onFfmpegProgress?: (progress: number) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	memeText = ''
 ): Promise<EncodeResult> {
 	if (windows.length === 1) {
 		const clip: ClipRange = {
 			startSeconds: windows[0].start,
 			endSeconds: windows[0].start + windows[0].duration
 		};
-		return encodeRange(prepared, settings, clip, 'sample.gif', onFfmpegProgress, signal);
+		return encodeRange(
+			prepared,
+			settings,
+			clip,
+			'sample.gif',
+			onFfmpegProgress,
+			signal,
+			false,
+			1,
+			memeText
+		);
 	}
 
 	let total = 0;
@@ -94,7 +120,10 @@ async function encodeSample(
 			clip,
 			`sample-${index}.gif`,
 			onFfmpegProgress,
-			signal
+			signal,
+			false,
+			1,
+			memeText
 		);
 		total += part.fileSizeBytes;
 		last = part.bytes;
@@ -110,10 +139,14 @@ async function encodeRange(
 	onFfmpegProgress?: (progress: number) => void,
 	signal?: AbortSignal,
 	bounce = false,
-	speed = 1
+	speed = 1,
+	memeText = ''
 ): Promise<EncodeResult> {
 	const { ffmpeg, inputPath } = prepared;
 	const duration = Math.max(0.05, clip.endSeconds - clip.startSeconds);
+	const caption = !!memeText.trim();
+	const captionName = `${outputName}.caption.png`;
+	const captionInput = caption ? ['-i', captionName] : [];
 	const paletteName = outputName.replace(/\.gif$/, '.png');
 	const start = Math.max(0, clip.startSeconds).toFixed(3);
 	const length = duration.toFixed(3);
@@ -126,74 +159,73 @@ async function encodeRange(
 		await safeDelete(ffmpeg, paletteName);
 		await safeDelete(ffmpeg, outputName);
 
-		const execOpts = { signal };
-		const paletteCode = await ffmpeg.exec(
-			[
+		if (caption) {
+			await ffmpeg.writeFile(
+				captionName,
+				await memeTextPng(memeText, settings.width, settings.height)
+			);
+		}
+
+		const exec = (args: string[]) =>
+			encoderOperation(ffmpeg, () => ffmpeg.exec(args, 175_000), signal);
+		const paletteCode = await exec([
+			'-ss',
+			start,
+			'-t',
+			length,
+			'-i',
+			inputPath,
+			...captionInput,
+			'-an',
+			caption ? '-filter_complex' : '-vf',
+			palettePassFilter(settings, caption),
+			'-y',
+			paletteName
+		]);
+
+		if (paletteCode === 0) {
+			const gifCode = await exec([
 				'-ss',
 				start,
 				'-t',
 				length,
 				'-i',
 				inputPath,
+				'-i',
+				paletteName,
+				...captionInput,
 				'-an',
-				'-vf',
-				palettePassFilter(settings),
+				'-filter_complex',
+				paletteUseComplex(settings, bounce, speed, caption),
+				'-gifflags',
+				'+transdiff',
+				'-loop',
+				'0',
 				'-y',
-				paletteName
-			],
-			undefined,
-			execOpts
-		);
-
-		if (paletteCode === 0) {
-			const gifCode = await ffmpeg.exec(
-				[
-					'-ss',
-					start,
-					'-t',
-					length,
-					'-i',
-					inputPath,
-					'-i',
-					paletteName,
-					'-an',
-					'-filter_complex',
-					paletteUseComplex(settings, bounce, speed),
-					'-gifflags',
-					'+transdiff',
-					'-loop',
-					'0',
-					'-y',
-					outputName
-				],
-				undefined,
-				execOpts
-			);
+				outputName
+			]);
 			if (gifCode !== 0) {
 				throw new Error('GIF encoding failed');
 			}
 		} else {
-			const combinedCode = await ffmpeg.exec(
-				[
-					'-ss',
-					start,
-					'-t',
-					length,
-					'-i',
-					inputPath,
-					'-an',
-					'-vf',
-					combinedPaletteFilter(settings, bounce, speed),
-					'-gifflags',
-					'+transdiff',
-					'-loop',
-					'0',
-					'-y',
-					outputName
-				],
-				undefined,
-				execOpts
-			);
+			const combinedCode = await exec([
+				'-ss',
+				start,
+				'-t',
+				length,
+				'-i',
+				inputPath,
+				...captionInput,
+				'-an',
+				'-filter_complex',
+				combinedPaletteFilter(settings, bounce, speed, caption),
+				'-gifflags',
+				'+transdiff',
+				'-loop',
+				'0',
+				'-y',
+				outputName
+			]);
 			if (combinedCode !== 0) {
 				throw new Error('GIF encoding failed');
 			}
@@ -207,6 +239,7 @@ async function encodeRange(
 		return { bytes, fileSizeBytes: bytes.byteLength };
 	} finally {
 		stopProgress();
+		if (caption) await safeDelete(ffmpeg, captionName);
 		await safeDelete(ffmpeg, paletteName);
 		await safeDelete(ffmpeg, outputName);
 	}

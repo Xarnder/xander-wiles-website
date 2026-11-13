@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { MEME_TEXT_LIMIT } from '#lib/gif/meme-text';
 	import AdvancedSettings from '#lib/components/AdvancedSettings.svelte';
 	import ClipSelector from '#lib/components/ClipSelector.svelte';
 	import ConversionProgress from '#lib/components/ConversionProgress.svelte';
@@ -47,6 +48,7 @@
 	let startSeconds = $state(0);
 	let endSeconds = $state(0);
 	let bounce = $state(false);
+	let memeText = $state('');
 	let playbackMode = $state<PlaybackMode>('speed');
 	let speed = $state(1);
 	let targetSeconds = $state(1);
@@ -151,6 +153,7 @@
 		startSeconds = 0;
 		endSeconds = 0;
 		bounce = false;
+		memeText = '';
 		playbackMode = 'speed';
 		speed = 1;
 
@@ -200,6 +203,7 @@
 		try {
 			const { convertVideoToGif, encodeSmallestGif } = await import('#lib/gif/convert');
 			const options = {
+				memeText,
 				file,
 				video: videoEl,
 				analysis,
@@ -287,7 +291,7 @@
 			{/if}
 
 			{#if videoUrl}
-				<VideoPreview url={videoUrl} {analysis} bind:element={videoEl} />
+				<VideoPreview url={videoUrl} {analysis} {memeText} bind:element={videoEl} />
 			{/if}
 
 			{#if analysing}
@@ -299,6 +303,21 @@
 			{/if}
 
 			{#if analysis}
+				<div class="stack">
+					<label for="meme-text">Meme text <span class="hint">(optional)</span></label>
+					<textarea
+						id="meme-text"
+						rows="2"
+						maxlength={MEME_TEXT_LIMIT}
+						placeholder="WHEN THE COFFEE FINALLY KICKS IN"
+						bind:value={memeText}
+						disabled={converting}
+						oninput={() => resetResult()}
+						aria-describedby="meme-text-hint"></textarea>
+					<p id="meme-text-hint" class="hint">
+						White text with a black outline. Automatically sized and wrapped to fit at the top.
+					</p>
+				</div>
 				<SizeSelector bind:bytes={targetBytes} />
 				<ClipSelector
 					duration={analysis.durationSeconds}
@@ -428,6 +447,17 @@ Encoder: {result.usedMultiThread ? 'multi-thread FFmpeg' : 'single-thread FFmpeg
 </div>
 
 <style>
+	#meme-text {
+		width: 100%;
+		box-sizing: border-box;
+		padding: 12px 14px;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--preview);
+		resize: vertical;
+		min-height: 80px;
+	}
+
 	.row-end {
 		display: flex;
 		justify-content: flex-end;

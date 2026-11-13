@@ -24,8 +24,11 @@ export function paletteUseFilter(settings: GifSettings): string {
 	return `paletteuse=dither=${settings.dither}`;
 }
 
-export function palettePassFilter(settings: GifSettings): string {
-	return `${fpsFilter(settings)},${scaleFilter(settings)},${paletteGenFilter(settings)}`;
+export function palettePassFilter(settings: GifSettings, caption = false): string {
+	const prep = `${fpsFilter(settings)},${scaleFilter(settings)}`;
+	return caption
+		? `[0:v]${prep}[base];[base][1:v]overlay=0:0:format=auto,${paletteGenFilter(settings)}`
+		: `${prep},${paletteGenFilter(settings)}`;
 }
 
 export function bounceLoopFilter(): string {
@@ -49,10 +52,26 @@ export function videoPrepFilter(settings: GifSettings, bounce = false, speed = 1
 	return prep;
 }
 
-export function combinedPaletteFilter(settings: GifSettings, bounce = false, speed = 1): string {
-	return `${videoPrepFilter(settings, bounce, speed)},split[s0][s1];[s0]${paletteGenFilter(settings)}[p];[s1][p]${paletteUseFilter(settings)}`;
+export function combinedPaletteFilter(
+	settings: GifSettings,
+	bounce = false,
+	speed = 1,
+	caption = false
+): string {
+	const prep = caption
+		? `[0:v]${videoPrepFilter(settings, bounce, speed)}[base];[base][1:v]overlay=0:0:format=auto`
+		: videoPrepFilter(settings, bounce, speed);
+	return `${prep},split[s0][s1];[s0]${paletteGenFilter(settings)}[p];[s1][p]${paletteUseFilter(settings)}`;
 }
 
-export function paletteUseComplex(settings: GifSettings, bounce = false, speed = 1): string {
-	return `[0:v]${videoPrepFilter(settings, bounce, speed)}[x];[x][1:v]${paletteUseFilter(settings)}`;
+export function paletteUseComplex(
+	settings: GifSettings,
+	bounce = false,
+	speed = 1,
+	caption = false
+): string {
+	const prep = caption
+		? `[0:v]${videoPrepFilter(settings, bounce, speed)}[base];[base][2:v]overlay=0:0:format=auto`
+		: `[0:v]${videoPrepFilter(settings, bounce, speed)}`;
+	return `${prep}[x];[x][1:v]${paletteUseFilter(settings)}`;
 }

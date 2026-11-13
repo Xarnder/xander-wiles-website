@@ -1,3 +1,4 @@
+import { encoderOperation } from './encoder-operation';
 import { resolve } from '$app/paths';
 import type { FFmpeg, LogEvent, ProgressEvent as FfmpegProgress } from '@ffmpeg/ffmpeg';
 import { parseProbeOutput } from './format';
@@ -20,53 +21,58 @@ export async function loadFfmpeg(
 	onStatus?: (message: string) => void,
 	signal?: AbortSignal
 ): Promise<FfmpegHandle> {
+	signal?.throwIfAborted();
 	if (handle?.ffmpeg.loaded) return handle;
 	if (loadPromise) return loadPromise;
 
+	// A terminated session must never be returned from an old resolved promise.
 	loadPromise = (async () => {
+		signal?.throwIfAborted();
 		onStatus?.('Loading local encoder…');
 		const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-		const { toBlobURL } = await import('@ffmpeg/util');
-		const ffmpegWorker = await import('@ffmpeg/ffmpeg/worker?url');
-
+		// Bundle the worker's imports too; ?url alone copies unresolved relative imports.
+		const ffmpegWorker = await import('@ffmpeg/ffmpeg/worker?worker&url');
 		const multiThread = shouldUseMultiThreadFfmpeg(
 			isCrossOriginIsolated(),
 			prefersNativeShareSave()
 		);
-		const coreDir = `${resolve('/').replace(/\/$/, '')}/ffmpeg/${multiThread ? 'core-mt' : 'core'}`;
-
-		const coreURL = await toBlobURL(`${coreDir}/ffmpeg-core.js`, 'text/javascript');
-		const wasmURL = await toBlobURL(`${coreDir}/ffmpeg-core.wasm`, 'application/wasm');
-		const workerURL = multiThread
-			? await toBlobURL(`${coreDir}/ffmpeg-core.worker.js`, 'text/javascript')
-			: undefined;
-
+		const coreDir = new URL(
+			`${resolve('/').replace(/\/$/, '')}/ffmpeg/${multiThread ? 'core-mt' : 'core'}/`,
+			window.location.href
+		).href;
 		const ffmpeg = new FFmpeg();
 		const logs: string[] = [];
 		ffmpeg.on('log', ({ message }: LogEvent) => {
 			logs.push(message);
 			if (logs.length > 200) logs.splice(0, logs.length - 200);
 		});
-
-		await ffmpeg.load(
-			{
-				classWorkerURL: ffmpegWorker.default,
-				coreURL,
-				wasmURL,
-				workerURL
-			},
-			{ signal }
-		);
-
-		handle = { ffmpeg, multiThread, logs };
-		return handle;
+		try {
+			await encoderOperation(
+				ffmpeg,
+				() =>
+					ffmpeg.load({
+						classWorkerURL: ffmpegWorker.default,
+						coreURL: `${coreDir}ffmpeg-core.js`,
+						wasmURL: `${coreDir}ffmpeg-core.wasm`,
+						workerURL: multiThread ? `${coreDir}ffmpeg-core.worker.js` : undefined
+					}),
+				signal,
+				60_000,
+				'Could not load the local encoder. Check your connection and try again.'
+			);
+			handle = { ffmpeg, multiThread, logs };
+			return handle;
+		} catch (error) {
+			ffmpeg.terminate();
+			throw error;
+		}
 	})();
 
+	const pending = loadPromise;
 	try {
-		return await loadPromise;
-	} catch (error) {
-		loadPromise = undefined;
-		throw error;
+		return await pending;
+	} finally {
+		if (loadPromise === pending) loadPromise = undefined;
 	}
 }
 
@@ -92,30 +98,38 @@ export function listenProgress(
 
 export async function probeVideo(
 	ffmpeg: FFmpeg,
-	inputPath: string
+	inputPath: string,
+	signal?: AbortSignal
 ): Promise<ReturnType<typeof parseProbeOutput>> {
 	try {
-		await ffmpeg.ffprobe(
-			[
-				'-v',
-				'error',
-				'-select_streams',
-				'v:0',
-				'-show_entries',
-				'stream=width,height,r_frame_rate,avg_frame_rate,nb_frames,duration:format=duration',
-				'-of',
-				'default=noprint_wrappers=1',
-				inputPath,
-				'-o',
-				'probe.txt'
-			],
-			undefined
+		await encoderOperation(
+			ffmpeg,
+			() =>
+				ffmpeg.ffprobe(
+					[
+						'-v',
+						'error',
+						'-select_streams',
+						'v:0',
+						'-show_entries',
+						'stream=width,height,r_frame_rate,avg_frame_rate,nb_frames,duration:format=duration',
+						'-of',
+						'default=noprint_wrappers=1',
+						inputPath,
+						'-o',
+						'probe.txt'
+					],
+					30_000
+				),
+			signal,
+			35_000
 		);
 		const data = await ffmpeg.readFile('probe.txt');
 		const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
 		await safeDelete(ffmpeg, 'probe.txt');
 		return parseProbeOutput(text);
-	} catch {
+	} catch (error) {
+		if (signal?.aborted || !ffmpeg.loaded) throw error;
 		return {};
 	}
 }

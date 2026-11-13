@@ -17,6 +17,7 @@ import type {
 } from './types';
 
 export interface ConvertOptions {
+	memeText?: string;
 	file: File;
 	video: HTMLVideoElement;
 	analysis: VideoAnalysis;
@@ -63,7 +64,7 @@ export async function convertVideoToGif(options: ConvertOptions): Promise<Optimi
 
 	const prepared = await prepareInput(session.ffmpeg, options.file);
 	try {
-		const probe = await probeVideo(session.ffmpeg, prepared.inputPath);
+		const probe = await probeVideo(session.ffmpeg, prepared.inputPath, options.signal);
 		const analysis: VideoAnalysis = {
 			...options.analysis,
 			width: probe.width ?? options.analysis.width,
@@ -80,7 +81,7 @@ export async function convertVideoToGif(options: ConvertOptions): Promise<Optimi
 		const encode = async (request: EncodeRequest) => {
 			return encodeGif(
 				prepared,
-				request,
+				{ ...request, memeText: options.memeText },
 				(ffmpegProgress) => {
 					const current = request.settings;
 					options.onProgress({
@@ -117,6 +118,12 @@ export async function convertVideoToGif(options: ConvertOptions): Promise<Optimi
 
 		return {
 			...result,
+			filterGraph: combinedPaletteFilter(
+				result.candidate.settings,
+				options.bounce === true,
+				options.speed ?? 1,
+				!!options.memeText?.trim()
+			),
 			usedMultiThread: session.multiThread,
 			logs: [...session.logs]
 		};
@@ -150,7 +157,14 @@ export async function encodeSmallestGif(options: ConvertOptions): Promise<Optimi
 	try {
 		const encoded = await encodeGif(
 			prepared,
-			{ settings, mode: 'full', clip, bounce: options.bounce === true, speed: options.speed ?? 1 },
+			{
+				memeText: options.memeText,
+				settings,
+				mode: 'full',
+				clip,
+				bounce: options.bounce === true,
+				speed: options.speed ?? 1
+			},
 			(ffmpegProgress) => {
 				options.onProgress({
 					stage: 'final',
@@ -189,7 +203,12 @@ export async function encodeSmallestGif(options: ConvertOptions): Promise<Optimi
 					kind: 'full'
 				}
 			],
-			filterGraph: combinedPaletteFilter(settings, options.bounce === true, options.speed ?? 1),
+			filterGraph: combinedPaletteFilter(
+				settings,
+				options.bounce === true,
+				options.speed ?? 1,
+				!!options.memeText?.trim()
+			),
 			usedMultiThread: session.multiThread,
 			calibration: 1
 		};

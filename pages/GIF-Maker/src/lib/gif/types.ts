@@ -77,6 +77,7 @@ export interface SampleWindow {
 }
 
 export interface EncodeRequest {
+	memeText?: string;
 	settings: GifSettings;
 	mode: 'sample' | 'full';
 	clip: ClipRange;
