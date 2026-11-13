@@ -45,7 +45,7 @@ describe('original quadruped compiler', () => {
 			low = compileCreatureGeometry(d, 1);
 		expect(a.fingerprint).toBe(b.fingerprint);
 		expect(low.geometry.indices.length).toBeLessThan(a.geometry.indices.length * 0.55);
-		expect(a.fingerprint).toMatchInlineSnapshot(`"v1-24-1931-3628-1ac010c6"`);
+		expect(a.fingerprint).toMatchInlineSnapshot(`"v1-24-1931-3628-3ee2477e"`);
 	});
 	it('builds real skinning, shares compatible materials, and disposes idempotently', () => {
 		const a = compileCreature(definition(7)),

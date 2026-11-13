@@ -32,8 +32,20 @@ export const PATTERN_TYPES: CreaturePatternType[] = [
 	'limb-bands',
 	'dorsal-spots',
 	'gradient',
-	'underbelly'
+	'underbelly',
+	// Phase 3 (biome-specific creatures): appended, so earlier codes keep their meaning.
+	'rosettes',
+	'reticulated',
+	'patches',
+	'speckle',
+	'saddle'
 ];
+/**
+ * The patterns a saved recipe may use: the original ten. Phase 3's patterns only appear in biome
+ * coats, which are never saved as such (decision Q18: placing maps them to these), so older builds
+ * can still read every save.
+ */
+export const SAVED_PATTERN_TYPES: readonly CreaturePatternType[] = PATTERN_TYPES.slice(0, 10);
 /** Shader codes, in PATTERN_TYPES order. */
 export const patternCode = (type: CreaturePatternType) => PATTERN_TYPES.indexOf(type);
 export const ACCENT_REGIONS: CreatureAccentRegion[] = [
@@ -137,7 +149,27 @@ const TONES: Record<CreaturePatternType, Weighted<CreaturePatternTone>> = {
 		['dark', 0.55],
 		['accent', 0.45]
 	],
-	gradient: [['dark', 1]]
+	gradient: [['dark', 1]],
+	rosettes: [
+		['dark', 0.8],
+		['light', 0.2]
+	],
+	reticulated: [
+		['light', 0.6],
+		['dark', 0.4]
+	],
+	patches: [
+		['dark', 0.5],
+		['light', 0.5]
+	],
+	speckle: [
+		['dark', 0.6],
+		['light', 0.4]
+	],
+	saddle: [
+		['dark', 0.7],
+		['accent', 0.3]
+	]
 };
 function pickWeighted<T>(items: Weighted<T>, r: number): T {
 	const total = items.reduce((sum, [, w]) => sum + w, 0);
@@ -210,6 +242,37 @@ export function patternFor(
 			};
 		case 'gradient':
 			return { ...base, contrast: between(0.35, 0.55) };
+		case 'rosettes':
+			return {
+				...base,
+				scale: between(2.2, 3),
+				density: between(0.3, 0.4),
+				contrast: between(0.7, 0.9),
+				stretch: between(1, 1.3)
+			};
+		case 'reticulated':
+			return {
+				...base,
+				scale: between(1.6, 2.2),
+				density: between(0.35, 0.5),
+				contrast: between(0.6, 0.8)
+			};
+		case 'patches':
+			return {
+				...base,
+				scale: between(0.8, 1.2),
+				density: between(0.4, 0.55),
+				contrast: between(0.8, 0.95)
+			};
+		case 'speckle':
+			return {
+				...base,
+				scale: between(6, 9),
+				density: between(0.15, 0.25),
+				contrast: between(0.4, 0.6)
+			};
+		case 'saddle':
+			return { ...base, density: between(0.45, 0.6), contrast: between(0.6, 0.85) };
 		default:
 			return { ...base, contrast: 0 };
 	}
@@ -467,6 +530,32 @@ export function patternMask(
 		}
 		case 'gradient':
 			return smoothstep(-0.3, 1, radial);
+		case 'rosettes': {
+			// Rings around the noise's isolated peaks, with a fainter centre.
+			const n = noise(1);
+			const tr = 1 - pattern.density * 0.45;
+			const ring = smoothstep(tr - 0.04, tr, n) * (1 - smoothstep(tr + 0.06, tr + 0.1, n));
+			return Math.max(ring, 0.45 * smoothstep(tr + 0.08, tr + 0.12, n));
+		}
+		case 'reticulated': {
+			// The noise's ridge lines: a network around irregular patches.
+			const ridge = 1 - Math.abs(2 * noise(1) - 1);
+			const width = pattern.density * 0.35;
+			return smoothstep(1 - width - 0.05, 1 - width + 0.05, ridge);
+		}
+		case 'patches': {
+			const n = noise(1) * 0.8 + noise(2.2, 5.1) * 0.2;
+			return smoothstep(threshold - 0.03, threshold + 0.03, n);
+		}
+		case 'speckle':
+			return smoothstep(threshold - 0.04, threshold + 0.04, noise(2.5));
+		case 'saddle': {
+			// A dorsal band over the middle of the torso.
+			const half = 0.18 + pattern.density * 0.2;
+			return (
+				smoothstep(half + 0.08, half - 0.08, Math.abs(u - 0.5)) * smoothstep(-0.25, 0.35, radial)
+			);
+		}
 		default:
 			return 0;
 	}
@@ -491,7 +580,7 @@ export function validateSurfaceGenome(value: unknown): string | null {
 		return 'Unsupported creature surface version';
 	for (const key of ['primaryPattern', 'secondaryPattern']) {
 		const p = s[key] as Record<string, unknown> | undefined;
-		if (!p || typeof p !== 'object' || !PATTERN_TYPES.includes(p.type as CreaturePatternType))
+		if (!p || typeof p !== 'object' || !SAVED_PATTERN_TYPES.includes(p.type as CreaturePatternType))
 			return 'Invalid creature surface pattern';
 		if (!['light', 'dark', 'underbelly', 'accent'].includes(String(p.tone)))
 			return 'Invalid creature surface pattern tone';

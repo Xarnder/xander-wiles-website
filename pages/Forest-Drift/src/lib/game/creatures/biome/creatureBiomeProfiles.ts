@@ -19,7 +19,7 @@ export const CREATURE_BIOME_PROFILE_IDS: readonly CreatureBiomeProfileId[] = [
 
 /**
  * Patterns a profile can ask for. The last five are drawn by the shader from Phase 3; until then
- * they fall back to the nearest existing pattern (`PLANNED_PATTERN_FALLBACK`).
+ * a saved recipe stores the nearest of the original ten (`PLANNED_PATTERN_FALLBACK`).
  */
 export type CreatureCoatPattern =
 	| Exclude<CreaturePatternType, 'underbelly'>
@@ -533,7 +533,7 @@ export const PLAN_PATTERN_LEAN: Readonly<
 	}
 };
 
-/** Until Phase 3 draws them, planned patterns render as the nearest existing one. */
+/** The nearest of the original ten patterns, for saved recipes (Q18): older builds read them. */
 export const PLANNED_PATTERN_FALLBACK: Readonly<
 	Record<
 		Extract<CreatureCoatPattern, 'rosettes' | 'reticulated' | 'patches' | 'speckle' | 'saddle'>,

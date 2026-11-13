@@ -1,7 +1,7 @@
 # Forest Drift — Biome-Specific Creatures: Technical Plan
 
 **Feature cycle:** 2026-11-12 (written 2026-11-13)
-**Status:** **Revision 5: Phases 0–2 built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md).
+**Status:** **Revision 6: Phases 0–3 built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md), [Phase 3](../phase-3/implementation.md).
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biomes plan](../../Biomes-and-Enviroments/feature-plan/02-technical-plan.md) · [`docs/creature-system.md`](../../../../creature-system.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -36,6 +36,13 @@ Paths are relative to `pages/Forest-Drift/`.
 15. **The coat uses texel 7's three spare values** (type, strength, cycles per metre), so the surface table stays 8 texels wide rather than growing to 9 (§6.4).
 16. **Noise coats sample at the coat frequency × 12** (the noise volume's blob spacing). **Fading uses features per pixel along each screen direction**, and hard-edged coats (scales, chitin) fade earlier than soft ones.
 17. **The Creature Lab reads `?creatureDetail=off` and `?creatureCoats=off`**, for A/B review.
+
+**Phase 3 (2026-11-13):**
+
+18. **Saved recipes keep the original ten patterns** (`SAVED_PATTERN_TYPES`): the validator rejects the new ones, and `recipeForSave` maps them (coated or not), so older builds read every save (Q18).
+19. **Rosettes ring isolated noise peaks** (threshold 1 − density × 0.45), and **patches sample at the pattern scale**. Both were tuned from the Lab screenshots.
+20. **Morphs are chosen per herd member** (`coatMorph(groupId, member)`) in both the population and the resolver, cached per coated species, with the id kept. A placed morph saves as `…_<profile>_<morph>`.
+21. **Feature colour applies in every world**, so creature fingerprint snapshots were regenerated (vertex colours only).
 
 ## 1. Summary
 

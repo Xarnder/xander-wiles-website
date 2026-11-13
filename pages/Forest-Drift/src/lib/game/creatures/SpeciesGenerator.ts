@@ -22,7 +22,12 @@ const LEGACY_PATTERN: Record<
 	bands: 'bands',
 	'limb-bands': 'limb-tips',
 	gradient: 'gradient',
-	underbelly: 'belly'
+	underbelly: 'belly',
+	rosettes: 'spots',
+	reticulated: 'spots',
+	patches: 'spots',
+	speckle: 'spots',
+	saddle: 'stripe'
 };
 /**
  * V1 dimensions are reference metres; scaleRange bounds individual.sizeFactor, not height.

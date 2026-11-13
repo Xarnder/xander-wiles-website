@@ -48,7 +48,7 @@ exports[`creature golden fingerprints > biped 3 1`] = `
     "hands": 2,
     "nose": 1,
   },
-  "geometry": "9580445891b5113c472bdc5711d4bb9d5ebaa24c5da83fb643e9c0a2ee8359b9",
+  "geometry": "6bd1e5ee8bdd61e96bfd9dcb32dd3ef974bf087bd37527ba1218881cf54ff2a1",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -142,7 +142,7 @@ exports[`creature golden fingerprints > biped 42 1`] = `
     "hands": 2,
     "horns": 2,
   },
-  "geometry": "c273c6586fd8e5f61e0a41d4f0debad52ba68af3fb4a7c53b310f4c712919c2c",
+  "geometry": "df7c4314eb58eb1703d1509ae6687f2454b64c52b09f58fc2b90f88ca68a6670",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -358,7 +358,7 @@ exports[`creature golden fingerprints > hexapod 42 1`] = `
     "nose": 1,
     "plates": 3,
   },
-  "geometry": "4593ebaedf50cf9ddc5c121e7fc18dc26b0809a92bb65bdc0c27b277a79dc442",
+  "geometry": "30dedf0f9337b378c64f9afe9f401e2efbb5a262261af903135f4632801b47b9",
   "joints": 30,
   "keyJoints": {
     "chest": [
@@ -452,7 +452,7 @@ exports[`creature golden fingerprints > quadruped 7 1`] = `
     "nose": 1,
     "spikes": 6,
   },
-  "geometry": "8a6d81c921822e2131fe469fa67aa64b5d71f36217bd9183761efc070901799a",
+  "geometry": "2493dc34a743eba7d76fe4b4f47c62b1d39bdf479b380aae23d32b0a9d6e91cc",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -547,7 +547,7 @@ exports[`creature golden fingerprints > quadruped 42 1`] = `
     "feet": 4,
     "nose": 1,
   },
-  "geometry": "785d6a09b9597861751d5dc6912bd39f9c0c0f817e533c4624bc99fc571271d4",
+  "geometry": "056bb11cd89a56c485319fde208355cc41c788ba6e0b8b91f17f06cfc17563f1",
   "joints": 24,
   "keyJoints": {
     "chest": [
@@ -611,7 +611,7 @@ exports[`creature golden fingerprints > serpentine 5 1`] = `
     "fins": 6,
     "plates": 8,
   },
-  "geometry": "9ba720fca1c6463fcb514bcbaf557b4c30bf9613250ebc145571a8dd3617fac9",
+  "geometry": "a31e95e1f58b687736e00aac8b93fa1b08c4b68d1e6c2ae607614bb05ec93564",
   "joints": 18,
   "keyJoints": {
     "head": [
@@ -664,7 +664,7 @@ exports[`creature golden fingerprints > serpentine 42 1`] = `
     "fins": 6,
     "frills": 5,
   },
-  "geometry": "5f5c3ea18d7ddf52c3343d94686c4ed6a199c86fbcfd101e754f5a529ed056a9",
+  "geometry": "1af0ef6f47ec438bb5cfd952910ae5c9a2708072758db4137441550eaeb340fe",
   "joints": 16,
   "keyJoints": {
     "head": [

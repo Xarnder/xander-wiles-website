@@ -61,7 +61,13 @@ export type CreaturePatternType =
 	| 'limb-bands'
 	| 'dorsal-spots'
 	| 'gradient'
-	| 'underbelly';
+	| 'underbelly'
+	// Biome-specific creatures Phase 3 (biome coats; saved recipes keep the ten above):
+	| 'rosettes'
+	| 'reticulated'
+	| 'patches'
+	| 'speckle'
+	| 'saddle';
 /** How a pattern colour relates to the body colour. */
 export type CreaturePatternTone = 'light' | 'dark' | 'underbelly' | 'accent';
 export interface CreaturePatternDefinition {
@@ -133,6 +139,8 @@ export interface CreatureCoatInfo {
 	gloss: number;
 	/** A furred body plan wearing bare hide, scales or skin instead. */
 	bare: boolean;
+	/** A rare pale (leucistic) or dark (melanistic) individual (Q14). */
+	morph?: 'pale' | 'dark';
 }
 export interface SpeciesAppearance {
 	palette: CreaturePalette;

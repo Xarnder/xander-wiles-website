@@ -38,9 +38,10 @@ describe('biome coats in the world (Phase 1)', () => {
 				expect(spawn.position).toEqual(plain[i].position);
 				expect(spawn.individual).toEqual(plain[i].individual);
 			});
-			// A herd is one colour family: every member shares its species object.
+			// A herd is one colour family: members share its species, apart from rare morphs (Q14).
 			const byGroup = new Map<string, unknown>();
 			for (const spawn of dressed) {
+				if (spawn.species.appearance.coat?.morph) continue;
 				const seen = byGroup.get(spawn.groupId!);
 				if (seen) expect(spawn.species).toBe(seen);
 				else byGroup.set(spawn.groupId!, spawn.species);

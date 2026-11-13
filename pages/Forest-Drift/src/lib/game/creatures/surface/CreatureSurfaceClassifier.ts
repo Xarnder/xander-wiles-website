@@ -1,6 +1,7 @@
 import { Color, SRGBColorSpace } from 'three';
 import type { BodyPlanId, CreatureLod } from '../CreatureTypes';
 import type { GeometryAccumulator, RegionInfo } from '../SweptBodyVolume';
+import { sampleCreatureNoise } from './CreatureSurfaceNoise';
 import {
 	patternDetail,
 	patternMask,
@@ -152,6 +153,13 @@ export function regionPatternWeight(
 		if (region === SURFACE_REGION.TAIL) return smooth(0.15, 0.3, t);
 		return 0;
 	}
+	// The saddle sits over the middle of the torso only.
+	if (pattern.type === 'saddle')
+		return isAxial(region) && region !== SURFACE_REGION.NECK && region !== SURFACE_REGION.TAIL
+			? 1
+			: region === SURFACE_REGION.JOINT_MASS
+				? 0.5
+				: 0;
 	const banded = pattern.type === 'bands' || pattern.type === 'stripes';
 	const dorsalOnly = pattern.type === 'back-stripe' || pattern.type === 'gradient';
 	switch (region) {
@@ -292,6 +300,8 @@ export function classifyCreatureSurface(
 				const target = featureAccent(info.kind, has);
 				if (info.kind === 'horns') {
 					c.copy(target ? horn : under.clone().lerp(primary, 0.4));
+					// Growth rings along the horn (Phase 3 feature colour).
+					c.multiplyScalar(1 - 0.16 * smooth(-0.2, 0.6, Math.sin(TAU * t * 3.5)));
 					roughness = 0.5;
 					accentMix = target ? 1 : 0;
 				} else if (info.kind === 'antenna-tip') {
@@ -303,6 +313,15 @@ export function classifyCreatureSurface(
 					c.copy(primary).lerp(target ? accent : secondary, accentMix);
 					if (!target) accentMix = 0;
 					roughness -= 0.05;
+					// Phase 3 feature colour: banded antennae, darker ear tips, spotted fins.
+					if (info.kind === 'antennae')
+						c.multiplyScalar(1 - 0.18 * smooth(0, 0.6, Math.sin(TAU * t * 4)));
+					else if (info.kind === 'ears') c.multiplyScalar(1 - 0.3 * smooth(0.78, 0.97, t));
+					else if (info.kind === 'fins') {
+						const k = 24 / 32 / S;
+						const n = sampleCreatureNoise(x * k + 3.1, y * k + 7.7, z * k + 1.3);
+						c.lerp(primary.clone().multiplyScalar(0.6), 0.6 * smooth(0.6, 0.68, n));
+					}
 				}
 				break;
 			}
@@ -354,6 +373,10 @@ export function classifyCreatureSurface(
 						pat.type === 'spots' ||
 						pat.type === 'mottled' ||
 						pat.type === 'dorsal-spots' ||
+						pat.type === 'rosettes' ||
+						pat.type === 'reticulated' ||
+						pat.type === 'patches' ||
+						pat.type === 'speckle' ||
 						(fineRepeats &&
 							(pat.type === 'stripes' || pat.type === 'bands' || pat.type === 'limb-bands'));
 					const amount = noiseLike

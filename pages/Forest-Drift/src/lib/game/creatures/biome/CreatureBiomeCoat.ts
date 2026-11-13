@@ -1,4 +1,4 @@
-import { createNamedRandom } from '../../terrain/seededRandom';
+import { createNamedRandom, hashStringToUint32 } from '../../terrain/seededRandom';
 import type {
 	CreatureCoatInfo,
 	CreaturePattern,
@@ -15,7 +15,7 @@ import {
 	type CreatureBiomeProfileId,
 	type CreatureCoatPattern
 } from './creatureBiomeProfiles';
-import { oklchToHex } from './oklch';
+import { hexToOklch, oklchToHex } from './oklch';
 
 /**
  * Biome coats (biome-specific creatures, Phase 0): recolours a region's species for one creature
@@ -42,14 +42,24 @@ const LEGACY_PATTERN: Record<CreaturePatternType, CreaturePattern> = {
 	bands: 'bands',
 	'limb-bands': 'limb-tips',
 	gradient: 'gradient',
-	underbelly: 'belly'
+	underbelly: 'belly',
+	rosettes: 'spots',
+	reticulated: 'spots',
+	patches: 'spots',
+	speckle: 'spots',
+	saddle: 'stripe'
 };
 
-/** The pattern the shader draws today for a profile pattern (Phase 3 adds the planned ones). */
+/** The pattern the shader draws for a profile pattern (every one, since Phase 3). */
 export function renderedPattern(pattern: CreatureCoatPattern): CreaturePatternType {
-	return pattern in PLANNED_PATTERN_FALLBACK
-		? PLANNED_PATTERN_FALLBACK[pattern as keyof typeof PLANNED_PATTERN_FALLBACK]
-		: (pattern as CreaturePatternType);
+	return pattern;
+}
+
+/** A pattern a saved recipe can hold (the original ten): Phase 3 patterns map to the nearest. */
+export function savedPattern(type: CreaturePatternType): CreaturePatternType {
+	return type in PLANNED_PATTERN_FALLBACK
+		? PLANNED_PATTERN_FALLBACK[type as keyof typeof PLANNED_PATTERN_FALLBACK]
+		: type;
 }
 
 function pickWeighted<T>(items: readonly (readonly [T, number])[], r: number): T {
@@ -89,23 +99,6 @@ function patternDefinition(
 ): CreaturePatternDefinition {
 	const plan = species.bodyPlan.id;
 	const p = patternFor(renderedPattern(pattern), plan, between, tone);
-	switch (pattern) {
-		case 'speckle':
-			Object.assign(p, { scale: p.scale * 1.8, density: 0.2, contrast: p.contrast * 0.7 });
-			break;
-		case 'patches':
-			Object.assign(p, { scale: 0.8, density: between(0.45, 0.55), contrast: 0.9 });
-			break;
-		case 'saddle':
-			Object.assign(p, { density: between(0.45, 0.55) });
-			break;
-		case 'rosettes':
-			Object.assign(p, { stretch: 1, density: between(0.3, 0.4) });
-			break;
-		case 'reticulated':
-			Object.assign(p, { scale: between(1.4, 1.9), density: between(0.5, 0.6) });
-			break;
-	}
 	p.contrast = Math.max(0, Math.min(1, p.contrast * contrast));
 	return p;
 }
@@ -247,10 +240,91 @@ const FALLBACK_PATTERNS: readonly CreatureCoatPattern[] = [
  */
 export function recipeForSave(species: SpeciesGenome): SpeciesGenome {
 	const coat = species.appearance.coat;
-	if (!coat) return species;
+	const surface = species.appearance.surface;
+	const unsaved =
+		surface &&
+		(savedPattern(surface.primaryPattern.type) !== surface.primaryPattern.type ||
+			savedPattern(surface.secondaryPattern.type) !== surface.secondaryPattern.type);
+	if (!coat && !unsaved) return species;
 	const appearance = { ...species.appearance };
 	delete appearance.coat;
-	return { ...species, id: `${species.id}_${coat.profile}`, appearance };
+	if (surface)
+		appearance.surface = {
+			...surface,
+			primaryPattern: {
+				...surface.primaryPattern,
+				type: savedPattern(surface.primaryPattern.type)
+			},
+			secondaryPattern: {
+				...surface.secondaryPattern,
+				type: savedPattern(surface.secondaryPattern.type)
+			}
+		};
+	const suffix = !coat ? '' : coat.morph ? `_${coat.profile}_${coat.morph}` : `_${coat.profile}`;
+	return { ...species, id: `${species.id}${suffix}`, appearance };
+}
+
+/** About one individual in this many is a rare pale or dark morph (Q14). */
+export const MORPH_RARITY = 60;
+
+/** Whether herd member `member` of `groupId` is a rare morph: pure, the same for every player. */
+export function coatMorph(groupId: string, member: number): 'pale' | 'dark' | null {
+	const h = hashStringToUint32(`${groupId}:${member}:morph`) >>> 0;
+	if (h % MORPH_RARITY !== 0) return null;
+	return (h >>> 12) & 1 ? 'pale' : 'dark';
+}
+
+const morphs = new WeakMap<SpeciesGenome, Partial<Record<'pale' | 'dark', SpeciesGenome>>>();
+
+/**
+ * The species as a rare morph: pale (leucistic: lighter, nearly colourless body and underside) or
+ * dark (melanistic). The accent is kept, so the morph still reads as its species. Cached per
+ * coated species; identity is unchanged.
+ */
+export function morphSpecies(species: SpeciesGenome, morph: 'pale' | 'dark'): SpeciesGenome {
+	const coat = species.appearance.coat;
+	if (!coat) return species;
+	let byMorph = morphs.get(species);
+	if (!byMorph) morphs.set(species, (byMorph = {}));
+	const cached = byMorph[morph];
+	if (cached) return cached;
+	const palette = species.appearance.palette;
+	const body = hexToOklch(palette.primary);
+	const under = hexToOklch(palette.secondary);
+	const pale = morph === 'pale';
+	const result: SpeciesGenome = {
+		...species,
+		appearance: {
+			...species.appearance,
+			palette: {
+				...palette,
+				primary: oklchToHex(
+					pale
+						? { l: Math.min(0.93, body.l + 0.2), c: body.c * 0.4, h: body.h }
+						: { l: Math.max(0.12, body.l - 0.18), c: body.c * 0.6, h: body.h }
+				),
+				secondary: oklchToHex(
+					pale
+						? { l: Math.min(0.97, under.l + 0.08), c: under.c * 0.5, h: under.h }
+						: { l: Math.max(0.3, under.l - 0.14), c: under.c * 0.7, h: under.h }
+				)
+			},
+			coat: { ...coat, morph }
+		}
+	};
+	byMorph[morph] = result;
+	return result;
+}
+
+/** Herd member `member`'s species: the herd's coat, or its rare morph (coated herds only). */
+export function memberSpecies(
+	species: SpeciesGenome,
+	groupId: string,
+	member: number
+): SpeciesGenome {
+	if (!species.appearance.coat) return species;
+	const morph = coatMorph(groupId, member);
+	return morph ? morphSpecies(species, morph) : species;
 }
 
 /** Small LRU of coated regions (keyed by seed, region, profile and the species ids). */

@@ -48,6 +48,28 @@ float creaturePatternMask(int type, vec4 p1, vec4 p2, float oz, vec3 pos, float 
 		return smoothstep(edge - 0.12, edge + 0.12, radial * 0.5 + 0.5);
 	}
 	if (type == 8) return smoothstep(-0.3, 1.0, radial);
+	// Phase 3 (biome coats): rosettes, reticulated, patches, speckle, saddle.
+	if (type == 10) {
+		// Rings around the noise's isolated peaks, with a fainter centre.
+		float n = creatureNoiseAt(R * (pos * k) + o);
+		float tr = 1.0 - p1.y * 0.45;
+		float ring = smoothstep(tr - 0.04, tr, n) * (1.0 - smoothstep(tr + 0.06, tr + 0.1, n));
+		return max(ring, 0.45 * smoothstep(tr + 0.08, tr + 0.12, n));
+	}
+	if (type == 11) {
+		float ridge = 1.0 - abs(2.0 * creatureNoiseAt(R * (pos * k) + o) - 1.0);
+		float w = p1.y * 0.35;
+		return smoothstep(1.0 - w - 0.05, 1.0 - w + 0.05, ridge);
+	}
+	if (type == 12) {
+		float n = creatureNoiseAt(R * (pos * k) + o) * 0.8 + creatureNoiseAt(R * (pos * k * 2.2) + o + 5.1) * 0.2;
+		return smoothstep(th - 0.03, th + 0.03, n);
+	}
+	if (type == 13) return smoothstep(th - 0.04, th + 0.04, creatureNoiseAt(R * (pos * k * 2.5) + o));
+	if (type == 14) {
+		float saddleHalf = 0.18 + p1.y * 0.2;
+		return smoothstep(saddleHalf + 0.08, saddleHalf - 0.08, abs(u - 0.5)) * smoothstep(-0.25, 0.35, radial);
+	}
 	return 0.0;
 }
 // Coat micro-texture (biome-specific creatures Phase 2). Mirrors surface/CreatureCoatDetail.ts.

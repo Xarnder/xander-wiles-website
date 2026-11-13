@@ -16,6 +16,7 @@ import {
 	regionSpecies
 } from './CreaturePopulationSystem';
 import { generateIndividual } from './IndividualGenerator';
+import { memberSpecies } from './biome/CreatureBiomeCoat';
 import type { CreatureDefinition, PersistentCreatureDefinition } from './CreatureTypes';
 
 export interface AmbientCreatureRef {
@@ -80,7 +81,7 @@ export function resolveAmbientCreature(
 	if (!species || ref.member >= creatureGroupSize(species, index)) return null;
 	const groupId = creatureGroupId(worldSeed, ref.cellX, ref.cellZ, ref.slot);
 	return {
-		species,
+		species: memberSpecies(species, groupId, ref.member),
 		individual: generateIndividual(species, hashStringToUint32(`${groupId}:${ref.member}`))
 	};
 }

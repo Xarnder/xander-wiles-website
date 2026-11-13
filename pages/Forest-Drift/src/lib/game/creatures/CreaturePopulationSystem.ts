@@ -2,7 +2,7 @@ import { createNamedRandom, hashStringToUint32 } from '../terrain/seededRandom';
 import { generateSpecies } from './SpeciesGenerator';
 import { generateIndividual } from './IndividualGenerator';
 import { creatureDimensions } from './creatureDimensions';
-import { cachedCoatRegionSpecies } from './biome/CreatureBiomeCoat';
+import { cachedCoatRegionSpecies, memberSpecies } from './biome/CreatureBiomeCoat';
 import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
 import type {
 	BodyPlanId,
@@ -374,7 +374,8 @@ export function generatePopulationCell(
 					continue;
 				result.push({
 					id: `${groupId}:${member}`,
-					species,
+					// Rare pale or dark morphs (Q14), coated herds only.
+					species: memberSpecies(species, groupId, member),
 					individual,
 					position: { x, y: sy, z },
 					heading: local() * Math.PI * 2,

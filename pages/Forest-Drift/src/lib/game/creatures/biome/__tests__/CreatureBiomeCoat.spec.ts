@@ -7,6 +7,7 @@ import { generateIndividual } from '../../IndividualGenerator';
 import { paletteIssues, resolveCreaturePalette } from '../../surface/CreaturePaletteGenerator';
 import { PATTERN_TYPES } from '../../surface/CreaturePatternGenerator';
 import {
+	recipeForSave,
 	cachedCoatRegionSpecies,
 	clearCoatCache,
 	coatRegionSpecies,
@@ -96,7 +97,8 @@ describe('coatRegionSpecies', () => {
 					expect(species.behaviour).toBe(source.behaviour);
 					expect(species.bodyPlan).toBe(source.bodyPlan);
 					expect(species.appearance.coat?.profile).toBe(profile);
-					expect(validateSpecies(species), `${profile} ${species.id}`).toBeNull();
+					// Coats may use Phase 3 patterns; the saved form maps them to the original ten.
+					expect(validateSpecies(recipeForSave(species)), `${profile} ${species.id}`).toBeNull();
 				});
 				expect(JSON.stringify(original)).toBe(before);
 			}
