@@ -24,7 +24,7 @@ const youtubeSource = await readFile(new URL('youtube-title.mjs', root), 'utf8')
 
 async function setup(initialUser = null, fetchTitle) {
     const dom = new JSDOM(html, {
-        url: 'http://localhost/pages/Watch-Later/',
+        url: 'http://localhost/pages/Watch-Later/?view=recommendations',
         runScripts: 'outside-only',
     });
     const w = dom.window,
@@ -320,9 +320,10 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
     const mod = await load('private-editor.mjs');
     await mod.evaluate();
     let user = { email: model.OWNER_EMAIL, emailVerified: true }, fail = false;
-    const writes = [];
+    const writes = [], scoreRequests = [];
     const editor = mod.namespace.createPrivateEditor({
-        getUser: () => user, getItems: () => [], getPeople: () => [{ name: 'Friend' }],
+        getUser: () => user, getItems: () => [{ genre: 'Drama', type: 'movie' }, { genre: 'Comedy', type: 'tv' }], getPeople: () => [{ name: 'Friend' }],
+        getScores: async (title, options) => { scoreRequests.push({ title, options }); return { imdbScore: '8.5', rtScore: '91%', omdbPoster: 'https://example.com/poster.jpg' }; },
         getTiers: () => [{ id: 'later', name: 'Later' }, { id: 'next', name: 'Next' }],
         save: async (...args) => { if (fail) throw { code: 'unavailable' }; writes.push(args); },
         remove: async () => {},
@@ -331,15 +332,34 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
         const form = w.document.querySelector('form'), dialog = w.document.querySelector('dialog');
         editor.open(null, 'tv');
         assert.equal(form.elements.type.value, 'tv');
-        assert.equal(form.elements.trailerUrl, w.document.activeElement);
+        assert.equal(form.elements.title, w.document.activeElement);
+        assert.deepEqual([...form.querySelectorAll('[name]')].slice(0, 6).map(el => el.name), ['title', 'trailerUrl', 'type', 'tier', 'genre', 'watchStatus']);
+        assert.equal(form.elements.trailerUrl.required, true);
+        assert.equal(form.elements.imdbScore, undefined);
+        assert.equal(form.elements.rtScore, undefined);
+        form.elements.title.value = 'My series';
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(writes.length, 0);
+        assert.equal(w.document.getElementById('form-error').hidden, false);
+        form.elements.trailerUrl.value = 'https://youtu.be/abcdefghijk';
+        w.document.querySelector('#editor-people button').click();
+        assert.deepEqual([...w.document.querySelectorAll('#editor-genres button')].map(b => b.textContent), ['Comedy', 'Drama']);
+        w.document.querySelector('#editor-genres button').click();
         form.elements.title.value = 'My series';
         form.elements.tier.value = 'next';
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
         assert.equal(writes[0][1].movieTitle, 'My series');
         assert.equal(writes[0][1].tier, 'next');
+        assert.equal(writes[0][1].genre, 'Comedy');
+        assert.equal(writes[0][1].watchWith, 'Friend');
+        assert.equal(writes[0][1].imdbScore, '8.5');
+        assert.equal(writes[0][1].rtScore, '91%');
+        assert.equal(writes[0][1].thumb, 'https://example.com/poster.jpg');
+        assert.equal(scoreRequests[0].title, 'My series');
+        assert.equal(scoreRequests[0].options.type, 'tv');
         assert.equal(writes[0][2], true);
         assert.equal(dialog.open, false);
-        editor.open({ id: 'existing', movieTitle: 'My series', type: 'tv', tier: 'next', watchWith: 'Friend', watched: true, watchedAt: 123 });
+        editor.open({ id: 'existing', movieTitle: 'My series', url: 'https://youtu.be/abcdefghijk', imdbScore: '9.0', rtScore: '95%', type: 'tv', tier: 'next', watchWith: 'Friend', watched: true, watchedAt: 123 });
         form.elements.tier.value = 'later';
         fail = true;
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
@@ -352,10 +372,49 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
         assert.equal(writes[1][1].tier, 'later');
         assert.equal(writes[1][1].watchedAt, 123);
         assert.equal(writes[1][1].watchWith, 'Friend');
+        assert.equal(writes[1][1].imdbScore, '9.0');
+        assert.equal(scoreRequests.length, 1);
         user = null;
         editor.open();
         assert.equal(dialog.open, false);
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
         assert.equal(writes.length, 2);
     } finally { w.close(); }
+});
+
+test('genre picker lists all collection genres and supports selection, clearing, custom genres and edits', async () => {
+    const app = await setup({ email: model.OWNER_EMAIL, emailVerified: true });
+    try {
+        const { $, w } = app;
+        $('add-recommendation').click();
+        assert.equal($('editor-genres-empty').hidden, false);
+        $('close-editor').click();
+        app.seed([
+            { ...sample('film', 'Film'), genre: 'Drama' },
+            { ...sample('series', 'Series', 'tv'), genre: 'Comedy' },
+            { ...sample('other', 'Other'), genre: ' drama ' },
+        ]);
+        $('add-recommendation').click();
+        const form = $('recommendation-form');
+        const buttons = [...$('editor-genres').querySelectorAll('button')];
+        assert.deepEqual(buttons.map(b => b.textContent), ['Comedy', 'Drama']);
+        assert.equal($('editor-genres-empty').hidden, true);
+        buttons[0].click();
+        assert.equal(form.elements.genre.value, 'Comedy');
+        assert.equal(buttons[0].getAttribute('aria-pressed'), 'true');
+        assert.equal(app.writes.length, 0);
+        $('clear-editor-genre').click();
+        assert.equal(form.elements.genre.value, '');
+        assert.equal(buttons[0].getAttribute('aria-pressed'), 'false');
+        form.elements.genre.value = 'Mystery';
+        form.elements.genre.dispatchEvent(new w.Event('input'));
+        form.elements.title.value = 'A new title';
+        form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
+        assert.equal(app.writes[0].payload.genre, 'Mystery');
+        $('add-recommendation').click();
+        assert.deepEqual([...$('editor-genres').querySelectorAll('button')].map(b => b.textContent), ['Comedy', 'Drama', 'Mystery']);
+        $('close-editor').click();
+        w.document.querySelector('[aria-label="Edit A new title"]').click();
+        assert.equal($('editor-genres').querySelector('[aria-pressed="true"]').textContent, 'Mystery');
+    } finally { app.close(); }
 });

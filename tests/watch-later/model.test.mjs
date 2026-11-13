@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     isOwner,
+    watchLaterRedirect,
     recommendationPayload,
     youtubeId,
     safeImageUrl,
@@ -117,4 +118,18 @@ test('filters combined title/genre/year and keeps stable per-tier order', () => 
     assert.equal(filterRecommendations(items, { search: '2020' }).length, 2);
     assert.equal(filterRecommendations(items, { search: 'missing' }).length, 0);
     assert.equal(items[0].id, 'b');
+});
+
+test('landing follows restored authentication while explicit public navigation remains available', () => {
+    const owner = { email: 'xanderwiles@gmail.com', emailVerified: true };
+    assert.equal(watchLaterRedirect({ user: owner, page: 'public' }), '/pages/Watch-Later/private');
+    assert.equal(watchLaterRedirect({ user: null, page: 'public' }), null);
+    assert.equal(watchLaterRedirect({ user: owner, page: 'public', search: '?view=recommendations' }), null);
+    assert.equal(watchLaterRedirect({ user: owner, page: 'public', search: '?view=recommendations', signedInNow: true }), '/pages/Watch-Later/private');
+    assert.equal(watchLaterRedirect({ user: owner, page: 'private' }), null);
+    assert.equal(watchLaterRedirect({ user: null, page: 'private' }), '/pages/Watch-Later/');
+    for (const user of [{ email: 'visitor@example.com', emailVerified: true }, { ...owner, emailVerified: false }]) {
+        assert.equal(watchLaterRedirect({ user, page: 'public' }), null);
+        assert.equal(watchLaterRedirect({ user, page: 'private' }), '/pages/Watch-Later/');
+    }
 });

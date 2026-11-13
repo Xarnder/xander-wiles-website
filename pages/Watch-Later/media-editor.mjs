@@ -67,14 +67,16 @@ export function mountMediaEditor() {
                             pattern="[0-9]{4}"
                             maxlength="4"
                             placeholder="2026" /></label
-                    ><label
-                        >Genre <span>(optional)</span
-                        ><input
-                            name="genre" list="editor-genres"
-                            maxlength="80"
-                            placeholder="Sci-fi, drama…"
-                    /></label>
+                    >
                 </div>
+                <fieldset class="editor-genre-picker">
+                    <legend>Genre <span>(optional)</span></legend>
+                    <div id="editor-genres" class="editor-genre-options" role="group" aria-label="Existing genres"></div>
+                    <small id="editor-genres-empty" hidden>No genres yet. Enter your first genre below.</small>
+                    <label for="editor-genre-input">Or enter a new genre</label>
+                    <input id="editor-genre-input" name="genre" maxlength="80" placeholder="Enter a genre…" autocomplete="off">
+                    <button type="button" id="clear-editor-genre">Clear genre</button>
+                </fieldset>
                 <label
                     >Notes <span>(optional)</span
                     ><textarea
@@ -110,7 +112,6 @@ export function mountMediaEditor() {
                         title.</small
                     ></label
                 >
-                <datalist id="editor-genres"></datalist>
                 <div id="private-editor-fields" hidden></div>
                 <p
                     id="form-error"
@@ -132,7 +133,15 @@ export function mountMediaEditor() {
                 </div>
             </form>
         </dialog>`);
-    return document.getElementById('recommendation-editor');
+    const editor = document.getElementById('recommendation-editor');
+    const input = editor.querySelector('[name="genre"]');
+    input.addEventListener('input', () => syncGenreSelection(editor));
+    editor.querySelector('#clear-editor-genre').addEventListener('click', () => {
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+    });
+    return editor;
 }
 
 export function bindTitleAutofill(editor, canEdit) {
@@ -161,4 +170,33 @@ export function bindTitleAutofill(editor, canEdit) {
         title.value = autoTitle = cleanTitle(raw).slice(0, 160);
         status.textContent = 'Title filled in. You can edit it.';
     });
+}
+
+function syncGenreSelection(editor) {
+    const value = editor.querySelector('[name="genre"]').value.trim().toLocaleLowerCase();
+    editor.querySelectorAll('#editor-genres button').forEach(button => {
+        button.setAttribute('aria-pressed', String(button.textContent.toLocaleLowerCase() === value));
+    });
+}
+
+export function populateGenrePicker(editor, values) {
+    const genres = new Map();
+    for (const value of values) {
+        const genre = String(value || '').trim();
+        if (genre && !genres.has(genre.toLocaleLowerCase())) genres.set(genre.toLocaleLowerCase(), genre);
+    }
+    const input = editor.querySelector('[name="genre"]');
+    const options = [...genres.values()].sort((a, b) => a.localeCompare(b)).map(genre => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = genre;
+        button.addEventListener('click', () => {
+            input.value = genre;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        return button;
+    });
+    editor.querySelector('#editor-genres').replaceChildren(...options);
+    editor.querySelector('#editor-genres-empty').hidden = options.length > 0;
+    syncGenreSelection(editor);
 }

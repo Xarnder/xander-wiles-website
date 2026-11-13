@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRe
 import { getFirestore, collection, addDoc, setDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import { firebaseConfig } from './firebase-config.js';
-import { isOwner } from './recommendations-model.mjs';
+import { isOwner, watchLaterRedirect } from './recommendations-model.mjs';
 import { createPrivateEditor } from './private-editor.mjs';
 import { cleanTitle, getVideoData } from './youtube-title.mjs';
 
@@ -358,15 +358,30 @@ const batchMoveList = document.getElementById('batch-move-list');
 const batchPeopleToggles = document.getElementById('batch-people-toggles');
 const saveBatchPeopleBtn = document.getElementById('save-batch-people-btn');
 
+const modeDescriptions = {
+    watch: 'Open a title to watch its trailer.',
+    edit: 'Open a title to edit its details.',
+    organize: 'Drag titles between tiers.',
+    select: 'Select titles for bulk actions.',
+    'reorder-tiers': 'Drag tiers to change their order.',
+};
+function syncModeIndicator() {
+    modeBtns.forEach(button => {
+        const active = button.dataset.mode === appMode;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+    const activeButton = [...modeBtns].find(button => button.dataset.mode === appMode);
+    const status = document.getElementById('current-mode-status');
+    status.querySelector('strong').textContent = `${activeButton.textContent} mode`;
+    status.querySelector('span').textContent = modeDescriptions[appMode];
+    document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
+    document.body.classList.add(`mode-${appMode}`);
+}
 modeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        modeBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
         appMode = btn.dataset.mode;
-
-        // Update body class for cursors
-        document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
-        document.body.classList.add(`mode-${appMode}`);
+        syncModeIndicator();
 
         if (appMode !== 'select') {
             clearSelection();
@@ -1221,7 +1236,9 @@ onAuthStateChanged(auth, async (user) => {
             if (tierContainer) tierContainer.classList.remove('hidden');
             if (modeSelector) modeSelector.classList.remove('hidden');
             if (filterBar) filterBar.classList.remove('hidden');
-            document.body.classList.add('mode-watch');
+            appMode = 'watch';
+            syncModeIndicator();
+            updateSortableState();
 
             console.log("[Auth] UI transition complete, loading data...");
 
@@ -1241,6 +1258,7 @@ onAuthStateChanged(auth, async (user) => {
             if (modeSelector) modeSelector.classList.add('hidden');
             if (document.getElementById('filter-bar')) document.getElementById('filter-bar').classList.add('hidden');
             document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+            window.location.replace(watchLaterRedirect({ user, page: 'private' }));
 
         }
     } catch (err) {
@@ -1457,11 +1475,15 @@ async function handleSingleAdd() {
     await proceedWithSingleAdd(url);
 }
 
-async function getMovieScores(title) {
+async function getMovieScores(title, { type, year } = {}) {
     try {
         const apiKey = "6fda8b50";
         logDebug(`Fetching OMDb scores for: "${title}" using key: ${apiKey}`);
-        const response = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`);
+        const params = new URLSearchParams({ t: title, apikey: apiKey });
+        if (type) params.set('type', type === 'tv' ? 'series' : 'movie');
+        if (year) params.set('y', year);
+        const response = await fetch(`https://www.omdbapi.com/?${params}`, { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) throw new Error('Score lookup unavailable');
         const data = await response.json();
         
         logDebug(`OMDb Response: ${JSON.stringify(data)}`, data.Response === "False");
@@ -2261,6 +2283,7 @@ window.markAsWatched = async (id) => {
 const sharedPrivateEditor = createPrivateEditor({
     getUser: () => currentUser, getItems: () => cachedWatches,
     getTiers: () => userTiers, getPeople: () => userPeople,
+    getScores: getMovieScores,
     save: (id, data, creating) => creating
         ? setDoc(doc(db, 'watches', id), { ...data, uid: currentUser.uid, timestamp: Date.now() })
         : updateDoc(doc(db, 'watches', id), data),

@@ -63,3 +63,15 @@ body:has(#login-overlay:not(.hidden)) .legacy-batch { display: none; }
 .watch-editor .eyebrow { font-weight: 500; }
 .watch-editor .form-intro { font-weight: 400; }
 .legacy-batch #toggle-batch { display: none; }
+
+.watch-editor .editor-genre-picker { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
+.watch-editor .editor-genre-picker legend { padding: 0 6px; font-size: 14px; font-weight: 500; }
+.watch-editor .editor-genre-picker legend span { color: var(--muted); font-size: 12px; font-weight: 400; }
+.watch-editor .editor-genre-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.watch-editor .editor-genre-options button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; min-height: 44px; padding: 9px 14px; border-radius: 24px; }
+.watch-editor .editor-genre-options button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.watch-editor .editor-genre-picker label, .watch-editor #clear-editor-genre { margin-top: 12px; }
+.watch-editor #editor-genre-input { margin-top: 7px; }
+
+.watch-editor .private-primary-fields, .watch-editor #private-editor-fields:not([hidden]) { display: grid; gap: 18px; min-width: 0; }
+.watch-editor #editor-score-status:empty { display: none; }

@@ -132,3 +132,13 @@ export function filterRecommendations(
                 a.id.localeCompare(b.id),
         );
 }
+
+// Resolve only after Firebase restores the session. Explicit navigation lets the
+// owner manage public recommendations without changing the default landing page.
+export function watchLaterRedirect({ user, page, search = '', signedInNow = false }) {
+    if (page === 'private') return isOwner(user) ? null : '/pages/Watch-Later/';
+    const publicRequested = new URLSearchParams(search).get('view') === 'recommendations';
+    return isOwner(user) && (signedInNow || !publicRequested)
+        ? '/pages/Watch-Later/private'
+        : null;
+}

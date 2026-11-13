@@ -25,13 +25,14 @@ import {
     TIERS,
     PUBLIC_COLLECTION,
     isOwner,
+    watchLaterRedirect,
     safeImageUrl,
     youtubeId,
     recommendationPayload,
     filterRecommendations,
 } from './recommendations-model.mjs';
 
-import { mountMediaEditor, bindTitleAutofill } from './media-editor.mjs';
+import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
 mountMediaEditor();
 
 const app = initializeApp(firebaseConfig);
@@ -44,6 +45,7 @@ const form = $('recommendation-form');
 const removeDialog = $('remove-dialog');
 const signInButton = $('owner-sign-in');
 let user = null;
+let authResolved = false;
 let items = [];
 let type = 'movie';
 let search = '';
@@ -295,7 +297,7 @@ function openEditor(item = null) {
     ]) {
         form.elements.namedItem(key).value = initial[key] ?? '';
     }
-    $('editor-genres').replaceChildren(...[...new Set(items.map(i => i.genre).filter(Boolean))].map(genre => { const option = document.createElement('option'); option.value = genre; return option; }));
+    populateGenrePicker(editor, items.map(item => item.genre));
     editor.showModal();
     form.elements.namedItem(item ? 'title' : 'trailerUrl').focus();
 }
@@ -435,7 +437,13 @@ $('sign-out').addEventListener('click', async () => {
     }
 });
 onAuthStateChanged(auth, (nextUser) => {
+    const destination = watchLaterRedirect({
+        user: nextUser, page: 'public', search: window.location.search,
+        signedInNow: authResolved && !isOwner(user) && isOwner(nextUser),
+    });
+    authResolved = true;
     user = nextUser;
+    if (destination) { window.location.replace(destination); return; }
     const owner = isOwner(user);
     $('owner-toolbar').hidden = !owner;
     $('owner-navigation').hidden = !owner;

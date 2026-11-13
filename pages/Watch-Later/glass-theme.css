@@ -1,0 +1,155 @@
+/* Shared visual skin. Layout, private data, and interaction behavior stay in their own modules. */
+:root {
+    --bg: #060917;
+    --panel: rgba(255, 255, 255, .065);
+    --line: rgba(223, 231, 255, .18);
+    --text: #f3f6ff;
+    --muted: #bcc7e2;
+    --text-dim: #bcc7e2;
+    --accent: #a2edff;
+    --accent-ink: #07172b;
+    --accent-glow: #72dcff40;
+    --button-bg: rgba(255, 255, 255, .065);
+    --button-hover: rgba(170, 205, 255, .14);
+    --tier-surface: rgba(255, 255, 255, .05);
+    --card-surface: rgba(255, 255, 255, .075);
+    --glass: rgba(255, 255, 255, .06);
+    --glass-heavy: rgba(255, 255, 255, .09);
+    --border: var(--line);
+    --border-bright: #c4dfff66;
+    --light-gradient: linear-gradient(115deg, #a5f0ff, #b8c5ff 62%, #d3bbff);
+    --glass-surface: linear-gradient(135deg, #ffffff16, #ffffff0c 55%, #c9aaff0f);
+    --glass-shadow: 0 16px 48px #00000030, inset 0 1px 0 #ffffff12;
+}
+body.watch-glass {
+    isolation: isolate;
+    min-height: 100dvh;
+    background: radial-gradient(ellipse at 10% 0%, #172750 0, transparent 48%), radial-gradient(ellipse at 95% 35%, #281b43 0, transparent 48%), linear-gradient(165deg, #070c1c, #0d1025 60%, #080c1b);
+    color: var(--text);
+    font-family: Outfit, system-ui, sans-serif;
+    line-height: 1.5;
+}
+.watch-atmosphere { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
+.watch-atmosphere span { position: absolute; width: min(62vw, 650px); aspect-ratio: 1; border-radius: 50%; filter: blur(65px); opacity: .3; animation: watch-orbit 32s ease-in-out infinite alternate; }
+.watch-atmosphere span:nth-child(1) { left: -16%; top: -20%; background: radial-gradient(circle, #418bff, #418bff00 70%); }
+.watch-atmosphere span:nth-child(2) { right: -20%; top: 10%; background: radial-gradient(circle, #a66bff, #a66bff00 70%); animation-duration: 39s; animation-delay: -18s; }
+.watch-atmosphere span:nth-child(3) { left: 28%; bottom: -35%; background: radial-gradient(circle, #26e2db, #26e2db00 70%); animation-duration: 45s; animation-delay: -29s; opacity: .2; }
+@keyframes watch-orbit { from { transform: translate3d(-3%, -2%, 0); } to { transform: translate3d(13%, 9%, 0); } }
+.watch-glass .watch-shell { padding-bottom: 40px; }
+.watch-glass .site-header { min-height: 90px; border-bottom-color: #c6dcff24; }
+.watch-glass .brand-mark { background: var(--light-gradient); color: var(--accent-ink); border: 1px solid #ffffff80; box-shadow: 0 0 30px #94d9ff26; border-radius: 14px; }
+.watch-glass .brand small { color: var(--muted); }
+.watch-glass .collection-heading h1, .watch-glass .app-container .app-header h1 { color: var(--text); font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2; }
+.watch-glass .eyebrow, .watch-glass .watch-eyebrow { color: var(--accent); }
+.watch-glass :where(.tier-row, .app-container .tier, .recommendation-card, .media-card, .glass-card, .filter-bar, .owner-toolbar, .media-switch, .collection-state, .modal-content),
+.watch-glass #private-add-toolbar,
+.watch-glass #mode-selector .mode-toggle {
+    background: var(--glass-surface);
+    border: 1px solid var(--line);
+    border-top-color: #e5edff42;
+    border-left-color: #e5edff2e;
+    border-radius: 20px;
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+}
+/* These selectors intentionally outrank the original page-specific card skins. */
+.watch-glass .app-container .tier, .watch-glass .tier-row { background: var(--glass-surface); border-color: var(--line); border-top-color: #e5edff42; border-radius: 20px; box-shadow: var(--glass-shadow); }
+.watch-glass .recommendation-card, .watch-glass .app-container .media-card { background: var(--glass-surface); border: 1px solid #e0eaff30; border-top-color: #f0f5ff50; border-radius: 16px; box-shadow: 0 8px 24px #00000028, inset 0 1px 0 #ffffff09; transition: border-color .2s, box-shadow .2s, background-color .2s; }
+.watch-glass .recommendation-card:hover, .watch-glass .app-container .media-card:hover { background: linear-gradient(135deg, #ffffff1c, #d4deff10); border-color: #a9dfff80; box-shadow: 0 10px 32px #070c2460, 0 0 24px #72cfff1c; }
+.watch-glass .tier-label, .watch-glass .app-container .tier-label { background: linear-gradient(145deg, #b6cfff0d, #bda4ff09); border-color: var(--line); color: var(--text); }
+.watch-glass .tier-chip { box-shadow: 0 0 24px #b0d5ff19; border: 1px solid #ffffff30; }
+.watch-glass .card-body, .watch-glass .card-content { background: transparent; }
+.watch-glass .card-meta, .watch-glass .card-note, .watch-glass .empty-tier, .watch-glass .tier-label p { color: var(--muted); }
+.watch-glass .cover { background: linear-gradient(125deg, #8bacff12, #be91ff12); }
+.watch-glass .cover-fallback { color: #c3d6ff; }
+.watch-glass .media-type { background: #0b122acc; color: #e9f3ff; border: 1px solid #c5ddff40; backdrop-filter: blur(16px); }
+.watch-glass :where(button, .owner-navigation a, .trailer-link, .text-button) { transition: background-color .18s, border-color .18s, box-shadow .18s; }
+.watch-glass .app-container :is(.filter-pill, .secondary-btn, #user-info button),
+.watch-glass .quiet-button, .watch-glass .edit-pick, .watch-glass .owner-navigation a,
+.watch-glass .watch-editor button, .watch-glass .modal-content button {
+    background: var(--button-bg); border: 1px solid #d5e4ff38; color: var(--text); border-radius: 12px;
+    box-shadow: inset 0 1px 0 #ffffff0d; text-transform: none;
+}
+.watch-glass button:hover, .watch-glass .owner-navigation a:hover, .watch-glass .trailer-link:hover { border-color: #b5eaff99; box-shadow: 0 0 22px #93d7ff26, inset 0 1px 0 #ffffff20; }
+.watch-glass .primary-button, .watch-glass .primary-btn,
+.watch-glass #open-add-title, .watch-glass #add-btn, .watch-glass #google-login-btn,
+.watch-glass .watch-editor button.primary-button,
+.watch-glass .media-switch button[aria-pressed="true"],
+.watch-glass #mode-selector .mode-toggle .mode-btn[aria-pressed="true"],
+.watch-glass .app-container .filter-pill.active,
+.watch-glass .watch-editor .editor-genre-options button[aria-pressed="true"] {
+    background: var(--light-gradient); color: var(--accent-ink); border: 1px solid #e7f9ffb3;
+    box-shadow: 0 0 24px #9bd8ff28, inset 0 1px 0 #ffffff90; font-weight: 700;
+}
+.watch-glass .primary-button:hover, .watch-glass #open-add-title:hover, .watch-glass .watch-editor button.primary-button:hover { box-shadow: 0 0 32px #98deff50, inset 0 1px 0 #ffffff; }
+.watch-glass .media-switch { border-color: #cadcff40; padding: 8px; gap: 8px; }
+.watch-glass .media-switch button { min-height: 56px; border-radius: 13px; color: var(--text); }
+.watch-glass .media-switch button[aria-pressed="false"] { background: transparent; }
+.watch-glass .media-switch button[aria-pressed="false"]:hover { background: var(--button-hover); }
+.watch-glass #mode-selector .mode-toggle .mode-btn { background: var(--button-bg); color: var(--text); border: 1px solid #d5e4ff28; }
+.watch-glass #mode-selector .mode-toggle .mode-btn[aria-pressed="true"] { background: var(--light-gradient); color: var(--accent-ink); border-color: #e7f9ffb3; box-shadow: 0 0 0 2px #0b1228, 0 0 0 3px #aceaff, 0 0 24px #90dfff33; }
+.watch-glass .owner-navigation a[aria-current="page"] { color: var(--accent); background: #8ccaff16; border-color: #a8dcff70; box-shadow: inset 0 1px 0 #ffffff18; }
+.watch-glass :where(input, select, textarea), .watch-glass .watch-editor :is(input, select, textarea), .watch-glass .search-field { background: #070e2580; border: 1px solid #d5e4ff38; color: var(--text); border-radius: 12px; box-shadow: inset 0 1px 7px #00000020; }
+.watch-glass .search-field input { background: transparent; border: 0; box-shadow: none; }
+.watch-glass input::placeholder, .watch-glass textarea::placeholder { color: #a5b4d0; opacity: 1; }
+.watch-glass select option { background: #111a32; color: var(--text); }
+.watch-glass :where(button, a, input, textarea, select, summary):focus-visible { outline: 2px solid #b9f1ff; outline-offset: 4px; }
+.watch-glass dialog, .watch-glass dialog.watch-editor, .watch-glass .modal-content {
+    background: linear-gradient(135deg, #ffffff13, #ffffff08), #10182ade;
+    border: 1px solid #ddeaff45; border-top-color: #ffffff70; border-radius: 24px;
+    backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+    box-shadow: 0 32px 100px #00000070, inset 0 1px 0 #ffffff18;
+}
+.watch-glass dialog::backdrop { background: #03081899; backdrop-filter: blur(8px); }
+.watch-glass .modal-overlay, .watch-glass .modal { background-color: #03081899; backdrop-filter: blur(8px); }
+.watch-glass .watch-editor .editor-genre-picker, .watch-glass .settings-group { background: #ffffff06; border-color: #d5e4ff30; border-radius: 14px; }
+.watch-glass .watch-editor .danger-button, .watch-glass .danger-button { color: #ffbacd; border-color: #ff91b350; background: #ff709510; }
+.watch-glass footer { border-color: var(--line); }
+.watch-glass #login-overlay { background: linear-gradient(145deg, #111c39eb, #1a1334eb); backdrop-filter: blur(24px); }
+/* Restore/upload controls use the same glass instead of a browser-default button. */
+.watch-glass #restore-btn, .watch-glass input[type="file"]::file-selector-button { background: var(--glass-surface); border: 1px solid #bce9ff70; border-radius: 12px; color: var(--text); padding: 12px 18px; box-shadow: inset 0 1px 0 #ffffff20; backdrop-filter: blur(16px); cursor: pointer; }
+.watch-glass #restore-btn:hover, .watch-glass input[type="file"]::file-selector-button:hover { background: #b2dbff1a; box-shadow: 0 0 22px #93d7ff26; }
+/* Switches: a 32px track around a centered 20px handle, with 5px end clearance. */
+.watch-glass .switch { width: 56px; height: 32px; flex: 0 0 56px; }
+.watch-glass .switch .slider { background: #ffffff14; border: 1px solid #d5e4ff40; padding: 0; border-radius: 20px; }
+.watch-glass .switch .slider::before { width: 20px; height: 20px; top: 50%; bottom: auto; left: 5px; transform: translateY(-50%); background: #e9f1ff; box-shadow: 0 0 12px #c4eaff40; transition: transform .2s; }
+.watch-glass .switch input:checked + .slider { background: #86d9ff4d; border-color: #aceaff99; }
+.watch-glass .switch input:checked + .slider::before { transform: translate(24px, -50%); }
+.watch-glass .switch input:focus-visible + .slider { outline: 2px solid var(--accent); outline-offset: 3px; }
+.watch-glass input[type="range"] { appearance: none; -webkit-appearance: none; height: 32px; padding: 0 7px; background: #ffffff14; border: 1px solid #d5e4ff40; border-radius: 20px; }
+.watch-glass input[type="range"]::-webkit-slider-runnable-track { height: 30px; background: transparent; }
+.watch-glass input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: 5px; border-radius: 50%; border: 1px solid white; background: var(--light-gradient); box-shadow: 0 0 12px #a2edff50; }
+.watch-glass input[type="range"]::-moz-range-track { height: 30px; background: transparent; }
+.watch-glass input[type="range"]::-moz-range-thumb { box-sizing: border-box; width: 20px; height: 20px; border-radius: 50%; border: 1px solid white; background: var(--light-gradient); box-shadow: 0 0 12px #a2edff50; }
+/* No lift, scale, or rotation on hover. Drag-and-drop retains its transforms. */
+.watch-glass button:hover, .watch-glass a:hover { transform: none !important; }
+.watch-glass .recommendation-card:hover, .watch-glass .media-card:not(.sortable-drag):not(.sortable-ghost):hover, .watch-glass .media-card:hover img { transform: none !important; }
+@media (max-width: 600px) {
+    .watch-glass .site-header { min-height: 80px; }
+    .watch-glass .watch-shell { padding-inline: 16px; }
+    .watch-atmosphere span { width: 90vw; filter: blur(45px); opacity: .22; }
+    .watch-glass .tier-row, .watch-glass .app-container .tier { border-radius: 16px; }
+    .watch-glass dialog.watch-editor { border-radius: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .watch-atmosphere span { animation: none; }
+    .watch-glass *, .watch-glass *::before, .watch-glass *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+@supports not ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+    .watch-glass :where(.tier-row, .tier, .recommendation-card, .media-card, .glass-card, .owner-toolbar, .media-switch, .modal-content), .watch-glass dialog.watch-editor { background-color: #161d35; }
+}
+.watch-glass .app-container :is(.glass-card, .filter-bar) { background: var(--glass-surface); border-color: var(--line); border-top-color: #e5edff42; box-shadow: var(--glass-shadow); }
+/* A masked gradient catches light along the rounded outer edge. */
+.watch-glass .tier-row, .watch-glass .app-container .tier { position: relative; }
+.watch-glass .tier-row::before, .watch-glass .app-container .tier::before { content: ''; position: absolute; inset: -1px; padding: 1px; border-radius: inherit; pointer-events: none; background: linear-gradient(135deg, #edf5ff60, #d5dcff08 45%, #ae9eff35); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; }
+.watch-glass .app-container.watch-shell { gap: 0; }
+.watch-glass button { font-family: Outfit, system-ui, sans-serif; text-transform: none; }
+.watch-glass .first-watch-badge { color: var(--accent-ink); background: var(--light-gradient); box-shadow: 0 0 12px #a5ddff28; }
+/* Legacy settings buttons had inline-strength coloured skins. */
+.watch-glass .settings-modal-content :is(.quick-sort-btn-alt, .tiers-btn, .backfill-btn, .fix-btn, .logout-btn) { background: var(--glass-surface) !important; border: 1px solid #c5ddff45 !important; color: var(--text) !important; box-shadow: inset 0 1px 0 #ffffff15; }
+.watch-glass .settings-modal-content .logout-btn:hover { background: #ff70951a !important; border-color: #ff91b370 !important; }
+.watch-glass #filter-bar .filter-pill { background: var(--button-bg); color: var(--text); border-color: var(--line); }
+.watch-glass #filter-bar .filter-pill.active { background: var(--light-gradient); color: var(--accent-ink); border-color: #e7f9ffb3; box-shadow: 0 0 20px #9bd8ff20; }
+.watch-glass .app-container .media-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px #a2edff55, 0 0 24px #9bd8ff20; }
+.watch-glass .settings-modal-content button { min-height: 44px; }
