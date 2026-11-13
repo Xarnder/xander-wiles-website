@@ -1,0 +1,36 @@
+[
+	{
+		"label": "on",
+		"scene": "Lab 100 creatures",
+		"compileMs": 240,
+		"frameMs": 1.8,
+		"programs": 1,
+		"drawCalls": 100
+	},
+	{
+		"label": "on",
+		"scene": "Biome world near spawn",
+		"live": 40,
+		"frameMs": 5.03,
+		"p95FrameMs": 9.9,
+		"cpuFrameMs": 4.87,
+		"drawCalls": 411
+	},
+	{
+		"label": "off",
+		"scene": "Lab 100 creatures",
+		"compileMs": 228,
+		"frameMs": 1.9,
+		"programs": 1,
+		"drawCalls": 100
+	},
+	{
+		"label": "off",
+		"scene": "Biome world near spawn",
+		"live": 40,
+		"frameMs": 5.04,
+		"p95FrameMs": 9.6,
+		"cpuFrameMs": 4.89,
+		"drawCalls": 411
+	}
+]

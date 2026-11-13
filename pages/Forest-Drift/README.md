@@ -4463,4 +4463,4 @@ MIDI unit tests cover format 0/1, malformed input, chromatic/full-range pitch, s
 
 ## Procedural creatures
 
-Forest Drift includes deterministic species and individual recipes, four skinned body plans, terrain-aware animation, streamed ecology, and a Creature Lab for generation, inspection and persistent placement. See the [creature engineering report](docs/creature-system.md) for architecture, controls, verification, measured 10/25/50/100-creature performance and current limitations.
+Forest Drift includes deterministic species and individual recipes, four skinned body plans, terrain-aware animation, streamed ecology, and a Creature Lab for generation, inspection and persistent placement. See the [creature engineering report](docs/creature-system.md) for architecture, controls, verification, measured 10/25/50/100-creature performance and current limitations. Creatures wear their biome's colours, with fine fur, hide, scale, chitin or skin texture up close: see "Biome coats and coat detail" in the same report, and [`docs/biomes.md`](docs/biomes.md).

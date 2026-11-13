@@ -137,8 +137,42 @@ Unit coverage includes deterministic fingerprints, golden anatomy fingerprints f
 
 Draw calls are unchanged (one skinned mesh per creature, eyes and highlights included). LOD0 has 37 % fewer triangles and 33 % fewer vertices than the old generator; LOD1 and LOD2 cut a further 54 % and 78 %. On this GPU frames are CPU-bound even at 100 creatures, so frame time tracks animation/behaviour, not triangles; posing costs ~10 % more than before (knee bend hints and level feet), and bone-matrix updates are below the 0.1 ms timer resolution until 100 creatures. Compilation averages 1–2 ms per creature (about 5 ms for the first, which warms caches) and stays behind the one-compile-per-frame queue. The 25-creature row's range reflects run-to-run stalls rather than a stable cost. In the world, the live-creature caps, LOD distances (LOD1 beyond the near distance, LOD2 beyond 2.4× it, 1.6× on low quality) and shadows only on near LOD0 creatures keep creature cost well below this overload scene.
 
+## Biome coats and coat detail (November 2026)
+
+Creatures wear the colours of their biome, and their surface has fine coat texture up close. Decisions, plan and phase records: `docs/2026/11-12/Biomes-Specfic-Creatures/`.
+
+**Biome coats** (`creatures/biome/`):
+
+- **Profiles.** `creatureBiomeProfiles.ts` holds 26 biome profiles plus `neutral` (biomes off), built from six families. Each gives OKLCh body hues, a lightness range, an underside rule, at least three accents, pattern weights (leaned per body plan) and coat thickness, length and gloss.
+- **Region coats.** `coatRegionSpecies` colours a region's six species together. Each gets its own OKLab lightness step (at least 0.06 apart), species one step apart never share a pattern, and accents are dealt by step. Colour maths is pure (`oklch.ts`), so every engine agrees. Only `appearance` changes, in a cached copy; id, anatomy, sizes and behaviour are shared. The `appearance.coat` marker switches `resolveCreaturePalette` to natural clamps (near-grey and snow-pale bodies, white or black accents). Classic palettes keep the original clamps.
+- **In the world.** A herd wears the dominant biome at its group centre. `cellGroupCentres` is shared by `generatePopulationCell` and `resolveAmbientCreature`, so a creature rebuilt from its id has exactly its herd's coat. The room calls the resolver without a profile and stays biome-free; carrying and riding are unchanged. Remote pellet colours come from each client's own lookup. Biome setting changes call `CreatureRuntimeManager.regenerateAmbient()`; carried and ridden creatures keep their coat.
+- **Rare morphs.** About 1 in 60 herd members (`coatMorph`, from the member id) is pale or dark, keeping the species accent.
+- **Saves.** Placing a coated creature bakes its colours into today's recipe fields (`recipeForSave`), with an id per biome and morph. Phase 3 patterns map to the original ten, which are the only ones `validateSurfaceGenome` accepts in saves.
+
+**Patterns** gained rosettes, reticulated, patches, speckle and saddle (shader codes 10–14, appended). Small features got colour in every world: horn rings, antenna bands, darker ear tips and fin spots, baked into vertex colours.
+
+**Coat detail** (`surface/CreatureCoatDetail.ts`, shader in `CreatureMaterial.ts`):
+
+- **Types.** Fur for quadrupeds and bipeds, scales for serpents, chitin for hexapods. Bare biome coats get hide, scales or skin.
+- **Shading.** A height in bind space gives a faint albedo grain and a derivative-based bump normal. Fur and hide use the noise volume at the coat frequency × 12; scales and chitin are analytic cells.
+- **Size and fade.** Features run from 4 mm to 6 cm. Detail fades by features per pixel (scales and chitin sooner) and by LOD: ×0.35 at LOD1, none at LOD2. There's none on eyes, noses or hard adornments.
+- **Table.** The values live in surface table texel 7's spare slots: still one program and one draw per creature.
+
+**Switches.** `?creatureCoats=off` gives the classic regional showcase colours, and `?creatureDetail=off` drops the coat texture. Both work in the game and the Lab. The build constants `CREATURE_COATS_AVAILABLE` and `CREATURE_DETAIL_AVAILABLE` turn them off for everyone. The Lab has a Biome coat picker, a regional-six gallery, swatches, a colour-blind preview and a `coatDetail` debug view.
+
+**Cost.** Measured 13 November 2026 on Apple M4 with Metal; `tests/creatureSurfacePerformance.e2e.ts`, opt-in with `CREATURE_BENCH=1`.
+
+| Scene                              | Everything on | Coats and detail off |
+| ---------------------------------- | ------------- | -------------------- |
+| Lab, 100 creatures: compile        | 240 ms        | 228 ms (+5%)         |
+| Lab, 100 creatures: frame          | 1.8 ms        | 1.9 ms               |
+| Biome world near spawn, 40 live    | 5.03 ms       | 5.04 ms              |
+| Full-screen close-ups (five coats) | 2.0–2.1 ms    | 2.0–2.1 ms           |
+
+Both columns use one shader program, with draw calls unchanged. The coat function costs about 0.007 ms per species, and each result is cached.
+
 ## Limits and next milestone
 
-Attachment masses overlap the torso rather than sharing a welded surface, so a soft intersection crease is visible up close (by design: no runtime CSG). Deep bends of very long legs still compress the blended region slightly. Hexapod and very thin biped legs can make the hip mass read as a small knob. Grounding does not climb stairs or ledges (the surface sampler allows it later), turns faster than a quick step still leave a foot briefly at full stretch, and there is no airborne/jump state yet. Surface patterns: underbelly, accents and back-stripe edges are vertex-resolution (soft by design); noise patterns repeat every 32 noise texels (rotated, so not along body axes) and very large bodies at high spot scales could show it; small features (horns, fins) get colour and roughness only, no pattern; the surface table holds 1,023 live creatures. Coarse collision is intentionally conservative. Ambient individuals reset transient behaviour when their cells regenerate; persistent creatures retain recipe/position/state but not full simulation history. There is no indoor pathfinding, taming, breeding, combat, procedural fur or sound.
+Attachment masses overlap the torso rather than sharing a welded surface, so a soft intersection crease is visible up close (by design: no runtime CSG). Deep bends of very long legs still compress the blended region slightly. Hexapod and very thin biped legs can make the hip mass read as a small knob. Grounding does not climb stairs or ledges (the surface sampler allows it later), turns faster than a quick step still leave a foot briefly at full stretch, and there is no airborne/jump state yet. Surface patterns: underbelly, accents and back-stripe edges are vertex-resolution (soft by design); noise patterns repeat every 32 noise texels (rotated, so not along body axes) and very large bodies at high spot scales could show it; small features (horns, fins) get rings, tips and spots baked per vertex, not the body pattern; the surface table holds 1,023 live creatures. Coarse collision is intentionally conservative. Ambient individuals reset transient behaviour when their cells regenerate; persistent creatures retain recipe/position/state but not full simulation history. There is no indoor pathfinding, taming, breeding, combat, procedural fur or sound.
 
 Next steps: stair/ledge stepping on authored surfaces, turn-anticipating foot placement, an impostor or culled tier beyond LOD2, optional per-vertex smoothing where masses meet the torso, and profiling real walking scenes on representative hardware.

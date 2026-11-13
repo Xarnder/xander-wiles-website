@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
-import { test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { createAndEnterWorld } from './worldHelpers';
 
 /**
  * Biome-specific creatures Phase 2 GPU A/B (technical plan §14.1): creature coat micro-texture on
@@ -7,6 +8,10 @@ import { test, type Page } from '@playwright/test';
  * per-pixel cost) and the Lab's 25-creature stress scene. Opt-in, needs a real GPU:
  *   CREATURE_BENCH=1 npx playwright test tests/creatureSurfacePerformance.e2e.ts --project=chromium
  * `CREATURE_BENCH_OUT=<file>` saves the numbers (default: the Phase 2 record's folder).
+ *
+ * The release test (Phase 4) compares everything on with `?creatureCoats=off&creatureDetail=off`:
+ * the Lab's 100-creature benchmark (compile and frame time, programs, draws) and a biome world
+ * near spawn with live herds. Saved to the Phase 4 folder (`CREATURE_RELEASE_OUT`).
  */
 test.skip(process.env.CREATURE_BENCH !== '1', 'GPU benchmark: set CREATURE_BENCH=1 to run');
 if (process.platform === 'darwin')
@@ -94,6 +99,80 @@ test('creature coat detail GPU A/B', async ({ page }) => {
 	const out =
 		process.env.CREATURE_BENCH_OUT ??
 		'docs/2026/11-12/Biomes-Specfic-Creatures/phase-2/coat-detail-performance.json';
+	await writeFile(out, JSON.stringify(results, null, 2));
+	console.table(results);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Scene = any;
+async function worldFrames(page: Page, query: string) {
+	await page.goto(`/${query}`);
+	await createAndEnterWorld(page, { name: 'Creature release', seed: 'creature-biomes-e2e' });
+	await page.evaluate(() => {
+		const s = (window as unknown as { __forestSession: { scene: Scene } }).__forestSession.scene;
+		s.graphicsSettings.dynamicResolutionEnabled = false;
+		s.weather.debug.selection = 'clear';
+		s.weather.presetDebugValues();
+		s.weather.applyDebugSelection();
+		s.skySettings.dayCycle.enabled = false;
+		s.skySettings.dayCycle.timeOfDay = 0.45;
+		s.applySkySettings();
+	});
+	await expect
+		.poll(
+			() =>
+				page.evaluate(() => {
+					const s = (window as unknown as { __forestSession: { scene: Scene } }).__forestSession
+						.scene;
+					return (
+						s.treeManager.getStats().queuedChunks +
+						s.grassRenderStats().queuedChunks +
+						s.plantRenderStats().queuedChunks +
+						s.terrainManager.getStats().queuedChunks
+					);
+				}),
+			{ timeout: 120_000, intervals: [500] }
+		)
+		.toBe(0);
+	await page.waitForTimeout(4000);
+	return page.evaluate(async () => {
+		const s = (window as unknown as { __forestSession: { scene: Scene } }).__forestSession.scene;
+		const frames = await s.measureFrames(4000);
+		return {
+			live: s.creatures.live.size,
+			frameMs: frames.avgFrameMs,
+			p95FrameMs: frames.p95FrameMs,
+			cpuFrameMs: frames.cpuFrameMs,
+			drawCalls: frames.drawCalls
+		};
+	});
+}
+
+test('creature release A/B: coats and detail on vs off', async ({ page }) => {
+	test.setTimeout(900_000);
+	const results: Record<string, unknown>[] = [];
+	for (const [label, query] of [
+		['on', ''],
+		['off', '?creatureCoats=off&creatureDetail=off']
+	] as const) {
+		await page.goto(`/creatures/${query ? query + '&' : '?'}dev&inspect`);
+		await page.waitForFunction(() => (window as unknown as { creatureLab?: unknown }).creatureLab);
+		const lab = await page.evaluate(() =>
+			(window as unknown as { creatureLab: Lab }).creatureLab.benchmark(100)
+		);
+		results.push({
+			label,
+			scene: 'Lab 100 creatures',
+			compileMs: Math.round(lab.compileMs),
+			frameMs: Math.round(lab.frameMs * 100) / 100,
+			programs: lab.programs,
+			drawCalls: lab.drawCalls
+		});
+		results.push({ label, scene: 'Biome world near spawn', ...(await worldFrames(page, query)) });
+	}
+	const out =
+		process.env.CREATURE_RELEASE_OUT ??
+		'docs/2026/11-12/Biomes-Specfic-Creatures/phase-4/creature-release-performance.json';
 	await writeFile(out, JSON.stringify(results, null, 2));
 	console.table(results);
 });

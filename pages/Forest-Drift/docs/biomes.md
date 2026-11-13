@@ -7,6 +7,7 @@ New worlds are divided into **26 biomes**: forests, taiga, jungles, meadows, mou
 - **Where you are.** When you enter a biome, its name appears at the top of the screen for a few seconds. The pause menu always says which biome you're in. To hide the name card, turn off **Settings → Graphics → Show biome names**.
 - **Spawn is gentle.** A new world always starts in a temperate biome, such as a forest or plains. Cold, hot, dry and wet biomes lie further out. In testing, every seed had all 26 within 10 km of spawn.
 - **Weather follows the climate.** A world still has one weather schedule, shared by everyone online, but what falls depends on where you stand. It snows where it's cold and rains where it's mild. Nothing falls in the desert, savannas get about half the rain, and jungles and swamps get more. Clouds, wind and lightning are the same everywhere. A weather that the owner or the debug menu forces shows as chosen everywhere.
+- **Creatures belong where they live.** Each herd wears the colours of the biome at its centre: sand, ochre and rust in the desert; slate, grey and white in the snow; deep green with scarlet and teal accents in the jungle. Each species keeps one brighter accent, and the six species of an area differ in lightness and pattern. Some blend in, like real animals. About one creature in 60 is a rare pale or dark morph. Up close, coats have fur, hide, scale, chitin or skin texture. Worlds with biomes off use a neutral, natural palette.
 - **Air and water.** Jungles are hazy, swamps and Silverwood misty, deserts dusty, snowfields cool blue and Cherry Grove faintly pink. Swamp water is darker and greener, and cold water bluer. Crossing a border changes the air and weather over about 4 seconds.
 
 ### Settings (World → Biomes)
@@ -20,15 +21,17 @@ New worlds are divided into **26 biomes**: forests, taiga, jungles, meadows, mou
 | Rare biome share         | How much of a parent biome its variant takes, for example Flower Forest inside Forest. 0 turns variants off.   |
 | Border sharpness         | Higher gives narrower borders between biomes.                                                                  |
 
-Changing any of these regenerates the terrain, forests and plants. Your builds stay where they are.
+Changing any of these regenerates the terrain, forests and plants, and herds respawn in their new colours. Your builds stay where they are, and a creature you're carrying or riding keeps its colours until you put it down.
 
 ### Old worlds
 
-Worlds made before biomes keep **biomes off**, so they look exactly as they did. You can turn biomes on from the same settings group. The world then changes around your builds.
+Worlds made before biomes keep **biomes off**. Their land, forests and plants look as they did, and their creatures wear the neutral natural colours. You can turn biomes on from the same settings group, and the world then changes around your builds.
+
+The **Main World** ships with biomes on (since November 2026), with the same seed and outpost. A copy stored by an older version is replaced once, the next time it's opened.
 
 ### Online
 
-A world with biomes on can be published and played online like any other. Every player computes the same biomes from the world's seed, so players standing together see the same land and the same weather. The server relabels worlds published before biomes to the current generator version only when they have biomes off. Nothing about them changes.
+A world with biomes on can be published and played online like any other. Every player computes the same biomes from the world's seed, so players standing together see the same land, the same weather and the same creature colours. The server relabels worlds published before biomes to the current generator version only when they have biomes off. Nothing about them changes.
 
 ## The 26 biomes
 
@@ -85,6 +88,10 @@ flowchart LR
 - **Adding a biome.** Append its id to the end of `BIOME_IDS` (never reorder: saved data and the golden use the indices). Add a definition in `biomeDefinitions.ts`, plus a row in each profile table: `biomeSurfaceProfiles.ts`, `biomeTreeProfiles.ts`, `biomePlantProfiles.ts` and `biomeAtmosphereProfiles.ts`. The profile tests fail until every biome has a row. If it changes placement, bump `BIOME_GENERATOR_VERSION` and regenerate the golden.
 - **Debug views.** Settings → Rendering → Terrain debug → Debug view → **Biome map** or **Climate (temperature, moisture)**.
 - **Saved data.** Schema 10 adds `environment.biomes` (`BiomeSettings` in `BiomeTypes.ts`). Online rooms accept schemas 9 and 10, and the generator version is 4.
+
+### Creatures
+
+Biome coats live in `src/lib/game/creatures/biome/`: 26 creature profiles plus a neutral one, and the region coat function. Coat detail lives in `src/lib/game/creatures/surface/CreatureCoatDetail.ts`. See "Biome coats and coat detail" in [`creature-system.md`](creature-system.md). `?creatureCoats=off` gives the classic regional colours and `?creatureDetail=off` drops the coat texture, each for one session. The plan and phase records are in [`2026/11-12/Biomes-Specfic-Creatures/`](2026/11-12/Biomes-Specfic-Creatures/).
 
 ### Kill switch
 
