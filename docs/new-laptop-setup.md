@@ -4,7 +4,7 @@
 
 Follow the clone, Node 22 and root `npm ci` commands in [README](../README.md). No global Vite, Svelte or Firebase installation is needed for normal website development. Internet access is needed for dependency installs, CDN assets and initial AI model downloads.
 
-Root `npm run build` installs dependencies in each bundled app automatically, then builds `deploy_out/`. Root `npm ci` alone does not install those apps. For work on one app, run `npm install` then `npm run dev` in its directory; see [local development](local-development.md). The build currently uses `npm install` in nested apps because some historical lockfiles have drifted; review any lockfile changes before committing.
+Root `npm run build` installs dependencies in each bundled app automatically, then builds `deploy_out/`. Root `npm ci` alone does not install those apps. For work on one app, run `npm ci` then `npm run dev` in its directory; see [local development](local-development.md). The build uses `npm ci` in nested apps to preserve the audited lockfiles and security overrides. Keep the `vendor/` directory and app `.npmrc` files when moving the project; see [dependency maintenance](dependency-maintenance.md).
 
 `npm run preview` serves the static build. Root `npm run dev` serves source static pages and local `/api/markdown-gemini` and `/api/generate-list` handlers; it does not compile nested apps or inject build-time public settings. AI API routes need the root dev server or the deployed Vercel functions, rather than static preview alone.
 

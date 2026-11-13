@@ -34,10 +34,9 @@ const nestedBuildEnv = {
 
 function npmInstallAndBuild(appSrc, label) {
     process.chdir(appSrc);
-    // Prefer install over ci across the monorepo — several apps have drifted lockfiles;
-    // install still respects package-lock when present and is what prior Vercel deploys used.
-    console.log(`  [${label}] npm install`);
-    execSync('npm install --no-audit --no-fund', { stdio: 'inherit', env: nestedBuildEnv });
+    // Keep the audited dependency versions and local security overrides reproducible.
+    console.log(`  [${label}] npm ci`);
+    execSync('npm ci --no-audit --no-fund', { stdio: 'inherit', env: nestedBuildEnv });
     execSync('npm run build', { stdio: 'inherit', env: nestedBuildEnv });
 }
 
@@ -76,6 +75,8 @@ const excludeList = [
     'vercel.json',
     // Never publish local credentials / service accounts
     'secrets',
+    // Local dependency patches are build tooling, not public website content.
+    'vendor',
 ];
 
 for (const item of items) {

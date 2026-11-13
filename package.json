@@ -5,6 +5,7 @@
     "build": "node build.js",
     "dev": "node dev-server.mjs",
     "preview": "npx serve deploy_out",
+    "test:security": "node --test vendor/deepmerge/test.cjs vendor/minimatch-compat/test.cjs",
     "seed:home-design": "node pages/Home-Design/scripts/seed-firestore.mjs"
   },
   "dependencies": {
