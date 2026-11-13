@@ -52,8 +52,11 @@ export const PROTOCOL_VERSION = 8;
 /**
  * 4 (2026-11): biomes. Worlds published at 1–3 have biomes off and are relabelled by the server
  * (`server/src/generatorMigration.ts`).
+ * 5 (2026-11-13): biome-specific species. In biome worlds an ambient creature id names a species
+ * from its biome family's roster, so clients and the room must agree. Biomes-off worlds (1–4) are
+ * unchanged and relabelled; biome worlds published at 4 keep 4 and need republishing.
  */
-export const GENERATOR_VERSION = 4;
+export const GENERATOR_VERSION = 5;
 
 /** Locked decision Q19: 20 players per world at launch. */
 export const MAX_PLAYERS_PER_WORLD = 20;

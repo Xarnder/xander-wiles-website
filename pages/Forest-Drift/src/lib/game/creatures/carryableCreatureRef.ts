@@ -10,10 +10,9 @@ import { hashStringToUint32 } from '../terrain/seededRandom';
 import {
 	CREATURE_CELL_SLOTS,
 	cellGroupCentres,
-	coatedRegionSpecies,
 	creatureGroupId,
-	creatureGroupSize,
-	regionSpecies
+	slotSpecies,
+	type HerdBiomeSources
 } from './CreaturePopulationSystem';
 import { generateIndividual } from './IndividualGenerator';
 import { memberSpecies } from './biome/CreatureBiomeCoat';
@@ -61,28 +60,20 @@ export function parseAmbientCreatureId(id: unknown): AmbientCreatureRef | null {
 export function resolveAmbientCreature(
 	worldSeed: string,
 	id: unknown,
-	profileAt?: (x: number, z: number) => string | undefined
+	biomes?: HerdBiomeSources | ((x: number, z: number) => string | undefined)
 ): CreatureDefinition | null {
 	const ref = parseAmbientCreatureId(id);
 	if (!ref || ref.seed !== String(worldSeed)) return null;
-	// `profileAt` (clients only) gives the herd its biome coat, exactly as the population does; the
-	// room passes none and gets the coat-free recipe, which has the same identity and abilities.
+	// The same rule as the population (`slotSpecies`): clients pass their biome sources (rosters and
+	// coats); the room passes rosters only, and gets the same identity and abilities, uncoloured.
+	const sources = typeof biomes === 'function' ? { profileAt: biomes } : (biomes ?? {});
 	const centre = cellGroupCentres(worldSeed, ref.cellX, ref.cellZ)[ref.slot];
-	const index = centre.tier;
-	const regionX = Math.floor(ref.cellX / 8),
-		regionZ = Math.floor(ref.cellZ / 8);
-	const species = coatedRegionSpecies(
-		worldSeed,
-		regionX,
-		regionZ,
-		regionSpecies(worldSeed, regionX, regionZ),
-		profileAt?.(centre.cx, centre.cz)
-	)[index];
-	if (!species || ref.member >= creatureGroupSize(species, index)) return null;
+	const herd = slotSpecies(worldSeed, ref.cellX, ref.cellZ, centre, sources);
+	if (!herd || ref.member >= herd.groupSize) return null;
 	const groupId = creatureGroupId(worldSeed, ref.cellX, ref.cellZ, ref.slot);
 	return {
-		species: memberSpecies(species, groupId, ref.member),
-		individual: generateIndividual(species, hashStringToUint32(`${groupId}:${ref.member}`))
+		species: memberSpecies(herd.species, groupId, ref.member),
+		individual: generateIndividual(herd.species, hashStringToUint32(`${groupId}:${ref.member}`))
 	};
 }
 

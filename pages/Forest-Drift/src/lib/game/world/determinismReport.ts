@@ -1,10 +1,8 @@
 import { BiomeField } from '../biomes/BiomeField';
-import {
-	cellGroupCentres,
-	coatedRegionSpecies,
-	regionSpecies
-} from '../creatures/CreaturePopulationSystem';
-import type { SpeciesGenome } from '../creatures/CreatureTypes';
+import { cellGroupCentres, slotSpecies } from '../creatures/CreaturePopulationSystem';
+import { creatureDimensions } from '../creatures/creatureDimensions';
+import { biomeRoster } from '../creatures/biome/BiomeRoster';
+import { rosterKeyOf } from '../creatures/biome/biomeRosters';
 import { BiomeTrees } from '../biomes/BiomeTrees';
 import { TreeSpeciesSelector } from '../vegetation/trees/TreeSpeciesSelector';
 import {
@@ -54,8 +52,10 @@ export interface DeterminismReport {
 	biomes: DeterminismSection;
 	/** The same tree cells as `trees`, in a world with biomes on (biome forests and species). */
 	biomeTrees: DeterminismSection;
-	/** Creature herds in a world with biomes on: each group's biome and its coat colours. */
+	/** Creature herds in a world with biomes on: each group's biome, species and coat colours. */
 	biomeCreatures: DeterminismSection;
+	/** Biome-family rosters for fixed regions: bands, body plans, heights, names, herd sizes. */
+	biomeSpecies: DeterminismSection;
 }
 
 /** Terrain heights on a 100 × 100 grid covering about 3.7 km × 3.7 km. */
@@ -72,6 +72,8 @@ const BIOME_SPACING = 189.7;
 /** Creature cells: 16 × 16, one per 512 m region (8 cells apart), about 8 km × 8 km. */
 const CREATURE_GRID = 16;
 const CREATURE_STRIDE = 8;
+/** Every roster key (six families and the four biomes that override theirs). */
+const ROSTER_KEYS = [...new Set(BIOME_IDS.map((b) => rosterKeyOf(b)!))];
 
 export function computeDeterminismReport(seed: string): DeterminismReport {
 	const terrainSettings = createDefaultTerrainSettings();
@@ -182,33 +184,50 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 		}
 	}
 
-	// Biome coats: every group's centre, its biome and the colours its species wears there.
+	// Biome herds: every group's centre, its biome, and the species (roster, coat) it holds there —
+	// through `slotSpecies`, the rule the population, the resolver and the room share.
 	const creatureHash = new DualHash();
 	let creatureGroups = 0;
-	const creatureRegions = new Map<string, SpeciesGenome[]>();
+	const biomeAt = (x: number, z: number) => BIOME_IDS[biomeField.dominantAt(x, z)];
+	const sources = { rosterAt: biomeAt, profileAt: biomeAt };
 	for (let i = 0; i < CREATURE_GRID; i++)
 		for (let j = 0; j < CREATURE_GRID; j++) {
 			const cellX = (i - CREATURE_GRID / 2) * CREATURE_STRIDE + 3;
 			const cellZ = (j - CREATURE_GRID / 2) * CREATURE_STRIDE + 5;
-			const rx = Math.floor(cellX / 8),
-				rz = Math.floor(cellZ / 8);
-			const key = `${rx}:${rz}`;
-			let list = creatureRegions.get(key);
-			if (!list) creatureRegions.set(key, (list = regionSpecies(seed, rx, rz)));
 			for (const centre of cellGroupCentres(seed, cellX, cellZ)) {
-				const profile = BIOME_IDS[biomeField.dominantAt(centre.cx, centre.cz)];
-				const species = coatedRegionSpecies(seed, rx, rz, list, profile)[centre.tier];
+				const herd = slotSpecies(seed, cellX, cellZ, centre, sources);
+				if (!herd) continue;
+				const species = herd.species;
 				const palette = species.appearance.palette;
 				creatureHash.exact(centre.cx);
 				creatureHash.exact(centre.cz);
-				creatureHash.coarseText(profile);
+				creatureHash.coarseText(biomeAt(centre.cx, centre.cz));
 				creatureHash.coarseText(species.id);
 				creatureHash.coarseText(palette.primary + palette.secondary + palette.accent);
 				creatureHash.coarseText(species.appearance.coat?.pattern ?? '');
 				creatureHash.coarse(species.appearance.coat?.lightnessStep ?? -1);
+				creatureHash.coarse(herd.groupSize);
 				creatureGroups++;
 			}
 		}
+
+	// Biome rosters: each roster key's species for a fixed set of regions (biome-specific species).
+	const rosterHash = new DualHash();
+	let rosterSpecies = 0;
+	for (const key of ROSTER_KEYS)
+		for (let r = 0; r < 4; r++)
+			for (const entry of biomeRoster(seed, r * 3 - 4, 5 - r * 2, key)) {
+				const s = entry.species;
+				const height = creatureDimensions(s).height;
+				rosterHash.exact(height);
+				rosterHash.coarseText(key);
+				rosterHash.coarse(entry.band);
+				rosterHash.coarseText(s.bodyPlan.id);
+				rosterHash.coarseText(s.name);
+				rosterHash.coarse(Math.round(height * 1000));
+				rosterHash.coarse(s.behaviour.preferredGroupSize);
+				rosterSpecies++;
+			}
 
 	return {
 		seed,
@@ -221,7 +240,8 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 		trees: treeHash.result(treeCount),
 		biomes: biomeHash.result(BIOME_GRID * BIOME_GRID),
 		biomeTrees: biomeTreeHash.result(biomeTreeCount),
-		biomeCreatures: creatureHash.result(creatureGroups)
+		biomeCreatures: creatureHash.result(creatureGroups),
+		biomeSpecies: rosterHash.result(rosterSpecies)
 	};
 }
 

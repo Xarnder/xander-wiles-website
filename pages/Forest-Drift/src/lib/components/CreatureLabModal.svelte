@@ -428,6 +428,13 @@
 									lab.biome = biome;
 									lab.showGallery(plan, speciesSeed, 12, 4, lod);
 								}}>Gallery: 12 species</button
+							><button
+								data-testid="creature-gallery-roster"
+								onclick={() => {
+									lab.gait = gait;
+									lab.biome = biome;
+									lab.showRoster(...regionOf(speciesSeed), 'creature-lab', lod);
+								}}>Gallery: biome roster</button
 							>
 						</div>
 					</fieldset>

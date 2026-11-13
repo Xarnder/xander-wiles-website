@@ -1,7 +1,7 @@
 # Forest Drift — Biome-Specific Creatures: Technical Plan
 
 **Feature cycle:** 2026-11-12 (written 2026-11-13)
-**Status:** **Revision 7: all phases built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [1](../phase-1/implementation.md), [2](../phase-2/implementation.md), [3](../phase-3/implementation.md), [4](../phase-4/implementation.md). One item in §21 is waiting on your review of the screenshots.
+**Status:** **Revision 7: all phases built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). §0 lists what changed from revision 1 and while building. Phase records: [Phase 0](../phase-0/implementation.md), [1](../phase-1/implementation.md), [2](../phase-2/implementation.md), [3](../phase-3/implementation.md), [4](../phase-4/implementation.md). Every item in §21 is done; you reviewed and approved it on the live site.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biomes plan](../../Biomes-and-Enviroments/feature-plan/02-technical-plan.md) · [`docs/creature-system.md`](../../../../creature-system.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -512,7 +512,7 @@ Each phase ends with an implementation record and screenshots in `docs/2026/11-1
 - [x] New patterns and small-feature colour are in. Rare morphs are about 1 in 60. _(The CPU pattern masks are unit-tested; the GPU versions were checked by Lab screenshots, with no automated pixel comparison.)_
 - [x] Online: the same colours for everyone; remote pellet colours match; no protocol, generator or save change. _(The resolver equals the population in unit tests, and the pellet colour comes from it. There's no dedicated browser test of a remote pellet's colour.)_
 - [x] Determinism golden `biomeCreatures` passes in Chromium, WebKit and Firefox. Existing creature e2e suites pass.
-- [ ] Lab biome tools are done ✓; **the per-biome screenshot galleries (phase records 0–3) are waiting for your review.**
+- [x] Lab biome tools are done; the screenshot galleries and the live game were reviewed and approved by you (2026-11-13, "looks good").
 - [x] `docs/creature-system.md`, `docs/biomes.md` and the README are updated. Phase records are written.
 
 ## 22. Assumptions (to confirm when you approve)

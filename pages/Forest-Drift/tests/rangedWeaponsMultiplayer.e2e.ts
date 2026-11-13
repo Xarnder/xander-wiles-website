@@ -556,12 +556,30 @@ test('everyone else sees a pellet fly through the air, even 200 ms behind', asyn
 
 	// The owner stands facing −Z, aiming a little up; the watcher stands 12 m off to the side of
 	// the pellet's path, looking across it (−X), so the whole 30 m flight crosses their view.
+	// The owner fires from the nearest spot with open ground for 32 m along −Z: where the small
+	// creature happened to be may be a hillside, which would stop the pellet within a few metres.
 	const ownerFeet = await owner.evaluate(() => {
 		const s = (window as unknown as GameWindow).__forestSession.scene;
 		const p = s.controller.worldPosition;
-		const y = s.worldSurfaceSampler.getSupportingSurfaceY(p.x, p.z, p.y);
-		s.controller.restoreState({ x: p.x, y: y + 1.7, z: p.z }, 0, 0.2);
-		return { x: p.x, y, z: p.z };
+		const ground = (x: number, z: number) =>
+			s.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity);
+		const rise = (x: number, z: number) => {
+			const y = ground(x, z);
+			let most = -Infinity;
+			for (let d = 1; d <= 32; d++) most = Math.max(most, ground(x, z - d) - y);
+			return most;
+		};
+		let best = { x: p.x, z: p.z, rise: rise(p.x, p.z) };
+		for (let r = 4; r <= 60 && best.rise > 0.5; r += 4)
+			for (let a = 0; a < 16; a++) {
+				const x = p.x + Math.cos((a / 16) * Math.PI * 2) * r;
+				const z = p.z + Math.sin((a / 16) * Math.PI * 2) * r;
+				const here = rise(x, z);
+				if (here < best.rise) best = { x, z, rise: here };
+			}
+		const y = ground(best.x, best.z);
+		s.controller.restoreState({ x: best.x, y: y + 1.7, z: best.z }, 0, 0.2);
+		return { x: best.x, y, z: best.z };
 	});
 	await watcher.evaluate(
 		({ x, z }) => {

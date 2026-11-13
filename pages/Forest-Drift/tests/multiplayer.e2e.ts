@@ -302,9 +302,9 @@ test('Owner tab publishes to the real server and manages invites, offline copies
 		const body = (await snapshot.json()) as { manifest: { generatorVersion: number } };
 		return { legacy, generatorVersion: body.manifest.generatorVersion };
 	};
-	for (const generatorVersion of [1, 2, 3]) {
+	for (const generatorVersion of [1, 2, 3, 4]) {
 		const { legacy, generatorVersion: upgraded } = await publishAt(legacyWorld, generatorVersion);
-		expect(upgraded).toBe(4);
+		expect(upgraded).toBe(5);
 		const roundTrip = await fetch(`${MP_URL}/w/${legacy.worldId}/export`, {
 			headers: { Authorization: `Bearer ${legacy.invites.owner}` }
 		});
@@ -319,6 +319,7 @@ test('Owner tab publishes to the real server and manages invites, offline copies
 		}
 	};
 	expect((await publishAt(biomeWorld, 3)).generatorVersion).toBe(3);
+	expect((await publishAt(biomeWorld, 4)).generatorVersion).toBe(4);
 	await card.getByRole('button', { name: 'Forget', exact: true }).click();
 	await expect(card).toHaveCount(0);
 	// Forget removes a browser bookmark; the online world remains intact on the backend.

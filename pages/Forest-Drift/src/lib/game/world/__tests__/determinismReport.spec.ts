@@ -21,7 +21,8 @@ describe('world generation determinism', () => {
 			'trees',
 			'biomes',
 			'biomeTrees',
-			'biomeCreatures'
+			'biomeCreatures',
+			'biomeSpecies'
 		] as const) {
 			expect(actual[key], `${seed} ${key}`).toMatchObject({
 				...expected![key],

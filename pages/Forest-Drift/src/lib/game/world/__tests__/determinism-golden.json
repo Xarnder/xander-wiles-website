@@ -32,8 +32,13 @@
 			},
 			"biomeCreatures": {
 				"exact": "8422c1bc",
-				"coarse": "88dd3689",
+				"coarse": "5ea32eeb",
 				"count": 1024
+			},
+			"biomeSpecies": {
+				"exact": "5158a1d0",
+				"coarse": "524e4da7",
+				"count": 212
 			}
 		},
 		{
@@ -67,8 +72,13 @@
 			},
 			"biomeCreatures": {
 				"exact": "ec230f6d",
-				"coarse": "2671e3da",
+				"coarse": "7cc928fe",
 				"count": 1024
+			},
+			"biomeSpecies": {
+				"exact": "f2267639",
+				"coarse": "1ffb3e39",
+				"count": 212
 			}
 		},
 		{
@@ -102,8 +112,13 @@
 			},
 			"biomeCreatures": {
 				"exact": "9ccbe052",
-				"coarse": "ed8205a4",
+				"coarse": "b94c8ac4",
 				"count": 1024
+			},
+			"biomeSpecies": {
+				"exact": "225a65f7",
+				"coarse": "bf596bff",
+				"count": 212
 			}
 		}
 	]

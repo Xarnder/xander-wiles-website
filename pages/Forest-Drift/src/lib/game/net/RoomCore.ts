@@ -15,6 +15,7 @@ import { entityKey } from './worldEntities';
 import { WaypointBoard, type ClientWaypointMessage } from './sharedWaypoints';
 import { ScoreBoard, type ScoreEntry } from './playerScores';
 import { resolveAmbientCreature } from '../creatures/carryableCreatureRef';
+import type { HerdBiomeSources } from '../creatures/CreaturePopulationSystem';
 import { abilityFor } from '../creatures/creatureAbilities';
 import { rideFor } from '../creatures/creatureRiding';
 import type { CreatureDefinition } from '../creatures/CreatureTypes';
@@ -233,6 +234,12 @@ export interface RoomCoreOptions {
 	 * room calls the first time someone picks a creature up. Without it, carrying is refused.
 	 */
 	worldSeed?: string | (() => string | null);
+	/**
+	 * Biome-specific species: the published world's biomes, which decide which species an ambient
+	 * creature id names in a biome world. A loader called on the first creature check. Without it
+	 * (or null: biomes off), creatures resolve to today's regional species.
+	 */
+	creatureBiomes?: HerdBiomeSources | (() => HerdBiomeSources | null);
 }
 
 export interface RoomStats {
@@ -471,6 +478,8 @@ export class RoomCore {
 	/** Riding: player id → the creature they ride. A creature is never both carried and ridden. */
 	private readonly rides = new Map<string, string>();
 	private readonly worldSeedSource: RoomCoreOptions['worldSeed'];
+	private readonly creatureBiomesSource: RoomCoreOptions['creatureBiomes'];
+	private creatureBiomesValue: HerdBiomeSources | null | undefined;
 	private worldSeedValue: string | null | undefined;
 	private savedSessionJson = '{"doors":[],"interactions":[]}';
 	/** Everyone in the world, connected or in their grace period, by player id. */
@@ -501,6 +510,7 @@ export class RoomCore {
 		this.storeLoader = typeof store === 'function' ? store : null;
 		this.storeVersion = options.storeVersion ?? null;
 		this.worldSeedSource = options.worldSeed;
+		this.creatureBiomesSource = options.creatureBiomes;
 		const now = this.now();
 		this.clock = options.restored?.clock
 			? { ...options.restored.clock }
@@ -1617,6 +1627,19 @@ export class RoomCore {
 		return this.worldSeedValue;
 	}
 
+	/** The published world's biomes for creature identity (biome-specific species), built once. */
+	private creatureBiomes(): HerdBiomeSources | null {
+		if (this.creatureBiomesValue === undefined) {
+			const source = this.creatureBiomesSource;
+			try {
+				this.creatureBiomesValue = typeof source === 'function' ? source() : (source ?? null);
+			} catch {
+				this.creatureBiomesValue = null;
+			}
+		}
+		return this.creatureBiomesValue;
+	}
+
 	private carryList(): { slot: number; creature: string }[] {
 		return this.holderList(this.carries);
 	}
@@ -1756,7 +1779,10 @@ export class RoomCore {
 			};
 		}
 		const seed = this.worldSeed();
-		const definition = seed !== null ? resolveAmbientCreature(seed, creature) : null;
+		const definition =
+			seed !== null
+				? resolveAmbientCreature(seed, creature, this.creatureBiomes() ?? undefined)
+				: null;
 		return definition ? { definition, placed: false } : null;
 	}
 

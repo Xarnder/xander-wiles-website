@@ -10,17 +10,21 @@ import { GENERATOR_VERSION } from '../../src/lib/game/net/protocol';
  *   world anyway: a world that somehow has biomes on is never relabelled (the client then asks the
  *   player to refresh, rather than two versions drawing different forests).
  *
+ * - 4 → 5 changed which species live in biome worlds (biome-specific species, 2026-11-13). Worlds
+ *   with biomes off keep today's species exactly, so 1–4 relabel to 5 when biomes are off. A biome
+ *   world at 4 is never relabelled: its creatures would be different animals.
+ *
  * Future generator changes need their own compatibility review; never blindly relabel them.
  */
 export function migrateGenerator<T extends { generatorVersion: number }>(
 	manifest: T,
 	biomesEnabled: () => boolean
 ): T {
-	if (GENERATOR_VERSION !== 4) return manifest;
+	if (GENERATOR_VERSION !== 5) return manifest;
 	const version = manifest.generatorVersion;
-	if (version !== 1 && version !== 2 && version !== 3) return manifest;
+	if (!(Number.isInteger(version) && version >= 1 && version <= 4)) return manifest;
 	if (biomesEnabled()) return manifest;
-	return { ...manifest, generatorVersion: 4 };
+	return { ...manifest, generatorVersion: 5 };
 }
 
 /** Whether a stored base world (JSON text) has biomes switched on. Unreadable means no. */

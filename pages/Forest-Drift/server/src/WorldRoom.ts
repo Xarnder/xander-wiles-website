@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { baseHasBiomes, migrateGenerator } from './generatorMigration';
+import { roomBiomeSources } from '../../src/lib/game/creatures/biome/roomBiomeSources';
 import {
 	CAPABILITY_TTL_MS,
 	sha256Hex,
@@ -713,6 +714,9 @@ export class WorldRoom extends DurableObject<Env> {
 					return null;
 				}
 			},
+			// Biome-specific species: the published world's biomes decide which species a creature id
+			// names. Built once, on the first creature check.
+			creatureBiomes: () => roomBiomeSources(this.readBaseText()),
 			restored: {
 				grace: this.readJson<GraceEntry[]>('grace') ?? [],
 				clock: this.readJson<RoomClockRecord>('clock'),

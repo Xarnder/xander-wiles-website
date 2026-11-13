@@ -142,6 +142,20 @@ export interface CreatureCoatInfo {
 	/** A rare pale (leucistic) or dark (melanistic) individual (Q14). */
 	morph?: 'pale' | 'dark';
 }
+/**
+ * Biome-specific species (2026-11-13): optional weights that lean a species' generated silhouette,
+ * style and signature traits toward a biome family. Each lean replaces a uniform pick with a
+ * weighted one using the same random draw, so a species without a lean is generated exactly as
+ * before. Runtime-only: never saved (the generated form is).
+ */
+export interface SpeciesLean {
+	strategy?: Partial<Record<'longleg' | 'round' | 'longbody' | 'crownhead', number>>;
+	style?: Partial<Record<CreatureStyle, number>>;
+	/** Weights for dominant and secondary signature traits (names from CreatureForm). */
+	traits?: Readonly<Record<string, number>>;
+	/** First name word list (one is picked with the usual draw). */
+	nameWords?: readonly string[];
+}
 export interface SpeciesAppearance {
 	palette: CreaturePalette;
 	surface?: CreatureSurfaceGenome;
@@ -569,4 +583,9 @@ export interface CreatureWorldAccess {
 	 * off). Absent: no biome coats, so herds keep the regional showcase colours.
 	 */
 	profileAt?: (x: number, z: number) => string | undefined;
+	/**
+	 * The biome whose family roster a herd at (x, z) belongs to (biome-specific species), or
+	 * undefined with biomes off: herds then come from today's regional species.
+	 */
+	rosterAt?: (x: number, z: number) => string | undefined;
 }

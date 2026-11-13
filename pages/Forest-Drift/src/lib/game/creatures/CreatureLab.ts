@@ -24,6 +24,8 @@ import { creatureSurfaceTable, type SurfaceDebugMode } from './surface/CreatureS
 import { createMulberry32 } from '../terrain/seededRandom';
 import { coatRegionSpecies } from './biome/CreatureBiomeCoat';
 import { readCreatureCoatSwitches } from './biome/creatureCoatSwitches';
+import { biomeRoster } from './biome/BiomeRoster';
+import { rosterKeyOf } from './biome/biomeRosters';
 import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
 import { regionSpecies } from './CreaturePopulationSystem';
 import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
@@ -656,6 +658,33 @@ export class CreatureLab {
 				individual: generateIndividual(species, regionX * 977 + regionZ * 131 + i)
 			})),
 			3,
+			lod,
+			0
+		);
+	}
+	/**
+	 * One region's roster for the picked biome's family (biome-specific species), in that biome's
+	 * coat; Classic and Neutral show today's regional species. Up to seven, smallest first.
+	 */
+	showRoster(regionX: number, regionZ: number, worldSeed = 'creature-lab', lod: CreatureLod = 0) {
+		const key = this.biome === 'classic' ? null : rosterKeyOf(this.biome);
+		if (!key) {
+			this.showRegion(regionX, regionZ, worldSeed, lod);
+			return;
+		}
+		const roster = biomeRoster(worldSeed, regionX, regionZ, key).map((e) => e.species);
+		const coated = coatRegionSpecies(
+			roster,
+			this.biome as CreatureBiomeProfileId,
+			worldSeed,
+			`${regionX}:${regionZ}:${key}`
+		);
+		this.layoutGallery(
+			coated.map((species, i) => ({
+				species,
+				individual: generateIndividual(species, regionX * 977 + regionZ * 131 + i)
+			})),
+			4,
 			lod,
 			0
 		);

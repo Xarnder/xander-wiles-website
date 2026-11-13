@@ -8,6 +8,7 @@ import type {
 	HandType,
 	SpeciesForm,
 	SpeciesGenome,
+	SpeciesLean,
 	TailTipShape,
 	TorsoProfile
 } from './CreatureTypes';
@@ -268,13 +269,27 @@ const MINOR = ['tail-tip', 'antennae', 'small-horns', 'big-eyes', 'curled-tail',
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Weighted pick with one random draw (`r` in [0, 1)). Zero-weight items are never chosen. */
+export function weightedPick<T>(items: readonly T[], weight: (item: T) => number, r: number): T {
+	const total = items.reduce((sum, item) => sum + Math.max(0, weight(item)), 0);
+	if (total <= 0) return items[Math.floor(r * items.length)];
+	let x = r * total;
+	for (const item of items) {
+		const w = Math.max(0, weight(item));
+		if (w > 0 && (x -= w) < 0) return item;
+	}
+	for (let i = items.length - 1; i >= 0; i--) if (weight(items[i]) > 0) return items[i];
+	return items[items.length - 1];
+}
+
 /**
  * Deterministic from the species seed, body plan and silhouette strategy only — never from the
  * species' feature list — so a recipe saved before forms existed derives exactly what a new species
  * with the same seed is generated with.
  */
 export function deriveSpeciesForm(
-	species: Pick<SpeciesGenome, 'seed' | 'bodyPlan' | 'anatomy'>
+	species: Pick<SpeciesGenome, 'seed' | 'bodyPlan' | 'anatomy'>,
+	lean?: SpeciesLean
 ): SpeciesForm {
 	const plan = species.bodyPlan.id,
 		strategy = species.anatomy.signatureTraits[0] ?? 'round';
@@ -282,7 +297,12 @@ export function deriveSpeciesForm(
 	const between = (a: number, b: number) => a + rng() * (b - a);
 	const range = (r: Range) => between(r[0], r[1]);
 	const pick = <T>(items: readonly T[]) => items[Math.floor(rng() * items.length)];
-	const style = pick(STYLE_BY_STRATEGY[strategy] ?? STYLE_BY_STRATEGY.round);
+	// A biome lean weights each pick (style, traits) with the same single draw; without one, as always.
+	const leaned = <T extends string>(
+		items: readonly T[],
+		weights?: Partial<Record<string, number>>
+	) => (weights ? weightedPick(items, (item) => weights[item] ?? 1, rng()) : pick(items));
+	const style = leaned(STYLE_BY_STRATEGY[strategy] ?? STYLE_BY_STRATEGY.round, lean?.style);
 	const preset = CREATURE_STYLE_PRESETS[style];
 	const legged = plan !== 'serpentine';
 	const hasMuzzle = rng() < (style === 'cute' ? 0.55 : 0.8);
@@ -344,8 +364,14 @@ export function deriveSpeciesForm(
 		);
 	};
 	const dominantPool = (plan === 'serpentine' ? SERPENT_DOMINANT : DOMINANT[strategy]) ?? SECONDARY;
-	const dominant = pick(dominantPool.filter((t) => allowed(t, [])));
-	const secondary = pick(SECONDARY.filter((t) => allowed(t, [dominant])));
+	const dominant = leaned(
+		dominantPool.filter((t) => allowed(t, [])),
+		lean?.traits
+	);
+	const secondary = leaned(
+		SECONDARY.filter((t) => allowed(t, [dominant])),
+		lean?.traits
+	);
 	const minorCandidates = MINOR.filter((t) => allowed(t, [dominant, secondary]));
 	const minor = rng() < 0.6 && minorCandidates.length ? pick(minorCandidates) : '';
 	form.traits = { dominant, secondary, minor };

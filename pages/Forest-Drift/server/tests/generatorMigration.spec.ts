@@ -11,28 +11,30 @@ const manifestAt = (generatorVersion: number) => ({
 });
 
 describe('generator compatibility', () => {
-	it('is generator 4 (biomes)', () => {
-		expect(GENERATOR_VERSION).toBe(4);
+	it('is generator 5 (biome-specific species)', () => {
+		expect(GENERATOR_VERSION).toBe(5);
 	});
 
-	it.each([1, 2, 3])(
+	it.each([1, 2, 3, 4])(
 		'upgrades world published at %s (no biomes) without changing metadata or the input',
 		(version) => {
 			const manifest = manifestAt(version);
 			expect(migrateGenerator(manifest, () => false)).toEqual({
 				...manifest,
-				generatorVersion: 4
+				generatorVersion: 5
 			});
 			expect(manifest.generatorVersion).toBe(version);
 		}
 	);
 
 	it('never relabels an old world whose stored data has biomes switched on', () => {
-		const manifest = manifestAt(3);
-		expect(migrateGenerator(manifest, () => true)).toBe(manifest);
+		for (const version of [3, 4]) {
+			const manifest = manifestAt(version);
+			expect(migrateGenerator(manifest, () => true)).toBe(manifest);
+		}
 	});
 
-	it.each([0, 4, 5])('does not relabel unrelated generator version %s', (generatorVersion) => {
+	it.each([0, 5, 6])('does not relabel unrelated generator version %s', (generatorVersion) => {
 		const manifest = { generatorVersion };
 		expect(migrateGenerator(manifest, () => false)).toBe(manifest);
 	});

@@ -2,7 +2,11 @@ import { createNamedRandom, hashStringToUint32 } from '../terrain/seededRandom';
 import { generateSpecies } from './SpeciesGenerator';
 import { generateIndividual } from './IndividualGenerator';
 import { creatureDimensions } from './creatureDimensions';
+import { REGION_HEIGHT_BANDS, stature } from './regionBands';
+export { REGION_HEIGHT_BANDS, stature };
 import { cachedCoatRegionSpecies, memberSpecies } from './biome/CreatureBiomeCoat';
+import { biomeRoster } from './biome/BiomeRoster';
+import { MAX_ROSTER_DENSITY, rosterDensity, rosterKeyOf } from './biome/biomeRosters';
 import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
 import type {
 	BodyPlanId,
@@ -50,18 +54,6 @@ export function creatureSurface(
 	}
 	return y;
 }
-/**
- * One height band per regional species, smallest to giant. Adjacent bands stay far enough apart
- * that two groups read as different sizes even at a glance.
- */
-const REGION_HEIGHT_BANDS: readonly (readonly [number, number])[] = [
-	[0.55, 0.8],
-	[1.2, 1.65],
-	[2.3, 3.1],
-	[4.4, 6],
-	[8.5, 12],
-	[16, 26]
-];
 /**
  * Every region's smallest species is a quadruped, so there's always one small enough to carry
  * (ranged weapons, docs/2026/11-04/range-weapons Q3). Changed on purpose for existing worlds too
@@ -135,37 +127,6 @@ function showcaseRegion(
 	});
 }
 
-/** Resize a complete genome coherently, retaining scale-dependent gait and behaviour. */
-function stature(species: SpeciesGenome, height: number): SpeciesGenome {
-	const previous = creatureDimensions(species).height;
-	const factor = height / previous;
-	const p = species.proportions;
-	for (const key of [
-		'bodyLength',
-		'bodyWidth',
-		'bodyDepth',
-		'neckLength',
-		'headSize',
-		'legLength',
-		'legThickness',
-		'stanceWidth',
-		'tailLength',
-		'tailThickness'
-	] as const)
-		p[key] *= factor;
-	const gait = species.locomotion.gait;
-	for (const key of ['strideLength', 'strideLift', 'bodyBob', 'bodySway', 'headBob'] as const)
-		gait[key] *= factor;
-	gait.walkFrequency = Math.max(0.2, Math.min(2.5, 0.9 / Math.sqrt(height)));
-	gait.runFrequency = gait.walkFrequency * 1.9;
-	const b = species.behaviour;
-	b.wanderSpeed = Math.min(2.5, Math.sqrt(height) * 0.45);
-	b.fleeSpeed = b.wanderSpeed * 2.8;
-	b.wanderRadius = Math.max(6, height * 4);
-	b.awarenessRadius = Math.max(7, height * 3);
-	b.comfortDistance = Math.max(0.8, height * 0.9);
-	return species;
-}
 export function regionSpecies(
 	worldSeed: string | number,
 	regionX: number,
@@ -287,16 +248,85 @@ export function coatedRegionSpecies(
 	regionX: number,
 	regionZ: number,
 	speciesList: SpeciesGenome[],
-	profile: string | undefined
+	profile: string | undefined,
+	coatKey = `${regionX}:${regionZ}`
 ): SpeciesGenome[] {
 	return profile === undefined
 		? speciesList
-		: cachedCoatRegionSpecies(
-				speciesList,
-				profile as CreatureBiomeProfileId,
-				worldSeed,
-				`${regionX}:${regionZ}`
-			);
+		: cachedCoatRegionSpecies(speciesList, profile as CreatureBiomeProfileId, worldSeed, coatKey);
+}
+
+/**
+ * Where a herd's biome comes from. `rosterAt` (biome-specific species) gives the biome whose family
+ * roster the herd belongs to; `profileAt` (biome coats) the biome whose colours it wears. Either
+ * returns undefined when it doesn't apply (biomes off, switched off). Clients pass both; the
+ * multiplayer room passes `rosterAt` only (identity and abilities, not colours).
+ */
+export interface HerdBiomeSources {
+	rosterAt?: (x: number, z: number) => string | undefined;
+	profileAt?: (x: number, z: number) => string | undefined;
+}
+
+/** A cell's roster order: each slot a different species, seeded per cell and roster. */
+function rosterSlotOrder(
+	worldSeed: string | number,
+	cellX: number,
+	cellZ: number,
+	key: string,
+	n: number
+) {
+	const rng = createNamedRandom(String(worldSeed), `fauna-roster-cell-v1:${cellX}:${cellZ}:${key}`);
+	const order = Array.from({ length: n }, (_, i) => i);
+	for (let i = n - 1; i > 0; i--) {
+		const j = Math.floor(rng() * (i + 1));
+		[order[i], order[j]] = [order[j], order[i]];
+	}
+	return order;
+}
+
+/**
+ * Which species a cell's slot holds, how many it herds and how likely it is to be present: the
+ * one rule shared by the population, the id resolver (clients and the room) and the determinism
+ * report, so they can never disagree. In a biome world the herd comes from its centre's family
+ * roster (biome-specific species); otherwise from today's regional species.
+ */
+export function slotSpecies(
+	worldSeed: string | number,
+	cellX: number,
+	cellZ: number,
+	centre: { slot: number; tier: number; cx: number; cz: number },
+	sources: HerdBiomeSources = {}
+): { species: SpeciesGenome; groupSize: number; density: number } | null {
+	const regionX = Math.floor(cellX / 8),
+		regionZ = Math.floor(cellZ / 8);
+	const rosterBiome = sources.rosterAt?.(centre.cx, centre.cz);
+	const key = rosterBiome === undefined ? null : rosterKeyOf(rosterBiome);
+	const profile = sources.profileAt?.(centre.cx, centre.cz);
+	if (key) {
+		const roster = biomeRoster(worldSeed, regionX, regionZ, key);
+		const index = rosterSlotOrder(worldSeed, cellX, cellZ, key, roster.length)[
+			centre.slot % roster.length
+		];
+		const entry = roster[index];
+		const coated = coatedRegionSpecies(
+			worldSeed,
+			regionX,
+			regionZ,
+			roster.map((e) => e.species),
+			profile,
+			`${regionX}:${regionZ}:${key}`
+		);
+		return {
+			species: coated[index],
+			groupSize: entry.band >= 4 ? 1 : entry.species.behaviour.preferredGroupSize,
+			density: rosterDensity(rosterBiome!)
+		};
+	}
+	const list = regionSpecies(worldSeed, regionX, regionZ);
+	const species = coatedRegionSpecies(worldSeed, regionX, regionZ, list, profile)[centre.tier];
+	return species
+		? { species, groupSize: creatureGroupSize(species, centre.tier), density: 1 }
+		: null;
 }
 
 export function generatePopulationCell(
@@ -313,21 +343,15 @@ export function generatePopulationCell(
 		density <= 0
 	)
 		return [];
-	const regionX = Math.floor(cellX / 8),
-		regionZ = Math.floor(cellZ / 8);
-	const speciesList = regionSpecies(worldSeed, regionX, regionZ);
 	const result: CreatureSpawnDefinition[] = [];
-	const presenceLimit = slotPresenceLimit(density);
-	for (const { slot, tier: index, presence, cx, cz } of cellGroupCentres(worldSeed, cellX, cellZ)) {
-		if (presence >= presenceLimit) continue;
-		// Biome coats (biome-specific creatures Q4): the herd wears the biome at its group centre.
-		const species = coatedRegionSpecies(
-			worldSeed,
-			regionX,
-			regionZ,
-			speciesList,
-			access.profileAt?.(cx, cz)
-		)[index];
+	for (const centre of cellGroupCentres(worldSeed, cellX, cellZ)) {
+		const { slot, presence, cx, cz } = centre;
+		// A cheap reject first: no herd can appear above the world's density cap.
+		if (presence >= slotPresenceLimit(density * MAX_ROSTER_DENSITY)) continue;
+		// The herd's species, group size and family density (biome rosters and coats, Q2, Q15).
+		const herd = slotSpecies(worldSeed, cellX, cellZ, centre, access);
+		if (!herd || presence >= slotPresenceLimit(density * herd.density)) continue;
+		const species = herd.species;
 		const dimensions = creatureDimensions(species, 1.1);
 		const y = creatureSurface(
 			access,
@@ -340,7 +364,7 @@ export function generatePopulationCell(
 		if (y === undefined) continue;
 		const groupId = creatureGroupId(worldSeed, cellX, cellZ, slot);
 		const groupCentre = { x: cx, y, z: cz };
-		const count = creatureGroupSize(species, index);
+		const count = herd.groupSize;
 		for (let member = 0; member < count; member++) {
 			const seed = hashStringToUint32(`${groupId}:${member}`);
 			const local = createNamedRandom(String(seed), 'placement');

@@ -41,6 +41,7 @@ import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
 import { clearCoatCache } from './creatures/biome/CreatureBiomeCoat';
 import {
 	creatureCoatsAvailable,
+	creatureRostersAvailable,
 	readCreatureCoatSwitches
 } from './creatures/biome/creatureCoatSwitches';
 import type { CarryPlacement } from './net/protocol';
@@ -1779,8 +1780,10 @@ export class ThreeScene implements WorldRuntime {
 				blocked: naturalGroundBlocked,
 				// Terrestrial feet never plant on a lake floor under deep water.
 				standable: (x, z) => this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH,
-				// Biome-specific creatures: each herd wears the biome at its group centre.
-				profileAt: this.creatureProfileAt
+				// Biome-specific creatures: each herd wears the biome at its group centre, and comes
+				// from that biome family's roster (biome-specific species).
+				profileAt: this.creatureProfileAt,
+				rosterAt: this.creatureRosterAt
 			},
 			options.world?.creatures,
 			(m) => this.graphicsPipeline.registerMaterial(m)
@@ -2535,6 +2538,15 @@ export class ThreeScene implements WorldRuntime {
 			: this.biomeField.isEnabled()
 				? BIOME_IDS[this.biomeField.dominantAt(x, z)]
 				: 'neutral';
+
+	/**
+	 * The biome whose family roster a herd at a point belongs to (biome-specific species), or
+	 * undefined with biomes off or `?creatureRosters=off`: today's regional species.
+	 */
+	private readonly creatureRosterAt = (x: number, z: number): string | undefined =>
+		creatureRostersAvailable() && this.biomeField.isEnabled()
+			? BIOME_IDS[this.biomeField.dominantAt(x, z)]
+			: undefined;
 
 	/** After any biome setting changes: reclassify, then rebuild terrain colour and grass. */
 	private regenerateBiomes(): void {
@@ -4256,7 +4268,10 @@ export class ThreeScene implements WorldRuntime {
 			if (this.creatureRecipes.size > 256) this.creatureRecipes.clear();
 			this.creatureRecipes.set(
 				id,
-				resolveAmbientCreature(this.settings.seed, id, this.creatureProfileAt)
+				resolveAmbientCreature(this.settings.seed, id, {
+					profileAt: this.creatureProfileAt,
+					rosterAt: this.creatureRosterAt
+				})
 			);
 		}
 		return this.creatureRecipes.get(id) ?? null;

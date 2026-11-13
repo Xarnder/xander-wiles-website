@@ -3,9 +3,10 @@ import type {
 	BodyPlanId,
 	CreatureFeatureKind,
 	CreaturePattern,
-	SpeciesGenome
+	SpeciesGenome,
+	SpeciesLean
 } from './CreatureTypes';
-import { deriveSpeciesForm, traitFeatures } from './CreatureForm';
+import { deriveSpeciesForm, traitFeatures, weightedPick } from './CreatureForm';
 import { deriveTerrainLocomotion } from './CreatureTerrainProfile';
 import { deriveSurfaceGenome } from './surface/CreaturePatternGenerator';
 
@@ -34,12 +35,20 @@ const LEGACY_PATTERN: Record<
  * The draw order of `rng` is part of species identity (proportions, primary colour, name): new
  * choices use their own named streams instead of adding draws here.
  */
-export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'): SpeciesGenome {
+export function generateSpecies(
+	seed: number,
+	bodyPlan: BodyPlanId = 'quadruped',
+	lean?: SpeciesLean
+): SpeciesGenome {
 	if (!Number.isSafeInteger(seed)) throw new Error('Creature seed must be a safe integer');
 	const rng = createNamedRandom(String(seed), `creature-species-v1:${bodyPlan}`);
 	const between = (a: number, b: number) => a + rng() * (b - a);
 	const pick = <T>(items: readonly T[]) => items[Math.floor(rng() * items.length)];
-	const strategy = pick(['longleg', 'round', 'longbody', 'crownhead'] as const);
+	const strategies = ['longleg', 'round', 'longbody', 'crownhead'] as const;
+	// A biome lean weights the silhouette with the same single draw; without one, as always.
+	const strategy = lean?.strategy
+		? weightedPick(strategies, (s) => lean.strategy?.[s] ?? 1, rng())
+		: pick(strategies);
 	const stature = Math.exp(between(Math.log(0.12), Math.log(25)));
 	const leg = strategy === 'longleg' ? between(1.3, 1.8) : between(0.45, 0.8);
 	const length = strategy === 'longbody' ? between(2.3, 3.1) : between(1.05, 1.55);
@@ -108,7 +117,7 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 					: [0, 0.5, 0.5, 0];
 	const species: SpeciesGenome = {
 		id: `sp_1_${(hashStringToUint32(`${seed}:${bodyPlan}`) >>> 0).toString(16)}`,
-		name: `${pick(['Moss', 'Dusk', 'Amber', 'Mist', 'River', 'Moon'])} ${strategy === 'longleg' ? 'Stilt' : strategy === 'round' ? 'Pebbleback' : strategy === 'longbody' ? 'Ribbon' : 'Crownling'}`,
+		name: `${pick(lean?.nameWords?.length ? lean.nameWords : ['Moss', 'Dusk', 'Amber', 'Mist', 'River', 'Moon'])} ${strategy === 'longleg' ? 'Stilt' : strategy === 'round' ? 'Pebbleback' : strategy === 'longbody' ? 'Ribbon' : 'Crownling'}`,
 		seed,
 		generatorVersion: 1,
 		bodyPlan: {
@@ -190,7 +199,7 @@ export function generateSpecies(seed: number, bodyPlan: BodyPlanId = 'quadruped'
 		}
 	};
 	// The art-direction genome comes from its own named stream too.
-	const form = deriveSpeciesForm(species);
+	const form = deriveSpeciesForm(species, lean);
 	const adornments = traitFeatures(form);
 	for (const kind of legacyFeatures)
 		if (

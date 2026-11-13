@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-13
 **Plan:** [`../feature-plan/02-technical-plan.md`](../feature-plan/02-technical-plan.md) (revision 7) · earlier: [Phase 0](../phase-0/implementation.md), [1](../phase-1/implementation.md), [2](../phase-2/implementation.md), [3](../phase-3/implementation.md)
-**Status:** All phases built and pushed to main (`fd7e629e`, `47678c26`, `91681dba`, `91073a6f`). Waiting on your review of the screenshot galleries.
+**Status:** All phases built and pushed to main (`fd7e629e`, `47678c26`, `91681dba`, `91073a6f`). Reviewed and approved by you on the live site (2026-11-13).
 
 ## Performance pass
 
@@ -55,7 +55,6 @@ Every budget is met. The only measurable cost is compile time: +12 ms over 100 c
 
 ## Open
 
-- **Your review** of the screenshot galleries in the Phase 0–3 records (definition of done, §21).
 - **Not built (decided):** weather on coats (Q12, later), crease shading, extremities and rim light (Q9), a Vivid colour setting (Q8), biome-specific species mixes (Q1).
 - **Known limits:**
   - Very pale or grey placed creatures come back slightly tinted, because saved recipes use the classic clamps (Phase 1).
