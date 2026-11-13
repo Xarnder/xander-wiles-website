@@ -23,9 +23,9 @@
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.60.0",
-		"@sveltejs/adapter-static": "^4.0.0",
-		"@sveltejs/kit": "^3.0.0",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@sveltejs/adapter-static": "^4.0.1",
+		"@sveltejs/kit": "^3.1.1",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
 		"@types/node": "^24",
 		"eslint": "^10.4.1",
 		"eslint-config-prettier": "^10.1.8",
@@ -38,7 +38,8 @@
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
 		"vite": "^8.3.0",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.8",
+		"deepmerge": "file:../../vendor/deepmerge"
 	},
 	"imports": {
 		"#lib": "./src/lib/index.js",
@@ -48,5 +49,9 @@
 		"@huggingface/transformers": "^4.3.1",
 		"@mediabunny/aac-encoder": "^1.61.3",
 		"mediabunny": "^1.61.3"
+	},
+	"overrides": {
+		"deepmerge": "$deepmerge",
+		"minimatch": "^11.0.4"
 	}
 }
