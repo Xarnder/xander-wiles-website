@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-13
 **Plan:** [`../feature-plan/02-technical-plan.md`](../feature-plan/02-technical-plan.md) (revision 7) · earlier: [Phase 0](../phase-0/implementation.md), [1](../phase-1/implementation.md), [2](../phase-2/implementation.md), [3](../phase-3/implementation.md)
-**Status:** All phases built. Phases 0–2 are on main (pushed); Phase 3 is committed locally (`91681dba`, not pushed); Phase 4 is not committed. Waiting on your review of the screenshot galleries.
+**Status:** All phases built and pushed to main (`fd7e629e`, `47678c26`, `91681dba`, `91073a6f`). Waiting on your review of the screenshot galleries.
 
 ## Performance pass
 
@@ -28,13 +28,13 @@ Every budget is met. The only measurable cost is compile time: +12 ms over 100 c
 
 ## The whole feature, as built
 
-| Phase | What                                                                                                 | Commit                  |
-| ----- | ---------------------------------------------------------------------------------------------------- | ----------------------- |
-| 0     | 26 profiles plus neutral, OKLCh, region coats with species separation, Lab biome picker              | `fd7e629e` (with 1)     |
-| 1     | Coats in the world, resolver, remote pellets, biome changes, `biomeCreatures` golden, new Main World | `fd7e629e`              |
-| 2     | Coat micro-texture: fur, hide, scales, chitin, skin                                                  | `47678c26`              |
-| 3     | Rosettes, reticulated, patches, speckle, saddle; feature colour; rare morphs                         | `91681dba` (not pushed) |
-| 4     | Performance pass, docs                                                                               | not committed           |
+| Phase | What                                                                                                 | Commit              |
+| ----- | ---------------------------------------------------------------------------------------------------- | ------------------- |
+| 0     | 26 profiles plus neutral, OKLCh, region coats with species separation, Lab biome picker              | `fd7e629e` (with 1) |
+| 1     | Coats in the world, resolver, remote pellets, biome changes, `biomeCreatures` golden, new Main World | `fd7e629e`          |
+| 2     | Coat micro-texture: fur, hide, scales, chitin, skin                                                  | `47678c26`          |
+| 3     | Rosettes, reticulated, patches, speckle, saddle; feature colour; rare morphs                         | `91681dba`          |
+| 4     | Performance pass, docs                                                                               | `91073a6f`          |
 
 ## Verification (final)
 
