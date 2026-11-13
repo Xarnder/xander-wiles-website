@@ -1,4 +1,4 @@
-import { base } from '$app/paths';
+import { resolve } from '$app/paths';
 import type { FFmpeg, LogEvent, ProgressEvent as FfmpegProgress } from '@ffmpeg/ffmpeg';
 import { parseProbeOutput } from './format';
 import { prefersNativeShareSave, shouldUseMultiThreadFfmpeg } from './platform';
@@ -33,7 +33,7 @@ export async function loadFfmpeg(
 			isCrossOriginIsolated(),
 			prefersNativeShareSave()
 		);
-		const coreDir = `${base}/ffmpeg/${multiThread ? 'core-mt' : 'core'}`;
+		const coreDir = `${resolve('/').replace(/\/$/, '')}/ffmpeg/${multiThread ? 'core-mt' : 'core'}`;
 
 		const coreURL = await toBlobURL(`${coreDir}/ffmpeg-core.js`, 'text/javascript');
 		const wasmURL = await toBlobURL(`${coreDir}/ffmpeg-core.wasm`, 'application/wasm');

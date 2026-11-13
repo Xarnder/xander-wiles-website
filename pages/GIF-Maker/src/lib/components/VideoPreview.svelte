@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { motionLabel } from '$lib/gif/analyse-frames';
-	import { prepareVideoElement } from '$lib/gif/analyse-video';
-	import { formatBytes, formatDuration } from '$lib/gif/format';
-	import type { VideoAnalysis } from '$lib/gif/types';
+	import { motionLabel } from '#lib/gif/analyse-frames';
+	import { prepareVideoElement } from '#lib/gif/analyse-video';
+	import { formatBytes, formatDuration } from '#lib/gif/format';
+	import type { VideoAnalysis } from '#lib/gif/types';
 
 	let {
 		url,

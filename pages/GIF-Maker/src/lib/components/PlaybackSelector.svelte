@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SPEED_PRESETS } from '$lib/gif/constants';
+	import { SPEED_PRESETS } from '#lib/gif/constants';
 	import {
 		clampTargetDuration,
 		contentDuration,
@@ -8,8 +8,8 @@
 		outputDuration,
 		resolvedPlaybackSpeed,
 		snapSpeedPreset
-	} from '$lib/gif/format';
-	import type { PlaybackMode } from '$lib/gif/types';
+	} from '#lib/gif/format';
+	import type { PlaybackMode } from '#lib/gif/types';
 
 	let {
 		clipSeconds,

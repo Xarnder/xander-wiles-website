@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { defaultConstraints } from '$lib/gif/candidate-generator';
-	import type { AdvancedConstraints, DitherStrategy, OptimisationPreference } from '$lib/gif/types';
+	import { defaultConstraints } from '#lib/gif/candidate-generator';
+	import type { AdvancedConstraints, DitherStrategy, OptimisationPreference } from '#lib/gif/types';
 
 	let { constraints = $bindable() }: { constraints: AdvancedConstraints } = $props();
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { formatDuration, outputDuration } from '$lib/gif/format';
+	import { formatDuration, outputDuration } from '#lib/gif/format';
 
 	let {
 		duration,

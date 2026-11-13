@@ -5,10 +5,10 @@
 		formatDuration,
 		formatSpeed,
 		percentOfLimit
-	} from '$lib/gif/format';
-	import { prefersNativeShareSave } from '$lib/gif/platform';
-	import { openInNewTab, saveGifOnIos, triggerDownload } from '$lib/gif/save-file';
-	import type { OptimiserResult } from '$lib/gif/types';
+	} from '#lib/gif/format';
+	import { prefersNativeShareSave } from '#lib/gif/platform';
+	import { openInNewTab, saveGifOnIos, triggerDownload } from '#lib/gif/save-file';
+	import type { OptimiserResult } from '#lib/gif/types';
 	import { onMount } from 'svelte';
 
 	let {

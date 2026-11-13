@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { formatBytes } from '$lib/gif/format';
-	import type { OptimiserProgress } from '$lib/gif/types';
+	import { formatBytes } from '#lib/gif/format';
+	import type { OptimiserProgress } from '#lib/gif/types';
 
 	let { progress, oncancel }: { progress: OptimiserProgress; oncancel: () => void } = $props();
 

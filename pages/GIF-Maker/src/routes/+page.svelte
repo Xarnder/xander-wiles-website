@@ -1,14 +1,14 @@
 <script lang="ts">
-	import AdvancedSettings from '$lib/components/AdvancedSettings.svelte';
-	import ClipSelector from '$lib/components/ClipSelector.svelte';
-	import ConversionProgress from '$lib/components/ConversionProgress.svelte';
-	import GifResult from '$lib/components/GifResult.svelte';
-	import PlaybackSelector from '$lib/components/PlaybackSelector.svelte';
-	import SizeSelector from '$lib/components/SizeSelector.svelte';
-	import VideoDropzone from '$lib/components/VideoDropzone.svelte';
-	import VideoPreview from '$lib/components/VideoPreview.svelte';
-	import { defaultConstraints } from '$lib/gif/candidate-generator';
-	import { DEFAULT_TARGET_BYTES } from '$lib/gif/constants';
+	import AdvancedSettings from '#lib/components/AdvancedSettings.svelte';
+	import ClipSelector from '#lib/components/ClipSelector.svelte';
+	import ConversionProgress from '#lib/components/ConversionProgress.svelte';
+	import GifResult from '#lib/components/GifResult.svelte';
+	import PlaybackSelector from '#lib/components/PlaybackSelector.svelte';
+	import SizeSelector from '#lib/components/SizeSelector.svelte';
+	import VideoDropzone from '#lib/components/VideoDropzone.svelte';
+	import VideoPreview from '#lib/components/VideoPreview.svelte';
+	import { defaultConstraints } from '#lib/gif/candidate-generator';
+	import { DEFAULT_TARGET_BYTES } from '#lib/gif/constants';
 	import {
 		clipDuration,
 		formatBytes,
@@ -17,18 +17,18 @@
 		gifFilename,
 		outputDuration,
 		resolvedPlaybackSpeed
-	} from '$lib/gif/format';
-	import { recommendSettings } from '$lib/gif/optimiser';
-	import { colourEstimateLabel } from '$lib/gif/size-model';
-	import { prefersNativeShareSave } from '$lib/gif/platform';
+	} from '#lib/gif/format';
+	import { recommendSettings } from '#lib/gif/optimiser';
+	import { colourEstimateLabel } from '#lib/gif/size-model';
+	import { prefersNativeShareSave } from '#lib/gif/platform';
 	import {
 		THEME_LABEL,
 		nextTheme,
 		resolveStoredTheme,
 		themeColor,
 		type ThemeName
-	} from '$lib/gif/theme';
-	import { inputMemoryWarning, longVideoWarning, tightTargetWarning } from '$lib/gif/warnings';
+	} from '#lib/gif/theme';
+	import { inputMemoryWarning, longVideoWarning, tightTargetWarning } from '#lib/gif/warnings';
 	import { onMount, tick } from 'svelte';
 	import type {
 		AdvancedConstraints,
@@ -36,7 +36,7 @@
 		OptimiserResult,
 		PlaybackMode,
 		VideoAnalysis
-	} from '$lib/gif/types';
+	} from '#lib/gif/types';
 
 	let file = $state<File | null>(null);
 	let videoUrl = $state<string | null>(null);
@@ -163,7 +163,7 @@
 		}
 
 		try {
-			const { analyseLoadedVideo } = await import('$lib/gif/analyse-video');
+			const { analyseLoadedVideo } = await import('#lib/gif/analyse-video');
 			videoEl.src = videoUrl;
 			const nextAnalysis = await analyseLoadedVideo(videoEl, next);
 			analysis = nextAnalysis;
@@ -198,7 +198,7 @@
 		abort = new AbortController();
 
 		try {
-			const { convertVideoToGif, encodeSmallestGif } = await import('$lib/gif/convert');
+			const { convertVideoToGif, encodeSmallestGif } = await import('#lib/gif/convert');
 			const options = {
 				file,
 				video: videoEl,

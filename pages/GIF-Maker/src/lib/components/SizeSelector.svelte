@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { DEFAULT_TARGET_BYTES, PRESET_SIZES } from '$lib/gif/constants';
-	import { parseSizeInput } from '$lib/gif/format';
+	import { DEFAULT_TARGET_BYTES, PRESET_SIZES } from '#lib/gif/constants';
+	import { parseSizeInput } from '#lib/gif/format';
 
 	let { bytes = $bindable(DEFAULT_TARGET_BYTES) }: { bytes: number } = $props();
 

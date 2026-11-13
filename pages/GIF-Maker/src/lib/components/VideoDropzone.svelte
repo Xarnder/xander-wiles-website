@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { FILE_PICKER_ACCEPT } from '$lib/gif/constants';
-	import { isProbablyVideo } from '$lib/gif/format';
+	import { FILE_PICKER_ACCEPT } from '#lib/gif/constants';
+	import { isProbablyVideo } from '#lib/gif/format';
 
 	let { disabled = false, onfile }: { disabled?: boolean; onfile: (file: File) => void } = $props();
 
