@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName, padKey } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUiState, BuildingSettings, ToolId } from './FoundationTypes';
 import type { BuildUndoManager } from './BuildUndoManager';
@@ -143,11 +145,13 @@ export class MoveTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.repeat) return;
-		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (isTypingTarget(event.target)) return;
-		if (event.code === 'KeyR') {
+		if (matchesAction(event, 'tool.rotate')) {
 			this.rotate(event.shiftKey ? -1 : 1);
-		} else if (event.code === 'KeyT' && (this.heldMiniBuild || this.hoveredMiniBuildId)) {
+		} else if (
+			matchesAction(event, 'tool.rotationStep') &&
+			(this.heldMiniBuild || this.hoveredMiniBuildId)
+		) {
 			// Mini Builds turn in the shared snap step (furniture keeps its own fixed steps).
 			cycleRotationSnapStep(event.shiftKey ? -1 : 1);
 			this.emitMiniBuildHud();
@@ -487,8 +491,8 @@ export class MoveTool implements BuildTool {
 							? 'Click: Place object'
 							: (preview.reason ?? 'Cannot place here').split('\n')[0]
 						: 'Aim at a floor or the ground',
-					'R    Rotate (Shift: back)',
-					'T    Snap angle (Shift: coarser)',
+					`${padKey('tool.rotate')}Rotate (Shift: back)`,
+					`${padKey('tool.rotationStep')}Snap angle (Shift: coarser)`,
 					'Right-Click / Esc: Cancel move',
 					...(readout ? ['', formatAreaDetail(readout)] : [])
 				],
@@ -507,9 +511,9 @@ export class MoveTool implements BuildTool {
 				`Rotation: ${formatAngle(instance?.rotationY ?? 0)} · snap ${formatAngle(getRotationSnapStep())}`,
 				'',
 				'Click: Pick up / drag',
-				'R    Rotate in-place (Shift: back)',
-				'T    Snap angle (Shift: coarser)',
-				'M: Exit Move Mode'
+				`${padKey('tool.rotate')}Rotate in-place (Shift: back)`,
+				`${padKey('tool.rotationStep')}Snap angle (Shift: coarser)`,
+				`${keyName('build.moveMode')}: Exit Move Mode`
 			]
 		});
 	}
@@ -1110,7 +1114,7 @@ export class MoveTool implements BuildTool {
 					'',
 					placeLine,
 					'R    Rotate',
-					'E    Edit object',
+					`${padKey('build.customise')}Edit object`,
 					'Right-Click / Esc: Cancel move'
 				],
 				notice: this.preview && !this.preview.valid ? (this.preview.reason ?? undefined) : undefined
@@ -1131,8 +1135,8 @@ export class MoveTool implements BuildTool {
 					'',
 					'Click: Pick up / drag',
 					'R    Rotate in-place',
-					'E    Edit object',
-					'M: Exit Move Mode'
+					`${padKey('build.customise')}Edit object`,
+					`${keyName('build.moveMode')}: Exit Move Mode`
 				]
 			});
 		} else {
@@ -1144,7 +1148,7 @@ export class MoveTool implements BuildTool {
 					'Aim at an existing object',
 					'',
 					'Click: Pick up and drag',
-					'M: Exit Move Mode'
+					`${keyName('build.moveMode')}: Exit Move Mode`
 				]
 			});
 		}

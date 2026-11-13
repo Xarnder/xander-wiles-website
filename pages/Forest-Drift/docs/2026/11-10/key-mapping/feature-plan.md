@@ -1,8 +1,18 @@
 # Forest Drift — Key Mapping & Control Profiles: Feature Plan
 
-**Status:** Phase 1 done (10 Nov 2026): `src/lib/game/input/` holds the action list, key names,
-conflict finder, bindings store (read-only) and `KeyInput`, with unit tests. The game doesn't use
-them yet; that starts in Phase 2. The open questions are decided (section 9).
+**Status:** Built (10 Nov 2026), all phases. Every game key goes through
+`src/lib/game/input/` and follows the active profile; the full-screen Controls screen
+(`src/lib/components/KeyBindingsScreen.svelte`) opens from Settings → Controls, Pause → Controls
+and Help → Change keys. Profiles, Undo, download and load, conflict display, and key names in help,
+prompts, tool hints and tutorials all follow the bindings. A guard test fails if raw key checks
+come back. The open questions are decided (section 9).
+
+**Changes from this plan while building:** loaded files from a newer version are accepted (unknown
+actions are skipped and counted) rather than refused; files may hold keys the browser takes, but
+those entries are dropped on load like other bad entries; the tutorial script keeps its spoken
+wording ("Press three", "Minus") while the default key is in use, so cached narration still
+matches.
+
 **Date:** 10 November 2026
 **Scope:** `pages/Forest-Drift/` (SvelteKit + Three.js)
 
@@ -169,10 +179,16 @@ labelFor(actionId: string, slot?: 0 | 1): string           // "W", "Shift + R", 
   roof steps" keeps working. Hold actions ignore modifiers.
 - **Typing is never caught.** Keys pressed in `input, textarea, select, [contenteditable]` are
   ignored in one shared function (today only `handleCreatureKey` checks this).
-- **Touch keeps working whatever the bindings are.** `simulateKey(code)` becomes
-  `simulateAction(actionId)`. It sends a `KeyboardEvent` carrying a private `forestAction`
-  property, and `matches()` accepts that before it looks at the code. Touch buttons then never
-  break when a player rebinds a key or clears it.
+- **Touch keeps working whatever the bindings are.** Touch buttons press a key *as the defaults
+  mean it* (`simulateKey` → `createDefaultKeyEvent`): the event is matched against default
+  bindings, so "R" still rotates, restyles a fence or turns a beam in whichever tool is active,
+  however the keyboard is rebound. A second kind of synthetic event names one action directly
+  (`createActionEvent`), for buttons that map to a single action.
+- **Tools that borrow a shared key** (Roof keeps E and ↑/↓, Place Object keeps ↑/↓) say so with
+  `capturesKeyOf(action)`, which compares the current keys (`actionsShareKey`). Rebinding Roof's
+  outline key off E lets E open Placement Height on the roof again.
+- **Exact Shift where it matters.** An extra Shift is normally allowed (Shift is Run, and K or G
+  must still work while running). The tutorial keys (F6–F9) set `exactShift`, as before.
 - **Key names follow the player's keyboard layout.** Bindings use `event.code` (the physical key),
   so WASD stays in the same place on AZERTY. Labels use `navigator.keyboard.getLayoutMap()` where
   the browser has it (Chromium), so the key players see as "Z" is shown as "Z". Elsewhere a

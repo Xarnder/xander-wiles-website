@@ -181,6 +181,8 @@ function environment(
 		data[i * ENV_CHANNELS] = forest;
 		data[i * ENV_CHANNELS + 1] = 1;
 		data[i * ENV_CHANNELS + 2] = wet;
+		// Biome plant density: 1 = the pre-biome meadow.
+		data[i * ENV_CHANNELS + 3] = 1;
 	}
 	return { originX, originZ, spacing: size / 2, size: 3, channels: ENV_CHANNELS, data };
 }

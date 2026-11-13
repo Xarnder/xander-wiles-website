@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keyLabel } from '#lib/game/input/keyLabels.svelte';
 	import {
 		createDefaultBuildingSettings,
 		isFloorDetailTool,
@@ -112,16 +113,16 @@
 	let showHeight = $derived(toolId !== 'beam' || orientation === 'horizontal');
 	let hint = $derived(
 		isFloorDetail
-			? 'E or Esc to close — applies to the next piece you place.'
+			? `${keyLabel('build.customise')} or Esc to close — applies to the next piece you place.`
 			: isStairs
-				? 'E or Esc to close — colour, framing, railings, hole, and hole framing apply to the next stair you place. Railings use the Fence / Railing style (slot 2 → Fence / Rail, E); aim that tool at a stair and press R to restyle one already built.'
+				? `${keyLabel('build.customise')} or Esc to close — colour, framing, railings, hole, and hole framing apply to the next stair you place. Railings use the Fence / Railing style (slot 2 → Fence / Rail, ${keyLabel('build.customise')}); aim that tool at a stair and press ${keyLabel('barrier.restyle')} to restyle one already built.`
 				: isWall
-					? 'E or Esc to close — height and width apply to the next wall you place. Length still comes from your clicks.'
+					? `${keyLabel('build.customise')} or Esc to close — height and width apply to the next wall you place. Length still comes from your clicks.`
 					: toolId === 'beam' && orientation === 'vertical'
-						? 'E or Esc to close — a vertical beam spans the wall. R flips to horizontal.'
+						? `${keyLabel('build.customise')} or Esc to close — a vertical beam spans the wall. ${keyLabel('opening.beamOrientation')} flips to horizontal.`
 						: isOpening
-							? 'E or Esc to close — width, height, and sill apply to the next piece you place.'
-							: 'E or Esc to close — sizes apply to the next piece you place.'
+							? `${keyLabel('build.customise')} or Esc to close — width, height, and sill apply to the next piece you place.`
+							: `${keyLabel('build.customise')} or Esc to close — sizes apply to the next piece you place.`
 	);
 	let widthDisplay = $derived.by(() => {
 		void revision;

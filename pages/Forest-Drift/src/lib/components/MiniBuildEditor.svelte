@@ -1,6 +1,41 @@
 <script module lang="ts">
 	import type { MiniBuildDefinition as LaunchDefinition } from '#lib/game/miniBuild/MiniBuildTypes';
 
+	/**
+	 * The editor's keys, most specific first: Shift + arrow resizes before a plain arrow moves, and
+	 * Shift / Alt + R pick an axis before plain R.
+	 */
+	const EDITOR_KEY_ACTIONS = [
+		'miniBuild.duplicate',
+		'miniBuild.addBlock',
+		'miniBuild.delete',
+		'miniBuild.resizeXMinus',
+		'miniBuild.resizeXPlus',
+		'miniBuild.resizeZMinus',
+		'miniBuild.resizeZPlus',
+		'miniBuild.resizeYPlus',
+		'miniBuild.resizeYMinus',
+		'miniBuild.moveXMinus',
+		'miniBuild.moveXPlus',
+		'miniBuild.moveZMinus',
+		'miniBuild.moveZPlus',
+		'miniBuild.moveYPlus',
+		'miniBuild.moveYMinus',
+		'miniBuild.rotateX',
+		'miniBuild.rotateZ',
+		'miniBuild.rotateY',
+		'miniBuild.rotationStep',
+		'miniBuild.mirror',
+		'miniBuild.frame',
+		'miniBuild.selectPrevious',
+		'miniBuild.selectNext',
+		'miniBuild.material1',
+		'miniBuild.material2',
+		'miniBuild.material3',
+		'miniBuild.material4',
+		'miniBuild.help'
+	] as const;
+
 	export type MiniBuildEditorLaunch =
 		| { kind: 'new' }
 		| { kind: 'edit'; designId: string }
@@ -8,6 +43,7 @@
 </script>
 
 <script lang="ts">
+	import { firstMatchingAction, matchesAction } from '#lib/game/input/KeyInput';
 	import { shapeCount, shapeLimit } from '#lib/game/miniBuild/miniBuildShapes';
 	import { metersToGrid, snapAngle, computeBounds } from '#lib/game/miniBuild/miniBuildGrid';
 	import type { Attachment } from 'svelte/attachments';
@@ -358,102 +394,131 @@
 	 */
 	function onKeyDown(event: KeyboardEvent) {
 		event.stopPropagation();
-		const mod = event.metaKey || event.ctrlKey;
 		if (namePrompt || confirmDiscard) {
-			if (event.code === 'Escape') {
+			if (matchesAction(event, 'ui.back')) {
 				namePrompt = null;
 				confirmDiscard = false;
 			}
 			return;
 		}
-		if (mod && event.code === 'KeyS') {
+		// Save, undo and redo work even while typing in a field (they are chords, never text).
+		if (matchesAction(event, 'miniBuild.save')) {
 			event.preventDefault();
 			void save({ mode: 'save', stay: true });
 			return;
 		}
-		if (mod && event.code === 'KeyZ') {
-			event.preventDefault();
-			run(event.shiftKey ? editor.redo() : editor.undo());
-			return;
-		}
-		if (mod && event.code === 'KeyY') {
+		if (matchesAction(event, 'miniBuild.redo')) {
 			event.preventDefault();
 			run(editor.redo());
 			return;
 		}
-		if (isTyping(event.target)) {
-			if (event.code === 'Escape') (event.target as HTMLElement).blur();
-			return;
-		}
-		if (mod && event.code === 'KeyD') {
+		if (matchesAction(event, 'miniBuild.undo')) {
 			event.preventDefault();
-			run(editor.duplicateSelected());
+			run(editor.undo());
 			return;
 		}
-		if (mod || (event.altKey && event.code !== 'KeyR')) return;
-		const step = event.shiftKey;
-		switch (event.code) {
-			case 'Escape':
-				cancel();
+		if (isTyping(event.target)) {
+			if (matchesAction(event, 'ui.back')) (event.target as HTMLElement).blur();
+			return;
+		}
+		if (matchesAction(event, 'ui.back')) {
+			cancel();
+			return;
+		}
+		const action = firstMatchingAction(event, EDITOR_KEY_ACTIONS);
+		if (!action) return;
+		switch (action) {
+			case 'miniBuild.duplicate':
+				event.preventDefault();
+				run(editor.duplicateSelected());
 				break;
-			case 'KeyN':
+			case 'miniBuild.addBlock':
 				run(editor.addBlock());
 				break;
-			case 'Delete':
-			case 'Backspace':
+			case 'miniBuild.delete':
 				event.preventDefault();
 				run(editor.deleteSelected());
 				break;
-			case 'ArrowLeft':
+			case 'miniBuild.resizeXMinus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('x', -1) : editor.moveSelected({ x: -1 }));
+				run(editor.resizeSelected('x', -1));
 				break;
-			case 'ArrowRight':
+			case 'miniBuild.resizeXPlus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('x', 1) : editor.moveSelected({ x: 1 }));
+				run(editor.resizeSelected('x', 1));
 				break;
-			case 'ArrowUp':
+			case 'miniBuild.resizeZMinus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('z', -1) : editor.moveSelected({ z: -1 }));
+				run(editor.resizeSelected('z', -1));
 				break;
-			case 'ArrowDown':
+			case 'miniBuild.resizeZPlus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('z', 1) : editor.moveSelected({ z: 1 }));
+				run(editor.resizeSelected('z', 1));
 				break;
-			case 'KeyE':
-			case 'PageUp':
+			case 'miniBuild.resizeYPlus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('y', 1) : editor.moveSelected({ y: 1 }));
+				run(editor.resizeSelected('y', 1));
 				break;
-			case 'KeyQ':
-			case 'PageDown':
+			case 'miniBuild.resizeYMinus':
 				event.preventDefault();
-				run(step ? editor.resizeSelected('y', -1) : editor.moveSelected({ y: -1 }));
+				run(editor.resizeSelected('y', -1));
 				break;
-			case 'KeyR':
-				rotate(event.altKey ? 'z' : event.shiftKey ? 'x' : 'y');
+			case 'miniBuild.moveXMinus':
+				event.preventDefault();
+				run(editor.moveSelected({ x: -1 }));
 				break;
-			case 'KeyT':
+			case 'miniBuild.moveXPlus':
+				event.preventDefault();
+				run(editor.moveSelected({ x: 1 }));
+				break;
+			case 'miniBuild.moveZMinus':
+				event.preventDefault();
+				run(editor.moveSelected({ z: -1 }));
+				break;
+			case 'miniBuild.moveZPlus':
+				event.preventDefault();
+				run(editor.moveSelected({ z: 1 }));
+				break;
+			case 'miniBuild.moveYPlus':
+				event.preventDefault();
+				run(editor.moveSelected({ y: 1 }));
+				break;
+			case 'miniBuild.moveYMinus':
+				event.preventDefault();
+				run(editor.moveSelected({ y: -1 }));
+				break;
+			case 'miniBuild.rotateX':
+				rotate('x');
+				break;
+			case 'miniBuild.rotateZ':
+				rotate('z');
+				break;
+			case 'miniBuild.rotateY':
+				rotate('y');
+				break;
+			case 'miniBuild.rotationStep':
+				// Shift held: step back.
 				cycleStep(event.shiftKey ? -1 : 1);
 				break;
-			case 'KeyM':
+			case 'miniBuild.mirror':
 				run(editor.mirrorDuplicateX());
 				break;
-			case 'KeyF':
+			case 'miniBuild.frame':
 				viewport?.frameDesign();
 				break;
-			case 'Tab':
+			case 'miniBuild.selectNext':
+			case 'miniBuild.selectPrevious':
 				event.preventDefault();
-				editor.selectNext(event.shiftKey ? -1 : 1);
+				editor.selectNext(action === 'miniBuild.selectPrevious' ? -1 : 1);
 				refresh();
 				break;
-			case 'Digit1':
-			case 'Digit2':
-			case 'Digit3':
-			case 'Digit4':
-				run(editor.setBlockMaterial(Number(event.code.slice(5)) - 1));
+			case 'miniBuild.material1':
+			case 'miniBuild.material2':
+			case 'miniBuild.material3':
+			case 'miniBuild.material4':
+				run(editor.setBlockMaterial(Number(action.slice(-1)) - 1));
 				break;
-			case 'Slash':
+			case 'miniBuild.help':
 				showHelp = !showHelp;
 				break;
 		}

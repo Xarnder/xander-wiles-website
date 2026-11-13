@@ -1,4 +1,5 @@
 import { shutterSideFacingPlayer, type WindowShutters } from './windowShutterMath';
+import { matchesAction } from '../input/KeyInput';
 import * as THREE from 'three';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -166,14 +167,13 @@ export class OpeningToolBase implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.repeat) return;
-		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (isTypingTarget(event.target)) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'tool.snap')) {
 			this.snapMode = cycleOpeningDivisionSnap(this.snapMode);
 			this.update();
 			return;
 		}
-		if (event.code === 'KeyR' && this.config.toolId === 'beam') {
+		if (matchesAction(event, 'opening.beamOrientation') && this.config.toolId === 'beam') {
 			this.buildingSettings.beamOrientation = cycleBeamOrientation(
 				this.buildingSettings.beamOrientation
 			);

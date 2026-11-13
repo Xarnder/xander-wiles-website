@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
 import { computeFoundationSelection, vertexSpacingFor, worldToGridCoord } from './foundationMath';
 import type { FoundationManager } from './FoundationManager';
 import type {
@@ -494,7 +495,7 @@ export class FoundationTool implements BuildTool {
 				'',
 				'Look at terrain',
 				'Left click: Select corner',
-				'E: Foundation style'
+				`${keyName('build.customise')}: Foundation style`
 			]
 		};
 	}

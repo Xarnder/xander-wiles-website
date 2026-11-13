@@ -1,4 +1,5 @@
 import type { BuildingLevelDefinition, BuildingLevelUiState } from './BuildingLevelTypes';
+import { matchesAction } from '../input/KeyInput';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings } from './FoundationTypes';
 import type { FoundationBuildingDefinition } from './WallTypes';
@@ -49,10 +50,10 @@ export class BuildingLevelManager {
 	private revision = 0;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		// `]` / `[` are the Mac-friendly pair (Page Up/Down need Fn on most laptop keyboards).
-		if (event.code === 'PageUp' || event.code === 'BracketRight') {
+		// `]` / `[` by default, with Page Up/Down as the second keys (they need Fn on most laptops).
+		if (matchesAction(event, 'build.levelUp')) {
 			this.moveUp();
-		} else if (event.code === 'PageDown' || event.code === 'BracketLeft') {
+		} else if (matchesAction(event, 'build.levelDown')) {
 			this.moveDown();
 		}
 	};

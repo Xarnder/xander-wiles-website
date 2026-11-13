@@ -22,12 +22,17 @@ const CODE = String.raw`(?:Key[A-Z]|Digit\d|Numpad(?:\d|Add|Subtract|Multiply|Di
 /** A quoted code (`'KeyR'`), or a code used as an object key (`Digit1: 1`). */
 const PATTERN = new RegExp(String.raw`['"\`](${CODE})['"\`]|\b(${CODE})\s*:\s*\d`, 'g');
 
+/** The Controls screen captures raw keys on purpose: that's how players choose new ones. */
+const EXEMPT = new Set(['KeyBindingsScreen.svelte']);
+
 function sourceFiles(dir: string): string[] {
 	return readdirSync(dir).flatMap((name) => {
 		const path = join(dir, name);
 		if (statSync(path).isDirectory())
 			return name === '__tests__' || path.endsWith(join('game', 'input')) ? [] : sourceFiles(path);
-		return /\.(ts|svelte)$/.test(name) && !/\.(spec|test)\.ts$/.test(name) ? [path] : [];
+		return /\.(ts|svelte)$/.test(name) && !/\.(spec|test)\.ts$/.test(name) && !EXEMPT.has(name)
+			? [path]
+			: [];
 	});
 }
 
@@ -53,8 +58,9 @@ describe('default key coverage', () => {
 
 	it('finds the key handlers it is meant to check', () => {
 		const found = codesInSource();
-		// A sanity check that the scan still sees the game's keys at all.
-		for (const code of ['KeyW', 'KeyK', 'Digit1', 'BracketLeft', 'F3'])
+		// A sanity check that the scan still sees key names at all: touch buttons and dialogs still
+		// name these as plain strings.
+		for (const code of ['KeyB', 'KeyR', 'ArrowUp', 'Minus', 'Escape'])
 			expect(found.has(code), code).toBe(true);
 	});
 

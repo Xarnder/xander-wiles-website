@@ -13,7 +13,7 @@
 import { hashCellToFloat01 } from '../cellHash';
 import { smoothstep } from '../../terrain/mathUtils';
 import { generatePlantSpecies } from './plantSpecies';
-import type { PlantSpeciesDefinition } from './PlantTypes';
+import type { PlantFamily, PlantSpeciesDefinition } from './PlantTypes';
 
 export const PLANT_REGION_SIZE = 192;
 const SUPER_REGION = 4;
@@ -83,10 +83,36 @@ export function plantSuitability(species: PlantSpeciesDefinition, env: PlantEnvi
 	return shade * moisture * elevation * meadow;
 }
 
+/**
+ * What a biome asks of one region's plants (biomes Phase 4). Absent (biomes off), regions draw
+ * exactly the pre-biome species.
+ */
+export interface RegionPlantPlan {
+	/** Biome index — salts pool seeds, so a desert's pool differs from a forest's in the same area. */
+	biome: number;
+	/** Multiply the region's flower and ground-plant species counts (0 = none of that kind). */
+	flowers: number;
+	ground: number;
+	/** Families pool species are drawn from; omitted = any family (as without biomes). */
+	flowerFamilies?: readonly PlantFamily[];
+	groundFamilies?: readonly PlantFamily[];
+	/** Biome-defining species added to the region (sunflowers, reeds …). */
+	signature: readonly PlantSpeciesDefinition[];
+}
+
+export interface PlantEcologyBiomes {
+	enabled(): boolean;
+	/** The plan for the region whose centre is at (x, z). */
+	regionPlan(worldX: number, worldZ: number): RegionPlantPlan;
+	/** Changes whenever the biome layout does (cached regions are then rebuilt). */
+	generation(): number;
+}
+
 export interface PlantEcologyOptions {
 	seedHash: number;
 	/** Multiplies the per-region species counts (settings × quality preset). */
 	speciesScale: () => number;
+	biomes?: PlantEcologyBiomes;
 }
 
 /** Region species sets and the species they reference, generated and cached on demand. */
@@ -95,11 +121,14 @@ export class PlantEcology {
 	private readonly regions = new Map<string, PlantSpeciesDefinition[]>();
 	private readonly seedHash: number;
 	private readonly speciesScale: () => number;
+	private readonly biomes: PlantEcologyBiomes | null;
 	private lastScale = Number.NaN;
+	private lastBiomeKey = '';
 
 	constructor(options: PlantEcologyOptions) {
 		this.seedHash = options.seedHash;
 		this.speciesScale = options.speciesScale;
+		this.biomes = options.biomes ?? null;
 	}
 
 	/** The (warped) region containing a world point. */
@@ -122,8 +151,11 @@ export class PlantEcology {
 	/** A region's active species set (flowers first). */
 	regionSpecies(rx: number, rz: number): PlantSpeciesDefinition[] {
 		const scale = this.speciesScale();
-		if (scale !== this.lastScale) {
+		const biomesOn = this.biomes?.enabled() ?? false;
+		const biomeKey = biomesOn ? `on:${this.biomes!.generation()}` : 'off';
+		if (scale !== this.lastScale || biomeKey !== this.lastBiomeKey) {
 			this.lastScale = scale;
+			this.lastBiomeKey = biomeKey;
 			this.regions.clear();
 		}
 		const key = `${rx}:${rz}`;
@@ -132,11 +164,22 @@ export class PlantEcology {
 		const sx = Math.floor(rx / SUPER_REGION);
 		const sz = Math.floor(rz / SUPER_REGION);
 		const roll = (channel: number) => hashCellToFloat01(this.seedHash, rx, rz, 1000 + channel);
-		const flowers = Math.max(1, Math.round((3 + Math.floor(roll(0) * 4)) * scale));
-		const ground = Math.max(1, Math.round((2 + Math.floor(roll(1) * 3)) * scale));
+		const plan = biomesOn
+			? this.biomes!.regionPlan((rx + 0.5) * PLANT_REGION_SIZE, (rz + 0.5) * PLANT_REGION_SIZE)
+			: null;
+		// A biome scales the counts; a near-zero share (snowfields) may leave a kind out entirely.
+		const count = (base: number, share: number) =>
+			share < 0.3 && base * share < 0.5 ? 0 : Math.max(1, Math.round(base * scale * share));
+		const flowers = plan
+			? count(3 + Math.floor(roll(0) * 4), plan.flowers)
+			: Math.max(1, Math.round((3 + Math.floor(roll(0) * 4)) * scale));
+		const ground = plan
+			? count(2 + Math.floor(roll(1) * 3), plan.ground)
+			: Math.max(1, Math.round((2 + Math.floor(roll(1) * 3)) * scale));
 		const chosen = [
-			...this.draw(sx, sz, 'flower', POOL_FLOWERS, flowers, roll),
-			...this.draw(sx, sz, 'ground', POOL_GROUND, ground, (c) => roll(c + 500))
+			...this.draw(sx, sz, 'flower', POOL_FLOWERS, flowers, roll, plan),
+			...this.draw(sx, sz, 'ground', POOL_GROUND, ground, (c) => roll(c + 500), plan),
+			...(plan?.signature ?? [])
 		];
 		this.regions.set(key, chosen);
 		if (this.regions.size > 256) this.regions.delete(this.regions.keys().next().value!);
@@ -154,15 +197,17 @@ export class PlantEcology {
 		kind: 'flower' | 'ground',
 		poolSize: number,
 		count: number,
-		roll: (channel: number) => number
+		roll: (channel: number) => number,
+		plan: RegionPlantPlan | null = null
 	): PlantSpeciesDefinition[] {
+		if (count <= 0) return [];
 		const order = Array.from({ length: poolSize }, (_, i) => i).sort(
 			(a, b) => roll(10 + a) - roll(10 + b)
 		);
 		const out: PlantSpeciesDefinition[] = [];
 		for (const index of order) {
 			if (out.length >= count) break;
-			const species = this.poolSpecies(sx, sz, kind, index);
+			const species = this.poolSpecies(sx, sz, kind, index, plan);
 			const keep =
 				species.growth.rarity === 'rare' ? 0.35 : species.growth.rarity === 'uncommon' ? 0.75 : 1;
 			if (roll(40 + index) < keep) out.push(species);
@@ -174,16 +219,25 @@ export class PlantEcology {
 		sx: number,
 		sz: number,
 		kind: 'flower' | 'ground',
-		index: number
+		index: number,
+		plan: RegionPlantPlan | null = null
 	): PlantSpeciesDefinition {
+		// With biomes, the pool also depends on the biome (salted channel), and its families can be
+		// restricted (a desert pool is succulents and dry tufts). Without, seeds are the pre-biome ones.
+		const families = plan ? (kind === 'flower' ? plan.flowerFamilies : plan.groundFamilies) : null;
+		const channel =
+			(kind === 'flower' ? 2000 : 3000) + index + (plan ? 10_000 * (plan.biome + 1) : 0);
 		const seed =
-			Math.floor(
-				hashCellToFloat01(this.seedHash, sx, sz, (kind === 'flower' ? 2000 : 3000) + index) *
-					4294967296
-			) >>> 0 || 1;
+			Math.floor(hashCellToFloat01(this.seedHash, sx, sz, channel) * 4294967296) >>> 0 || 1;
 		let species = this.species.get(seed);
 		if (!species) {
-			species = generatePlantSpecies(seed, { kind });
+			const family =
+				families && families.length > 0
+					? families[Math.floor(hashCellToFloat01(seed, sx, sz, 77) * families.length)]
+					: undefined;
+			species = family
+				? generatePlantSpecies(seed, { kind, family })
+				: generatePlantSpecies(seed, { kind });
 			this.species.set(seed, species);
 			if (this.species.size > 512) this.species.delete(this.species.keys().next().value!);
 		}

@@ -137,6 +137,11 @@ export interface KeyActionDef {
 	 * pieces). Either side may list the other.
 	 */
 	readonly sharesKeyWith?: readonly string[];
+	/**
+	 * Normally an extra Shift is allowed (it's the Run key, and it means "reverse" or "finer" for
+	 * some actions). With this set, Shift must match the binding exactly.
+	 */
+	readonly exactShift?: boolean;
 }
 
 type ActionInput<Id extends string> = Omit<KeyActionDef, 'id' | 'defaults' | 'kind'> & {
@@ -948,28 +953,32 @@ export const KEY_ACTIONS = [
 		description: 'Open speech options and narrator settings.',
 		category: 'interface',
 		contexts: ['global'],
-		keys: [key('F6')]
+		keys: [key('F6')],
+		exactShift: true
 	}),
 	action({
 		id: 'tutorial.previous',
 		label: 'Previous tutorial instruction',
 		category: 'interface',
 		contexts: ['global'],
-		keys: [key('F7')]
+		keys: [key('F7')],
+		exactShift: true
 	}),
 	action({
 		id: 'tutorial.autoStart',
 		label: 'Start narrated tutorial',
 		category: 'interface',
 		contexts: ['global'],
-		keys: [key('F8')]
+		keys: [key('F8')],
+		exactShift: true
 	}),
 	action({
 		id: 'tutorial.next',
 		label: 'Next tutorial instruction',
 		category: 'interface',
 		contexts: ['global'],
-		keys: [key('F9')]
+		keys: [key('F9')],
+		exactShift: true
 	}),
 	action({
 		id: 'ui.back',

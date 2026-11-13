@@ -1,4 +1,6 @@
 import { wallCornersForPlacement } from './wallCornerSnap';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import { snapToNearestCorner } from './polygonDrawSnap';
 import * as THREE from 'three';
 import {
@@ -119,7 +121,7 @@ export class WallTool implements BuildTool {
 	private snapMode: SnapMode = 'wall-corners';
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || event.code !== 'KeyB') return;
+		if (!this.active || !matchesAction(event, 'tool.snap')) return;
 		this.snapMode = cycleSnapMode(this.snapMode, this.firstPoint ? 1 : 0, true);
 		this.refreshVisuals();
 	};
@@ -590,7 +592,7 @@ export class WallTool implements BuildTool {
 				`Grid: ${this.buildingSettings.buildingGridSize.toFixed(2)}m`,
 				'Left click: Select start point',
 				...this.snapHudLines(),
-				'B: Cycle snap',
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E customise'
 			]
 		};
@@ -609,7 +611,7 @@ export class WallTool implements BuildTool {
 				'',
 				'Select end point',
 				...this.snapHudLines(),
-				'B: Cycle snap',
+				`${keyName('tool.snap')}: Cycle snap`,
 				'Right click: Cancel'
 			]
 		};
@@ -629,7 +631,7 @@ export class WallTool implements BuildTool {
 				reason,
 				'',
 				...this.snapHudLines(),
-				'B: Cycle snap',
+				`${keyName('tool.snap')}: Cycle snap`,
 				'Right click: Cancel'
 			]
 		};
@@ -651,7 +653,7 @@ export class WallTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Left click: Build',
-				'B: Cycle snap',
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E customise',
 				'Right click: Cancel'
 			]

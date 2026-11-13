@@ -11,10 +11,10 @@ import { hashStringToUint32 } from '../../terrain/seededRandom';
 import type { GrassExclusion } from '../grass/GrassManager';
 import { GrassAdaptiveQuality, grassAdaptiveFactors, type GrassLodState } from '../grass/grassLod';
 import type { GrassGrid } from '../grass/grassPlacement';
-import type { VegetationRegionSampler } from '../VegetationRegionSampler';
+import { createForestVariation, type VegetationRegionSampler } from '../VegetationRegionSampler';
 import { generatePlantAtlas, type PlantAtlas } from './plantAtlas';
 import { PlantCardChunk } from './PlantCardChunk';
-import { PlantEcology, plantColony } from './plantEcology';
+import { PlantEcology, plantColony, type PlantEcologyBiomes } from './plantEcology';
 import type { TerrainGroundTint } from '../../terrain/TerrainChunk';
 import { smoothstep } from '../../terrain/mathUtils';
 import {
@@ -28,6 +28,7 @@ import {
 } from './plantMaterial';
 import {
 	ENV_CHANNELS,
+	ENV_DENSITY,
 	ENV_FOREST,
 	ENV_OPENNESS,
 	ENV_WET,
@@ -70,6 +71,13 @@ export interface PlantManagerOptions {
 	waterDepthAt?: (worldX: number, worldZ: number) => number;
 	hasWaterNear?: (minX: number, minZ: number, maxX: number, maxZ: number) => boolean;
 	now?: () => number;
+	/** Biome plants (biomes/BiomePlants.ts); no effect while a world's biomes are off. */
+	biomes?: PlantBiomeSource;
+}
+
+export interface PlantBiomeSource extends PlantEcologyBiomes {
+	densityAt(worldX: number, worldZ: number): number;
+	forestDensity(worldX: number, worldZ: number, variation: number, clearing: number): number;
 }
 
 export interface PlantRenderStats {
@@ -231,7 +239,8 @@ export class PlantManager {
 		this.seedHash = hashStringToUint32(`plants:v${version}:${seed}`, 0x9147);
 		this.ecology = new PlantEcology({
 			seedHash: this.seedHash,
-			speciesScale: () => Math.max(0.2, this.settings.speciesCount * this.quality.speciesScale)
+			speciesScale: () => Math.max(0.2, this.settings.speciesCount * this.quality.speciesScale),
+			biomes: this.options.biomes
 		});
 		this.notifySettingsChanged();
 	}
@@ -316,7 +325,9 @@ export class PlantManager {
 				total += w;
 			}
 			if (total <= 0) return;
-			const amount = Math.min(0.18, total * 0.12 * Math.min(1.5, settings.flowerDensity));
+			let amount = Math.min(0.18, total * 0.12 * Math.min(1.5, settings.flowerDensity));
+			if (this.options.biomes?.enabled())
+				amount *= Math.min(1, this.options.biomes.densityAt(x, z));
 			colors[offset] += (r / total - colors[offset]) * amount;
 			colors[offset + 1] += (g / total - colors[offset + 1]) * amount;
 			colors[offset + 2] += (b / total - colors[offset + 2]) * amount;
@@ -334,6 +345,7 @@ export class PlantManager {
 			if (species.kind !== 'flower') continue;
 			cover += plantColony(species, x, z) * species.growth.density;
 		}
+		if (this.options.biomes?.enabled()) cover *= Math.min(1, this.options.biomes.densityAt(x, z));
 		return Math.min(1, cover * 0.8 * Math.min(1.5, this.settings.flowerDensity));
 	}
 
@@ -785,13 +797,22 @@ export class PlantManager {
 		const spacing = PLANT_CHUNK_SIZE / (nodes - 1);
 		const data = new Float32Array(nodes * nodes * ENV_CHANNELS);
 		const biome = createBiomeWeights();
+		const biomes = this.options.biomes?.enabled() ? this.options.biomes : null;
+		const variation = createForestVariation();
 		for (let z = 0; z < nodes; z++) {
 			for (let x = 0; x < nodes; x++) {
 				const wx = originX + x * spacing;
 				const wz = originZ + z * spacing;
 				this.options.heightSampler.sampleBiomeWeights(wx, wz, biome);
 				const k = (z * nodes + x) * ENV_CHANNELS;
-				data[k + ENV_FOREST] = this.options.vegetationRegionSampler.getForestDensity(wx, wz);
+				if (biomes) {
+					const v = this.options.vegetationRegionSampler.getForestVariation(wx, wz, variation);
+					data[k + ENV_FOREST] = biomes.forestDensity(wx, wz, v.variation, v.clearing);
+					data[k + ENV_DENSITY] = biomes.densityAt(wx, wz);
+				} else {
+					data[k + ENV_FOREST] = this.options.vegetationRegionSampler.getForestDensity(wx, wz);
+					data[k + ENV_DENSITY] = 1;
+				}
 				data[k + ENV_OPENNESS] = Math.min(1, biome.plains + biome.hills * 0.6);
 				let wet = 0;
 				if (wetNodes) {

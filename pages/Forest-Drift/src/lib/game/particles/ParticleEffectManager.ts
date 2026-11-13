@@ -180,7 +180,12 @@ export class ParticleEffectManager {
 		const share = this.enabled ? Math.floor(this.budget * this.profile.fieldShare) : 0;
 		const granted = Math.max(
 			0,
-			Math.min(Math.floor(wanted), field.capacity, share - others, this.budget - this.pooledActive - others)
+			Math.min(
+				Math.floor(wanted),
+				field.capacity,
+				share - others,
+				this.budget - this.pooledActive - others
+			)
 		);
 		field.count = granted;
 		field.renderer?.setCount(granted);
@@ -402,7 +407,8 @@ export class ParticleEffectManager {
 	/** Every material this manager owns (shadow/fog registration is not needed: particles are unshadowed). */
 	getMaterials(): THREE.Material[] {
 		const materials: THREE.Material[] = [...this.renderers.values()].map((r) => r.material);
-		for (const field of this.fields.values()) if (field.renderer) materials.push(field.renderer.material);
+		for (const field of this.fields.values())
+			if (field.renderer) materials.push(field.renderer.material);
 		return materials;
 	}
 

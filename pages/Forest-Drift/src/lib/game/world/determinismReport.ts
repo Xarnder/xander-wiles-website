@@ -1,3 +1,12 @@
+import { BiomeField } from '../biomes/BiomeField';
+import { BiomeTrees } from '../biomes/BiomeTrees';
+import { TreeSpeciesSelector } from '../vegetation/trees/TreeSpeciesSelector';
+import {
+	BIOME_COUNT,
+	createBiomeWeightVector,
+	createClimateSample,
+	createDefaultBiomeSettings
+} from '../biomes/BiomeTypes';
 import { BaseTerrainSampler } from '../hydrology/BaseTerrainSampler';
 import { HydrologySystem } from '../hydrology/HydrologySystem';
 import { createDefaultHydrologySettings } from '../hydrology/HydrologyTypes';
@@ -34,6 +43,10 @@ export interface DeterminismReport {
 	terrain: DeterminismSection;
 	hydrology: DeterminismSection & { lakes: number; rivers: number };
 	trees: DeterminismSection;
+	/** Biome layout with default (enabled) biome settings: dominant biome and climate per point. */
+	biomes: DeterminismSection;
+	/** The same tree cells as `trees`, in a world with biomes on (biome forests and species). */
+	biomeTrees: DeterminismSection;
 }
 
 /** Terrain heights on a 100 × 100 grid covering about 3.7 km × 3.7 km. */
@@ -44,6 +57,9 @@ const WATER_GRID = 64;
 const WATER_SPACING = 31.7;
 /** Tree cells in a 40 × 40 block. */
 const TREE_CELLS = 40;
+/** Biomes on a 64 × 64 grid covering about 12 km × 12 km (several climate cycles). */
+const BIOME_GRID = 64;
+const BIOME_SPACING = 189.7;
 
 export function computeDeterminismReport(seed: string): DeterminismReport {
 	const terrainSettings = createDefaultTerrainSettings();
@@ -104,6 +120,56 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 		}
 	}
 
+	// Biomes read only the pre-water terrain; `terrain` above has no hydrology attached.
+	const biomeField = new BiomeField(terrain, createDefaultBiomeSettings());
+	biomeField.setSeed(seed);
+	const biomeWeights = createBiomeWeightVector();
+	const climate = createClimateSample();
+	const biomeHash = new DualHash();
+	for (let i = 0; i < BIOME_GRID; i++) {
+		for (let j = 0; j < BIOME_GRID; j++) {
+			const x = (i - BIOME_GRID / 2) * BIOME_SPACING + 0.41;
+			const z = (j - BIOME_GRID / 2) * BIOME_SPACING - 0.23;
+			const dominant = biomeField.classifyPoint(x, z, biomeWeights, climate);
+			for (let k = 0; k < BIOME_COUNT; k++) biomeHash.exact(biomeWeights[k]);
+			// Visible decisions: which biome, and the climate behind it (already on a 1/4096 grid).
+			biomeHash.coarse(dominant);
+			biomeHash.coarse(Math.round(climate.temperature * 4096));
+			biomeHash.coarse(Math.round(climate.moisture * 4096));
+		}
+	}
+
+	const biomeTreeSettings = createDefaultVegetationSettings();
+	const biomeSpecies = new TreeSpeciesSelector(biomeTreeSettings.species);
+	const biomeTrees = new BiomeTrees(biomeField);
+	biomeSpecies.setBiomeSource(biomeTrees);
+	const biomeTreeRegions = new VegetationRegionSampler(biomeTreeSettings);
+	biomeTreeRegions.setSeed(seed);
+	const biomeTreeGenerator = new TreePlacementGenerator(
+		terrain,
+		biomeTreeRegions,
+		biomeTreeSettings.trees,
+		{ speciesSelector: biomeSpecies, getPrototypesPerSpecies: () => 4, biomes: biomeTrees }
+	);
+	biomeTreeGenerator.setSeed(seed);
+	const biomeTreeHash = new DualHash();
+	let biomeTreeCount = 0;
+	for (let cx = -TREE_CELLS / 2; cx < TREE_CELLS / 2; cx++) {
+		for (let cz = -TREE_CELLS / 2; cz < TREE_CELLS / 2; cz++) {
+			const tree = biomeTreeGenerator.generateCell(cx, cz);
+			if (!tree) {
+				biomeTreeHash.coarse(-1);
+				continue;
+			}
+			biomeTreeCount++;
+			biomeTreeHash.exact(tree.worldX);
+			biomeTreeHash.exact(tree.scale);
+			biomeTreeHash.coarse(cx * 100_003 + cz);
+			biomeTreeHash.coarse(tree.variant);
+			biomeTreeHash.coarseText(tree.speciesId);
+		}
+	}
+
 	return {
 		seed,
 		terrain: terrainHash.result(TERRAIN_GRID * TERRAIN_GRID),
@@ -112,7 +178,9 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 			lakes: hydrologyStats.lakes,
 			rivers: hydrologyStats.rivers
 		},
-		trees: treeHash.result(treeCount)
+		trees: treeHash.result(treeCount),
+		biomes: biomeHash.result(BIOME_GRID * BIOME_GRID),
+		biomeTrees: biomeTreeHash.result(biomeTreeCount)
 	};
 }
 

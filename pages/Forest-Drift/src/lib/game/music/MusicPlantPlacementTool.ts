@@ -1,4 +1,6 @@
 import { plantMetrics } from './PlantVisualMetrics';
+import { keyName } from '../input/keyNames';
+import { firstMatchingAction } from '../input/KeyInput';
 import { compiledTimeline } from './MusicTimeline';
 import type { MidiImportPlan } from './midi/MidiImportPlan';
 import * as THREE from 'three';
@@ -33,6 +35,19 @@ import {
 import { MusicWaveRenderer } from './MusicWaveRenderer';
 import { validateMusic } from './MusicValidation';
 import { MusicTreeSequencer } from './MusicTreeSequencer';
+
+/** Compose Mode's own keys (the instrument number keys are handled by BuildToolManager). */
+const MUSIC_KEY_ACTIONS = [
+	'music.pitchUp',
+	'music.pitchDown',
+	'music.volumeDown',
+	'music.volumeUp',
+	'music.instrumentPrevious',
+	'music.instrumentNext',
+	'music.shorter',
+	'music.longer',
+	'music.playLoop'
+] as const;
 interface Options {
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
@@ -383,8 +398,8 @@ export class MusicPlantPlacementTool implements BuildTool {
 						? 'Aim at an open patch of earth'
 						: `Duration: ${c.durationSteps} step${c.durationSteps === 1 ? '' : 's'}`,
 					c === null ? '' : `${barBeat(t, c.ringIndex)} → ${barBeat(t, endRingIndex(c))}`,
-					'↑ ↓ Pitch · ← → Vibrancy · , . Duration',
-					'1–5 Instrument · Click: Plant · J Play/Pause · N Exit',
+					`${keyName('music.pitchUp')} ${keyName('music.pitchDown')} Pitch · ${keyName('music.volumeDown')} ${keyName('music.volumeUp')} Vibrancy · ${keyName('music.shorter')} ${keyName('music.longer')} Duration`,
+					`${keyName('music.instrument1')}–${keyName('music.instrument5')} Instrument · Click: Plant · ${keyName('music.playLoop')} Play/Pause · ${keyName('build.musicMode')} Exit`,
 					...(this.debug.showRingIndices || this.debug.showDurationSteps
 						? [
 								`Ring ${c?.ringIndex ?? '—'} → ${c ? endRingIndex(c) : '—'} (max ${c ? maxDurationSteps(t.loop, c.ringIndex) : '—'})`
@@ -539,29 +554,33 @@ export class MusicPlantPlacementTool implements BuildTool {
 			return;
 		const t = this.activeTree!;
 		const n = scaleNotes(t.scale, species[this.speciesIndex]).length;
-		if (e.code === 'ArrowUp' || e.code === 'ArrowDown')
+		const action = firstMatchingAction(e, MUSIC_KEY_ACTIONS);
+		if (action === 'music.pitchUp' || action === 'music.pitchDown')
 			this.growth = Math.max(
 				0,
-				Math.min(1, (Math.round(this.growth * (n - 1)) + (e.code === 'ArrowUp' ? 1 : -1)) / (n - 1))
+				Math.min(
+					1,
+					(Math.round(this.growth * (n - 1)) + (action === 'music.pitchUp' ? 1 : -1)) / (n - 1)
+				)
 			);
-		else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight')
+		else if (action === 'music.volumeDown' || action === 'music.volumeUp')
 			this.vibrancy = Math.max(
 				0,
-				Math.min(1, this.vibrancy + (e.code === 'ArrowRight' ? 0.1 : -0.1))
+				Math.min(1, this.vibrancy + (action === 'music.volumeUp' ? 0.1 : -0.1))
 			);
-		else if (e.code === 'KeyQ' || e.code === 'KeyE') {
-			this.selectSpecies(this.speciesIndex + (e.code === 'KeyE' ? 1 : -1));
+		else if (action === 'music.instrumentPrevious' || action === 'music.instrumentNext') {
+			this.selectSpecies(this.speciesIndex + (action === 'music.instrumentNext' ? 1 : -1));
 			this.onSpeciesChange?.();
-		} else if (e.code === 'Comma' || e.code === 'Period') {
+		} else if (action === 'music.shorter' || action === 'music.longer') {
 			// Clamped loosely here (a generous, ring-agnostic upper bound); `previewAt` re-clamps to the
 			// CURRENT candidate ring's own `maxDurationSteps` every time it runs, which is the precise
 			// bound that actually matters (see its own comment on why `duration` is deliberately raw).
 			const upperBound = Math.max(1, totalSteps(t.loop));
 			this.duration = Math.max(
 				1,
-				Math.min(upperBound, this.duration + (e.code === 'Period' ? 1 : -1))
+				Math.min(upperBound, this.duration + (action === 'music.longer' ? 1 : -1))
 			);
-		} else if (e.code === 'KeyJ') {
+		} else if (action === 'music.playLoop') {
 			const r = this.runtimes.get(t.id)!;
 			if (r.sequencer.playing) r.sequencer.pause();
 			else void this.play();

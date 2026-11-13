@@ -125,7 +125,7 @@ describe('rendering, retaining walls and shared persistence', () => {
 			count++;
 			return h + 1;
 		});
-		chunk.populate(0, 0, 96, sampler, 1, 'normal', null, null, null, {
+		chunk.populate(0, 0, 96, sampler, 1, 'normal', null, null, null, null, {
 			minX: 8,
 			maxX: 12,
 			minZ: 8,
@@ -240,8 +240,8 @@ it('updates a shared chunk edge with matching heights/normals and survives chunk
 			bounds: { minX: 94, maxX: 98, minZ: 46, maxZ: 50 }
 		};
 	edits.apply(stroke);
-	a.populate(0, 0, 96, sampler, 1, 'normal', null, null, null, stroke.bounds);
-	b.populate(1, 0, 96, sampler, 1, 'normal', null, null, null, stroke.bounds);
+	a.populate(0, 0, 96, sampler, 1, 'normal', null, null, null, null, stroke.bounds);
+	b.populate(1, 0, 96, sampler, 1, 'normal', null, null, null, null, stroke.bounds);
 	const ai = 24 * 49 + 48,
 		bi = 24 * 49;
 	for (const attr of ['position', 'normal']) {

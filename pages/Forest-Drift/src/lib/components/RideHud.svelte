@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keyLabel } from '#lib/game/input/keyLabels.svelte';
 	/**
 	 * The creature being ridden (riding plan §11), in the bottom HUD next to the carry chip. Text and
 	 * a seat icon, not colour alone; climbing on and off is announced by the page.
@@ -12,7 +13,9 @@
 	}
 	let { species, seat, touch }: Props = $props();
 	const where = $derived(seat === 'right-shoulder' ? 'on its shoulder' : 'on its shoulders');
-	const hint = $derived(touch ? 'Get off with the button' : 'K to get off');
+	const hint = $derived(
+		touch ? 'Get off with the button' : `${keyLabel('interact.use')} to get off`
+	);
 </script>
 
 <div class="ride-hud" role="img" aria-label={`Riding ${species} ${where}`} data-testid="ride-hud">

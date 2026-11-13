@@ -3,6 +3,7 @@
 	import ForestDriftLogo from './ForestDriftLogo.svelte';
 	import CountrysideBackground from './CountrysideBackground.svelte';
 	import { ownerInviteFor, type OnlineWorldEntry } from '#lib/game/net/mpConfig';
+	import type { BiomeSize } from '#lib/game/biomes/BiomeTypes';
 	import { generateWorldSeed } from '#lib/game/world/seedGenerator';
 	import { relativeTime } from '#lib/ui/relativeTime';
 	import type { WorldMetadata } from '#lib/game/world/WorldTypes';
@@ -19,7 +20,8 @@
 		onPlay: (worldId: string) => void;
 		onPlayDefault?: () => void;
 		onResetDefault?: () => void;
-		onCreate: (name: string, seed: string) => void;
+		/** `biomeSize`: the new world's biome size (decision Q23). */
+		onCreate: (name: string, seed: string, biomeSize: BiomeSize) => void;
 		onRename: (worldId: string, name: string) => void;
 		onDuplicate: (worldId: string) => void;
 		onExport: (worldId: string) => void;
@@ -75,7 +77,7 @@
 
 	type Dialog =
 		| { kind: 'none' }
-		| { kind: 'create'; name: string; seed: string }
+		| { kind: 'create'; name: string; seed: string; biomeSize: BiomeSize }
 		| { kind: 'rename'; worldId: string; name: string }
 		| { kind: 'delete'; worldId: string; name: string }
 		| { kind: 'reset-default' };
@@ -87,15 +89,15 @@
 
 	function openCreateDialog() {
 		openMenuId = null;
-		dialog = { kind: 'create', name: '', seed: generateWorldSeed() };
+		dialog = { kind: 'create', name: '', seed: generateWorldSeed(), biomeSize: 'normal' };
 	}
 
 	function submitCreate(event: SubmitEvent) {
 		event.preventDefault();
 		if (dialog.kind !== 'create') return;
-		const { name, seed } = dialog;
+		const { name, seed, biomeSize } = dialog;
 		dialog = { kind: 'none' };
-		onCreate(name.trim() || 'New World', seed.trim());
+		onCreate(name.trim() || 'New World', seed.trim(), biomeSize);
 	}
 
 	function submitRename(event: SubmitEvent) {
@@ -569,8 +571,17 @@
 						</button>
 					</span>
 				</label>
+				<label>
+					Biome size
+					<select data-testid="create-world-biome-size" bind:value={dialog.biomeSize}>
+						<option value="small">Small: lots of variety close together</option>
+						<option value="normal">Normal</option>
+						<option value="large">Large: wide, sweeping regions</option>
+					</select>
+				</label>
 				<p class="modal-hint">
-					The seed decides the terrain and forests. The same seed always makes the same world.
+					The seed decides the terrain, biomes and forests. The same seed and biome size always make
+					the same world.
 				</p>
 				<div class="modal-buttons">
 					<button type="button" onclick={() => (dialog = { kind: 'none' })}>Cancel</button>
@@ -1130,7 +1141,8 @@
 		opacity: 0.85;
 	}
 
-	.modal input {
+	.modal input,
+	.modal select {
 		padding: 0.5rem 0.6rem;
 		border-radius: 8px;
 		border: 1px solid rgba(234, 246, 255, 0.25);

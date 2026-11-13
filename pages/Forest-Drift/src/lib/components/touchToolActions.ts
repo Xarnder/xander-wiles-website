@@ -4,7 +4,10 @@ export interface TouchToolAction {
 	label: string;
 	aria: string;
 	testId: string;
-	/** `KeyboardEvent.code` dispatched to the active tool. */
+	/**
+	 * Default key (`KeyboardEvent.code`) pressed for the active tool. Touch sends it as a
+	 * default-key press, so it keeps its meaning however the keyboard is rebound.
+	 */
 	code: string;
 	primary?: boolean;
 }
@@ -16,6 +19,7 @@ function has(lines: readonly string[], fragment: string): boolean {
 /**
  * Extra placement controls that the always-on Place / Cancel / Snap / Type / Rotate row does not
  * cover. Each one matches a line the tool already prints, so a new hint does not invent a new key.
+ * Hints name the player's keys, which can be rebound, so matches use the hint's words, not its key.
  */
 export function touchToolActions(
 	hintLines: readonly string[],
@@ -24,7 +28,7 @@ export function touchToolActions(
 	const actions: TouchToolAction[] = [];
 	const add = (action: TouchToolAction) => actions.push(action);
 
-	if (has(hintLines, 'Backspace: Undo')) {
+	if (has(hintLines, ': Undo point')) {
 		add({
 			id: 'undo-pt',
 			label: 'Undo Pt',
@@ -33,7 +37,7 @@ export function touchToolActions(
 			code: 'Backspace'
 		});
 	}
-	if (has(hintLines, 'O: Auto')) {
+	if (has(hintLines, ': Auto / manual offset')) {
 		add({
 			id: 'offset',
 			label: 'Offset',
@@ -42,7 +46,7 @@ export function touchToolActions(
 			code: 'KeyO'
 		});
 	}
-	if (has(hintLines, 'Q: Copy')) {
+	if (has(hintLines, ': Copy its style') || has(hintLines, ': Copy their style')) {
 		add({
 			id: 'copy-style',
 			label: 'Copy',
@@ -51,7 +55,7 @@ export function touchToolActions(
 			code: 'KeyQ'
 		});
 	}
-	if (has(hintLines, 'R: Apply')) {
+	if (has(hintLines, ': Apply th')) {
 		add({
 			id: 'apply-style',
 			label: 'Apply',
@@ -85,7 +89,7 @@ export function touchToolActions(
 			code: 'KeyT'
 		});
 	}
-	if (has(hintLines, 'B    Copy')) {
+	if (options.toolId === 'place-object' && has(hintLines, '  Copy ')) {
 		add({
 			id: 'copy-object',
 			label: 'Copy',
@@ -94,7 +98,7 @@ export function touchToolActions(
 			code: 'KeyB'
 		});
 	}
-	if (has(hintLines, 'F    Edit')) {
+	if (options.toolId === 'place-object' && has(hintLines, '  Edit ')) {
 		add({
 			id: 'edit-object',
 			label: 'Edit',
@@ -119,7 +123,7 @@ export function touchToolActions(
 			code: 'ArrowUp'
 		});
 	}
-	if (has(hintLines, '↑ ↓ Pitch')) {
+	if (has(hintLines, ' Pitch · ')) {
 		add({
 			id: 'pitch-down',
 			label: 'Pitch −',
@@ -163,7 +167,7 @@ export function touchToolActions(
 			code: 'Period'
 		});
 	}
-	if (has(hintLines, 'J Play')) {
+	if (has(hintLines, ' Play/Pause')) {
 		add({
 			id: 'play',
 			label: 'Play',
@@ -202,15 +206,15 @@ export function touchToolActions(
 	return actions;
 }
 
-/** All build tools use B, leaving C reserved for the game’s hold-to-zoom control. */
-export function snapKeyForHints(_hintLines: readonly string[]): 'KeyB' {
+/** All build tools snap on B by default, leaving C reserved for the game’s hold-to-zoom control. */
+export function snapKeyForHints(): 'KeyB' {
 	return 'KeyB';
 }
 
 export function snapLabelForHints(hintLines: readonly string[]): string {
-	return has(hintLines, 'B: Polygon mode')
+	return has(hintLines, ': Polygon mode (Snap)')
 		? 'Polygon'
-		: has(hintLines, 'B path mode')
+		: has(hintLines, ' path mode')
 			? 'Mode'
 			: 'Snap';
 }
@@ -220,6 +224,6 @@ export function variantControl(hintLines: readonly string[]): {
 	label: string;
 	roofShape: boolean;
 } {
-	const roofShape = has(hintLines, 'V: Cycle type');
+	const roofShape = has(hintLines, ': Cycle type');
 	return { label: roofShape ? 'Shape' : 'Type', roofShape };
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
 import type { BuildTool } from './BuildToolManager';
 import type { FoundationManager } from './FoundationManager';
 import type { BuildingLevelManager } from './BuildingLevelManager';
@@ -125,7 +126,7 @@ export class PillarTool implements BuildTool {
 					: hit
 						? 'A pillar already occupies this point'
 						: 'Look at a foundation or selected floor',
-				'E: Customise'
+				`${keyName('build.customise')}: Customise`
 			]
 		});
 	}

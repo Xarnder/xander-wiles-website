@@ -119,4 +119,51 @@ export class VegetationRegionSampler {
 
 		return clamp01(density);
 	}
+
+	/**
+	 * Biomes (Phase 2): local forest variation everywhere, 0..1, with no "is this a forest region"
+	 * threshold — a biome decides how forested it is, this only decides where within that it's
+	 * thicker or thinner (the same mask, groves and clustering as `getForestDensity`). `clearing`
+	 * (0..1) is the separate clearing hole, applied on top so even a dense biome has glades.
+	 */
+	getForestVariation(worldX: number, worldZ: number, out: ForestVariation): ForestVariation {
+		const f = this.settings.forest;
+		let variation = smoothstep(0.2, 0.8, this.sampleForestMaskValue01(worldX, worldZ));
+		if (f.treeClusterStrength > 0) {
+			const clusterFreq = 1 / Math.max(1, f.treeClusterScale);
+			const clusterRaw = fbm2D(
+				this.clusterNoise,
+				worldX * clusterFreq,
+				worldZ * clusterFreq,
+				2,
+				2,
+				0.5,
+				0
+			);
+			variation *= Math.max(0, 1 + clusterRaw * f.treeClusterStrength);
+		}
+		out.variation = clamp01(variation);
+		out.clearing = 0;
+		if (f.clearingStrength > 0) {
+			const clearingFreq = 1 / Math.max(1, f.clearingScale);
+			const clearingNorm =
+				(fbm2D(this.clearingNoise, worldX * clearingFreq, worldZ * clearingFreq, 1, 2, 0.5, 0) +
+					1) *
+				0.5;
+			out.clearing = clamp01(
+				smoothstep(f.clearingThreshold - 0.1, f.clearingThreshold + 0.1, clearingNorm) *
+					f.clearingStrength
+			);
+		}
+		return out;
+	}
+}
+
+export interface ForestVariation {
+	variation: number;
+	clearing: number;
+}
+
+export function createForestVariation(): ForestVariation {
+	return { variation: 0, clearing: 0 };
 }

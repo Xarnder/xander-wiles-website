@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { matchesAction } from '../input/KeyInput';
 import type { MiniBuildSystem } from './MiniBuildSystem';
 import {
 	MINI_BUILD_INTERACTION_RANGE,
@@ -64,8 +65,7 @@ export class MiniBuildInteractionRuntime {
 		window.addEventListener('keydown', this.key, true);
 	}
 	private readonly key = (event: KeyboardEvent) => {
-		if (event.code !== 'KeyK' || event.repeat || event.ctrlKey || event.altKey || event.metaKey)
-			return;
+		if (!matchesAction(event, 'interact.use') || event.repeat) return;
 		const target = event.target as HTMLElement | null;
 		if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
 		if (this.controller.toggle()) {

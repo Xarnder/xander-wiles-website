@@ -32,7 +32,7 @@ import {
 	REGION_WARMTH,
 	type GrassGrid
 } from './grassPlacement';
-import { createGrassRegion, sampleGrassRegion } from './GrassRegionSampler';
+import { createGrassRegion, sampleGrassRegion, type GrassRegion } from './GrassRegionSampler';
 import {
 	GRASS_CHUNK_SIZE,
 	GRASS_GENERATOR_VERSION,
@@ -78,8 +78,27 @@ export interface GrassManagerOptions {
 	 * the plants show. Omitted, grass ignores other vegetation.
 	 */
 	groundCover?: (worldX: number, worldZ: number) => number;
+	/**
+	 * Biomes (biomes/BiomeSurface.ts): when it reports enabled, grass density, height, warmth and
+	 * colour follow the biome. Omitted or off, grass is exactly the pre-biome countryside.
+	 */
+	biomeSurface?: GrassBiomeSurface;
 	/** Atlas tile size (64 is plenty on weak devices). */
 	atlasTileSize?: number;
+}
+
+/** The slice of `BiomeSurface` grass uses. */
+export interface GrassBiomeSurface {
+	enabled(): boolean;
+	applyGrass(worldX: number, worldZ: number, region: GrassRegion): GrassRegion;
+	writeGrassColor(
+		height: number,
+		normalY: number,
+		worldX: number,
+		worldZ: number,
+		out: Float32Array,
+		offset: number
+	): void;
 }
 
 export interface GrassRenderStats {
@@ -630,7 +649,10 @@ export class GrassManager {
 			region,
 			water,
 			exclusions,
-			collectDebug: this.debug.showGrassCandidates
+			collectDebug: this.debug.showGrassCandidates,
+			grassColor: this.options.biomeSurface?.enabled()
+				? this.options.biomeSurface.writeGrassColor.bind(this.options.biomeSurface)
+				: undefined
 		});
 
 		const key = chunkKey(chunkX, chunkZ);
@@ -683,6 +705,7 @@ export class GrassManager {
 		const data = new Float32Array(nodes * nodes * REGION_CHANNELS);
 		const biome = createBiomeWeights();
 		const region = createGrassRegion();
+		const biomeSurface = this.options.biomeSurface?.enabled() ? this.options.biomeSurface : null;
 		const point = createSurfacePoint();
 		for (let z = 0; z < nodes; z++) {
 			for (let x = 0; x < nodes; x++) {
@@ -694,6 +717,7 @@ export class GrassManager {
 					? point.height
 					: this.options.heightSampler.sample(wx, wz);
 				sampleGrassRegion(biome, forest, height, region);
+				if (biomeSurface) biomeSurface.applyGrass(wx, wz, region);
 				const cover = this.options.groundCover?.(wx, wz) ?? 0;
 				const k = (z * nodes + x) * REGION_CHANNELS;
 				data[k + REGION_DENSITY] = region.density * (1 - cover * 0.45);

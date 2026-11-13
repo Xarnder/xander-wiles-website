@@ -470,10 +470,7 @@ describe('raycastLevelConstructionPlane', () => {
 
 describe('raycastStairPlacement', () => {
 	function makeTerrainPlane(): THREE.Mesh {
-		const mesh = new THREE.Mesh(
-			new THREE.PlaneGeometry(400, 400),
-			new THREE.MeshBasicMaterial()
-		);
+		const mesh = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial());
 		mesh.rotation.x = -Math.PI / 2;
 		mesh.updateMatrixWorld(true);
 		return mesh;

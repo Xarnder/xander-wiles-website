@@ -80,6 +80,11 @@
 					and the music garden. Touch controls are available on mobile.
 				</li>
 				<li>
+					<strong>Wander between biomes.</strong> New worlds hold 26 of them, from snowy taiga to jungle,
+					desert and swamp. Each one's name appears as you arrive, and the weather follows the climate:
+					snow where it's cold, rain where it's mild, none in the desert.
+				</li>
+				<li>
 					<strong>Make yourself comfortable.</strong> Settings lets you choose graphics quality, field
 					of view and audio levels. Online lets you join shared adventures when available.
 				</li>

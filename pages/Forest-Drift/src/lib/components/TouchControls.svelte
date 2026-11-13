@@ -316,7 +316,7 @@
 	}
 
 	function onToggleSnap() {
-		scene?.simulateKey(snapKeyForHints(hintLines));
+		scene?.simulateKey(snapKeyForHints());
 	}
 
 	function onRotate() {

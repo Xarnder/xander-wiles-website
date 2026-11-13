@@ -47,7 +47,11 @@ const scratchScale = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
 function batchKey(speciesIndex: number, variant: number, lod: TreeLod): string {
-	const effective = TreePrototypeCache.effectiveVariant(variant, lod);
+	const effective = TreePrototypeCache.effectiveVariant(
+		TREE_SPECIES_IDS[speciesIndex],
+		variant,
+		lod
+	);
 	return `${speciesIndex}:${effective}:${lod}`;
 }
 
@@ -219,7 +223,7 @@ export class TreeChunk {
 			const variant = Number(variantText);
 			const lod = Number(lodText) as TreeLod;
 			const capacity =
-				lod === 3
+				lod >= TreePrototypeCache.sharedFromLod(TREE_SPECIES_IDS[speciesIndex])
 					? (this.prototypeCounts.get(`${speciesIndex}:*`) ?? members.length)
 					: (this.prototypeCounts.get(`${speciesIndex}:${variant}`) ?? members.length);
 			let mesh = this.batches.get(key);

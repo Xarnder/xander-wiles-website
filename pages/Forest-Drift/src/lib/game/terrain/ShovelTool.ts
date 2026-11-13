@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { BuildTool } from '../building/BuildToolManager';
 import type { BuildUiState } from '../building/FoundationTypes';
 import type { BuildUndoManager } from '../building/BuildUndoManager';
@@ -64,8 +66,9 @@ export class ShovelTool implements BuildTool {
 	};
 	private key = (e: KeyboardEvent) => {
 		if (!this.active) return;
-		if (e.code === 'Escape') this.cancel();
-		if (['Minus', 'Equal', 'NumpadSubtract', 'NumpadAdd'].includes(e.code)) this.finish();
+		if (matchesAction(e, 'ui.back')) this.cancel();
+		// Undo / redo act on finished strokes, so close the open one first.
+		if (matchesAction(e, 'build.undo') || matchesAction(e, 'build.redo')) this.finish();
 	};
 	isStrokeOpen(): boolean {
 		return this.direction !== 0;
@@ -219,7 +222,7 @@ export class ShovelTool implements BuildTool {
 			hintLines: [
 				'Shovel · 7',
 				'Left: raise · Right: lower · Hold to shape',
-				'E: brush settings · −: undo · +: redo'
+				`${keyName('build.customise')}: brush settings · ${keyName('build.undo')}: undo · ${keyName('build.redo')}: redo`
 			]
 		});
 	}

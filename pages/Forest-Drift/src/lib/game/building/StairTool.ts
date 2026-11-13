@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import {
 	createActiveLevelWatch,
 	pullActiveLevelChange,
@@ -194,11 +196,11 @@ export class StairTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || this.state !== 'choosing-direction') return;
-		if (event.code === 'ArrowLeft') {
+		if (matchesAction(event, 'stairs.turnLeft')) {
 			this.rotateDirection(-1);
-		} else if (event.code === 'ArrowRight') {
+		} else if (matchesAction(event, 'stairs.turnRight')) {
 			this.rotateDirection(1);
-		} else if (event.code === 'Enter') {
+		} else if (matchesAction(event, 'tool.finish')) {
 			this.confirmStair();
 		}
 	};
@@ -1083,7 +1085,7 @@ export class StairTool implements BuildTool {
 				'STAIRS',
 				'',
 				'Click first corner',
-				'E customise',
+				`${keyName('build.customise')} customise`,
 				...hintExtra
 			]
 		};
@@ -1100,7 +1102,7 @@ export class StairTool implements BuildTool {
 				'STAIRS',
 				'',
 				'Choose opposite corner',
-				'E customise',
+				`${keyName('build.customise')} customise`,
 				'Right click: Cancel'
 			]
 		};
@@ -1154,7 +1156,12 @@ export class StairTool implements BuildTool {
 				`Too small — need at least ${this.buildingSettings.minimumStairWidthCells} × ${this.buildingSettings.minimumStairRunCells} cells`
 			);
 		}
-		lines.push('', 'Click: Confirm footprint', 'E customise', 'Right click: Cancel');
+		lines.push(
+			'',
+			'Click: Confirm footprint',
+			`${keyName('build.customise')} customise`,
+			'Right click: Cancel'
+		);
 		return {
 			toolId: 'stairs',
 			level: this.foundationId ? this.levelManager.getLevelUiState(this.foundationId) : undefined,
@@ -1207,13 +1214,18 @@ export class StairTool implements BuildTool {
 			}
 			lines.push(
 				'',
-				'← / → Change direction',
-				'Enter / Click: Build',
-				'E customise',
+				`${keyName('stairs.turnLeft')} / ${keyName('stairs.turnRight')} Change direction`,
+				`${keyName('tool.finish')} / Click: Build`,
+				`${keyName('build.customise')} customise`,
 				'Right click: Cancel'
 			);
 		} else {
-			lines.push('', 'Enter / Click: Build', 'E customise', 'Right click: Cancel');
+			lines.push(
+				'',
+				`${keyName('tool.finish')} / Click: Build`,
+				`${keyName('build.customise')} customise`,
+				'Right click: Cancel'
+			);
 		}
 		return {
 			toolId: 'stairs',
@@ -1235,7 +1247,7 @@ export class StairTool implements BuildTool {
 				'',
 				reason,
 				'',
-				'← / → Change direction',
+				`${keyName('stairs.turnLeft')} / ${keyName('stairs.turnRight')} Change direction`,
 				'Right click: Cancel'
 			]
 		};

@@ -41,7 +41,9 @@ import type { RgbColor } from '../../materials/ProceduralMaterialTypes';
 export const ENV_FOREST = 0;
 export const ENV_OPENNESS = 1;
 export const ENV_WET = 2;
-export const ENV_CHANNELS = 3;
+/** Biome plant density at a point (exactly 1 without biomes, so the product is unchanged). */
+export const ENV_DENSITY = 3;
+export const ENV_CHANNELS = 4;
 
 const Channel = {
 	JitterX: 0,
@@ -175,6 +177,7 @@ export function generatePlantChunk(input: PlantChunkInput): PlantChunkData {
 				env.openness = sampleGrassGrid(input.environment, x, z, ENV_OPENNESS);
 				env.wet = sampleGrassGrid(input.environment, x, z, ENV_WET);
 				env.height = surface.height;
+				const biomeDensity = sampleGrassGrid(input.environment, x, z, ENV_DENSITY);
 				const flowerSeed = dominantFlowerAt(regionSpecies, x, z, env);
 				let best = 0;
 				let total = 0;
@@ -192,7 +195,8 @@ export function generatePlantChunk(input: PlantChunkInput): PlantChunkData {
 								colony *
 								species.growth.density *
 								kindDensity *
-								quality
+								quality *
+								biomeDensity
 							: 0;
 					weights.push(w);
 					total += w;

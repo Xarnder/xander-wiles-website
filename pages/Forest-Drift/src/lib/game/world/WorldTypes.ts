@@ -1,3 +1,4 @@
+import type { BiomeSettings } from '../biomes/BiomeTypes';
 import type { WeatherSaveState } from '../weather/WeatherTypes';
 import type { CreatureWorldState } from '../creatures/CreatureTypes';
 import type { MusicTreeDefinition, MusicPlantDefinition } from '../music/MusicModel';
@@ -18,7 +19,16 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 9;
+export const CURRENT_WORLD_SCHEMA_VERSION = 10;
+
+/**
+ * Schema versions an ONLINE world may have been published with and still be opened by this build.
+ * A published world is stored at the schema it was published with and is migrated on download, so
+ * an older version is only safe here when its migration can't make two players generate different
+ * worlds. 9 → 10 only adds `environment.biomes` switched off, so it generates identically. Review
+ * each future bump before adding it; never widen this to "anything older".
+ */
+export const ONLINE_COMPATIBLE_SCHEMA_VERSIONS: readonly number[] = [9, 10];
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';
@@ -44,6 +54,12 @@ export interface WorldEnvironmentDefinition {
 	 * under a building that was placed on the old terrain.
 	 */
 	hydrology: HydrologySettings;
+	/**
+	 * Biomes (climate-driven Snowy Taiga, Desert, Jungle …). Regenerated from these settings and the
+	 * seed; nothing per biome is saved. Worlds created before biomes existed migrate with
+	 * `enabled: false`, so they keep looking exactly as they did (decision Q6).
+	 */
+	biomes: BiomeSettings;
 	/**
 	 * The world's logical weather (schedule seed and clock, or a forced weather). Never particles or
 	 * sounds. Absent in worlds saved before weather existed — they start the schedule from the seed.

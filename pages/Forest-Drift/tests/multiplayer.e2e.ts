@@ -275,12 +275,20 @@ test('Owner tab publishes to the real server and manages invites, offline copies
 	await expect(returningRestore).toHaveCount(0);
 	// Known older generators keep their world content and invite access on the new server.
 	const exported = await fetch(`${MP_URL}/w/${worldId}/export`, { headers: auth });
-	const legacyWorld = await exported.json();
-	for (const generatorVersion of [1, 2]) {
+	const exportedWorld = await exported.json();
+	// A world from before biomes (generators 1–3) has them off; the server relabels it to 4.
+	const legacyWorld = {
+		...exportedWorld,
+		environment: {
+			...exportedWorld.environment,
+			biomes: { ...exportedWorld.environment.biomes, enabled: false }
+		}
+	};
+	const publishAt = async (world: unknown, generatorVersion: number) => {
 		const published = await fetch(`${MP_URL}/w`, {
 			method: 'POST',
 			headers: { Authorization: `Bearer ${ADMIN_KEY}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ world: legacyWorld, generatorVersion })
+			body: JSON.stringify({ world, generatorVersion })
 		});
 		expect(published.status).toBe(201);
 		const legacy = (await published.json()) as {
@@ -291,16 +299,26 @@ test('Owner tab publishes to the real server and manages invites, offline copies
 			headers: { Authorization: `Bearer ${legacy.invites.viewer}` }
 		});
 		expect(snapshot.ok).toBe(true);
-		const upgraded = (await snapshot.json()) as {
-			manifest: { generatorVersion: number };
-			rows: unknown[];
-		};
-		expect(upgraded.manifest.generatorVersion).toBe(3);
+		const body = (await snapshot.json()) as { manifest: { generatorVersion: number } };
+		return { legacy, generatorVersion: body.manifest.generatorVersion };
+	};
+	for (const generatorVersion of [1, 2, 3]) {
+		const { legacy, generatorVersion: upgraded } = await publishAt(legacyWorld, generatorVersion);
+		expect(upgraded).toBe(4);
 		const roundTrip = await fetch(`${MP_URL}/w/${legacy.worldId}/export`, {
 			headers: { Authorization: `Bearer ${legacy.invites.owner}` }
 		});
 		expect(await roundTrip.json()).toEqual(legacyWorld);
 	}
+	// A world whose stored data has biomes on is never relabelled: its version stays as published.
+	const biomeWorld = {
+		...exportedWorld,
+		environment: {
+			...exportedWorld.environment,
+			biomes: { ...exportedWorld.environment.biomes, enabled: true }
+		}
+	};
+	expect((await publishAt(biomeWorld, 3)).generatorVersion).toBe(3);
 	await card.getByRole('button', { name: 'Forget', exact: true }).click();
 	await expect(card).toHaveCount(0);
 	// Forget removes a browser bookmark; the online world remains intact on the backend.

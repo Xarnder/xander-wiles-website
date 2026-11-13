@@ -1,3 +1,4 @@
+import type { BiomeSettings } from '../biomes/BiomeTypes';
 import type { BuildingSettings } from '../building/FoundationTypes';
 import type { GraphicsSettings } from '../graphics/GraphicsTypes';
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
@@ -40,6 +41,10 @@ export interface GameSettingsActions {
 	terrainViewDistance: () => void;
 	terrainRendering: () => void;
 	hydrologyStructure?: () => void;
+	/** A biome setting changed (size, biases, rarity, borders): regenerate the ground. */
+	biomeSettings?: () => void;
+	/** Ask the player to confirm switching biomes on or off (decision Q9). */
+	biomeToggleRequest?: () => void;
 	hydrologyVisual?: () => void;
 	hydrologyDebug?: () => void;
 	particles?: () => void;
@@ -86,6 +91,7 @@ export interface GameSettingsActions {
 	graphicsFpsCounter?: () => void;
 	/** Locator bar checkbox (applies live; saved per browser). */
 	graphicsLocatorBar?: () => void;
+	graphicsBiomeNames?: () => void;
 	graphicsExposure: () => void;
 	graphicsAo: () => void;
 	graphicsExport: () => void;
@@ -156,6 +162,8 @@ export interface GameSettingsHost {
 	 * everyone else is a `member`. See `lockOnlineSettings`.
 	 */
 	worldAccess?: 'local' | 'owner' | 'member';
+	/** This world's biome settings (saved in the world; locked online with the rest of the land). */
+	biomes?: BiomeSettings;
 	/** This world's gameplay rules; online, the owner's (assigning applies them). */
 	rules?: { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean };
 	actions: GameSettingsActions;

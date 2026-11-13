@@ -5,6 +5,8 @@ import type { Binding } from '../keyCodes';
 import type { BindingPair } from '../KeyBindingsStore';
 import {
 	ACTION_EVENT_PROPERTY,
+	actionsShareKey,
+	DEFAULT_KEY_EVENT_PROPERTY,
 	createActionEvent,
 	firstMatchingAction,
 	isTypingTarget,
@@ -230,5 +232,48 @@ describe('createActionEvent', () => {
 			withOverrides({ 'build.toggle': [null, null] })
 		);
 		expect(unbound.code).toBe('');
+	});
+});
+
+describe('touch and shared keys', () => {
+	const tap = (code: string): KeyEventLike => ({
+		...press(code),
+		[DEFAULT_KEY_EVENT_PROPERTY]: true
+	});
+
+	it('matches a default-key tap against the defaults, not the profile', () => {
+		const resolve = withOverrides({ 'build.toggle': [key('KeyJ'), null] });
+		expect(matchesAction(tap('KeyG'), 'build.toggle', resolve)).toBe(true);
+		expect(matchesAction(tap('KeyJ'), 'build.toggle', resolve)).toBe(false);
+		// The same tap still means the tool's own default (R rotates, restyles a fence …).
+		expect(matchesAction(tap('KeyR'), 'barrier.restyle', resolve)).toBe(true);
+	});
+
+	it('never counts a default-key tap as a held key', () => {
+		const input = new KeyInput(defaults);
+		input.handleKeyDown(tap('KeyW'));
+		expect(input.isHeld('move.forward')).toBe(false);
+	});
+
+	it('lets an action event reach its on-purpose key partner while they share a key', () => {
+		const event = { ...press(''), [ACTION_EVENT_PROPERTY]: 'build.slotNext' };
+		expect(matchesAction(event, 'roof.riseDown', defaults)).toBe(true);
+		const split = withOverrides({ 'roof.riseDown': [key('KeyI'), null] });
+		expect(matchesAction(event, 'roof.riseDown', split)).toBe(false);
+	});
+
+	it('compares current keys with actionsShareKey', () => {
+		expect(actionsShareKey('roof.footprint', 'build.customise', defaults)).toBe(true);
+		const split = withOverrides({ 'roof.footprint': [key('KeyY'), null] });
+		expect(actionsShareKey('roof.footprint', 'build.customise', split)).toBe(false);
+	});
+
+	it('requires an exact Shift for the tutorial keys, but not for others', () => {
+		expect(matchesAction(press('F8', { shiftKey: true }), 'tutorial.autoStart', defaults)).toBe(
+			false
+		);
+		expect(matchesAction(press('F8'), 'tutorial.autoStart', defaults)).toBe(true);
+		// Holding Shift to run must not stop K from working.
+		expect(matchesAction(press('KeyK', { shiftKey: true }), 'interact.use', defaults)).toBe(true);
 	});
 });

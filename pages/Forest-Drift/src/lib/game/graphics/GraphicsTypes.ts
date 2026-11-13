@@ -350,6 +350,11 @@ export interface GraphicsSettings {
 	 * Graphics → Show locator bar turns it off. Remembered per browser.
 	 */
 	showLocatorBar: boolean;
+	/**
+	 * A brief card naming the biome when the player enters one ("Snowy Taiga"). On by default;
+	 * Graphics → Show biome names turns it off. Remembered per browser.
+	 */
+	showBiomeNames: boolean;
 	/** Live-tunable GTAO look parameters — see `AoTuning`'s own doc comment. */
 	aoTuning: AoTuning;
 	/** Procedural PBR materials on buildings and terrain (see `materials/`). Off = the original flat-colour look, kept for comparison and for very weak devices. */
@@ -420,6 +425,7 @@ export function createDefaultGraphicsSettings(): GraphicsSettings {
 		showRenderStats: false,
 		showFpsCounter: true,
 		showLocatorBar: true,
+		showBiomeNames: true,
 		aoTuning: createDefaultAoTuning(),
 		proceduralMaterials: true,
 		antiTiling: true,

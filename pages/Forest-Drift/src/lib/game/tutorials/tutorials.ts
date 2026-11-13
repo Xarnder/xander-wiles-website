@@ -1,4 +1,19 @@
 import { NARRATOR, type SpeechRequest } from '../speech/types';
+import type { KeyActionId } from '../input/keyActions';
+import { defaultBindings, labelForAction } from '../input/KeyInput';
+
+/**
+ * The key to say for an action. While the default key is in use the script reads exactly as
+ * before (so cached narration still matches); after a rebinding it names the player's key.
+ */
+function key(id: KeyActionId, spoken?: string): string {
+	const label = labelForAction(id);
+	if (spoken && label === labelForAction(id, undefined, { resolve: defaultBindings }))
+		return spoken;
+	return label;
+}
+
+const SLOT_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 export const TUTORIAL_VERSION = 2;
 export type TutorialAction = 'continue' | 'move' | 'build' | 'tool' | 'help';
 export interface Lesson {
@@ -11,9 +26,12 @@ export interface Lesson {
  * Building practice deliberately uses Continue/F9, not a claim that placement succeeded.
  */
 export function lessons(touch: boolean): Lesson[] {
-	const select = (number: string) => (touch ? `Tap hotbar slot ${number}.` : `Press ${number}.`);
+	const select = (number: string) =>
+		touch
+			? `Tap hotbar slot ${number}.`
+			: `Press ${key(`build.slot${SLOT_WORDS.indexOf(number) + 1}` as KeyActionId, number)}.`;
 	const place = touch ? 'Tap Place' : 'Left click';
-	const customise = touch ? 'Tap Customise' : 'Press E';
+	const customise = touch ? 'Tap Customise' : `Press ${key('build.customise')}`;
 	const variant = (name: string) =>
 		touch
 			? `Choose ${name} from the subtool panel.`
@@ -24,7 +42,7 @@ export function lessons(touch: boolean): Lesson[] {
 			'look',
 			touch
 				? 'Swipe on the right side to look around. Aim with the centre crosshair. Continue when you are ready.'
-				: 'Click the world and move your mouse to look around. Aim with the centre crosshair. Press F9 when you are ready.'
+				: `Click the world and move your mouse to look around. Aim with the centre crosshair. Press ${key('tutorial.next')} when you are ready.`
 		),
 		{
 			id: 'move',
@@ -35,13 +53,13 @@ export function lessons(touch: boolean): Lesson[] {
 		},
 		guide(
 			'hotbar',
-			`${touch ? 'Tap Build' : 'Press G'} if the building hotbar is hidden. Its eight numbered slots hold building tools. Select a slot to see its subtools. Your last subtool is remembered.`
+			`${touch ? 'Tap Build' : `Press ${key('build.toggle')}`} if the building hotbar is hidden. Its eight numbered slots hold building tools. Select a slot to see its subtools. Your last subtool is remembered.`
 		),
 		guide(
 			'practice',
 			touch
 				? 'Aim first, then tap Place to confirm. Cancel stops a preview. Try each instruction, then tap Continue. Previous replays the last instruction.'
-				: 'Left click places or confirms. Right click cancels a preview. Try each instruction, then press F9. F7 goes back and replays. Press Escape to free the mouse for menus.'
+				: `Left click places or confirms. Right click cancels a preview. Try each instruction, then press ${key('tutorial.next')}. ${key('tutorial.previous')} goes back and replays. Press Escape to free the mouse for menus.`
 		),
 		guide(
 			'foundation',
@@ -77,7 +95,7 @@ export function lessons(touch: boolean): Lesson[] {
 		),
 		guide(
 			'doors',
-			`${select('three')} ${variant('Door')} Aim at an existing wall. ${customise} to set the door dimensions. ${place} where the preview fits to create a doorway.${touch ? '' : ' Aim at a door and press K to open or close it.'}`
+			`${select('three')} ${variant('Door')} Aim at an existing wall. ${customise} to set the door dimensions. ${place} where the preview fits to create a doorway.${touch ? '' : ` Aim at a door and press ${key('interact.use')} to open or close it.`}`
 		),
 		guide(
 			'windows',
@@ -85,15 +103,15 @@ export function lessons(touch: boolean): Lesson[] {
 		),
 		guide(
 			'beams',
-			`${variant('Beam')} Beams decorate an existing wall without cutting an opening. ${touch ? 'Use the beam settings to choose its orientation.' : 'Press R to switch between vertical and horizontal.'} Aim at the wall and ${place.toLowerCase()} to place the beam.`
+			`${variant('Beam')} Beams decorate an existing wall without cutting an opening. ${touch ? 'Use the beam settings to choose its orientation.' : `Press ${key('opening.beamOrientation')} to switch between vertical and horizontal.`} Aim at the wall and ${place.toLowerCase()} to place the beam.`
 		),
 		guide(
 			'opening-snap',
-			`Doors, windows, and beams snap along the wall to help alignment. ${touch ? 'Use the available snap control and placement settings to adjust the preview.' : 'Press B to change snapping. Press E to adjust the next piece.'} Watch the preview before confirming.`
+			`Doors, windows, and beams snap along the wall to help alignment. ${touch ? 'Use the available snap control and placement settings to adjust the preview.' : `Press ${key('tool.snap')} to change snapping. Press ${key('build.customise')} to adjust the next piece.`} Watch the preview before confirming.`
 		),
 		guide(
 			'ceiling',
-			`${select('four')} ${variant('Ceiling')} Draw the ceiling footprint over your building. Follow the corner prompts. ${touch ? 'Use the height control' : 'Press E to adjust placement height'} before confirming.`
+			`${select('four')} ${variant('Ceiling')} Draw the ceiling footprint over your building. Follow the corner prompts. ${touch ? 'Use the height control' : `Press ${key('build.customise')} to adjust placement height`} before confirming.`
 		),
 		guide(
 			'floor',
@@ -113,7 +131,7 @@ export function lessons(touch: boolean): Lesson[] {
 		),
 		guide(
 			'tiles',
-			`${variant('Tiles')} Add a tiled floor finish. Choose the area using the preview. ${customise} for settings.${touch ? '' : ' Press R to cycle tile patterns.'}`
+			`${variant('Tiles')} Add a tiled floor finish. Choose the area using the preview. ${customise} for settings.${touch ? '' : ` Press ${key('floorDetail.cycle')} to cycle tile patterns.`}`
 		),
 		guide(
 			'carpet',
@@ -135,13 +153,13 @@ export function lessons(touch: boolean): Lesson[] {
 			'finishing',
 			touch
 				? 'The hotbar also has Move, Paint, and Remove buttons. Use these to reposition, recolour, or remove pieces. Cancel leaves the active editing mode.'
-				: 'Use M to move pieces, P to paint, and X to remove. Click the highlighted piece to act. Right click cancels. Minus undoes a recent placement.'
+				: `Use ${key('build.moveMode')} to move pieces, ${key('build.paintMode')} to paint, and ${key('build.removeMode')} to remove. Click the highlighted piece to act. Right click cancels. ${key('build.undo', 'Minus')} undoes a recent placement.`
 		),
 		guide(
 			'help',
 			touch
 				? 'Open Help for the full controls. You can replay this guide from Tutorial at any time.'
-				: 'Press H for the full controls. F6 opens speech options. F8 automatically starts the tutorial. F7 replays the previous instruction, and F9 advances.'
+				: `Press ${key('ui.help')} for the full controls. ${key('tutorial.speechOptions')} opens speech options. ${key('tutorial.autoStart')} automatically starts the tutorial. ${key('tutorial.previous')} replays the previous instruction, and ${key('tutorial.next')} advances.`
 		),
 		guide(
 			'complete',

@@ -33,6 +33,7 @@ import type {
 	WallOpeningDefinition
 } from '../building/WallTypes';
 import type { WallPathDefinition, WallPathSegmentDefinition } from '../building/WallPathTypes';
+import { sanitizeBiomeSettings } from '../biomes/BiomeTypes';
 import { CURRENT_WORLD_SCHEMA_VERSION, type WorldDefinition } from './WorldTypes';
 
 /**
@@ -587,13 +588,18 @@ export function validateWorldDefinition(value: unknown): ValidationResult<WorldD
 	}
 
 	if (!isRecord(value.environment)) return fail('World environment missing');
-	for (const key of ['terrain', 'vegetation', 'sky', 'hydrology'] as const) {
+	for (const key of ['terrain', 'vegetation', 'sky', 'hydrology', 'biomes'] as const) {
 		if (!isRecord(value.environment[key])) return fail(`World environment.${key} missing`);
 	}
 	// Weather is optional (older worlds) and sanitised on load; only its shape is checked here.
 	if (value.environment.weather !== undefined && !isRecord(value.environment.weather)) {
 		return fail('World environment.weather must be an object');
 	}
+	// Biomes: `enabled` must be explicit; every other value is clamped to a safe range and unknown
+	// keys are dropped, so an imported or online world can't stall generation with extreme values.
+	const biomes = sanitizeBiomeSettings(value.environment.biomes);
+	if (!biomes) return fail('Biomes enabled must be a boolean');
+	value.environment.biomes = biomes;
 	const hydrology = value.environment.hydrology as Record<string, unknown>;
 	if (typeof hydrology.enabled !== 'boolean') return fail('Hydrology enabled must be a boolean');
 	if (!isFiniteNumber(hydrology.generatorVersion))

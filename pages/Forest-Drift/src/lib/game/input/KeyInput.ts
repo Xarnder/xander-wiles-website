@@ -15,13 +15,35 @@
  * Touch buttons send a synthetic event naming the action (`createActionEvent`). It matches that
  * action whatever key is bound to it, even none, so touch never breaks when a player rebinds.
  */
-import { anyContextsOverlap, findKeyAction, KEY_ACTIONS, type KeyActionId } from './keyActions';
-import { codeMatches, codesOverlap, formatBinding, isModifierCode, type Binding } from './keyCodes';
+import {
+	anyContextsOverlap,
+	findKeyAction,
+	KEY_ACTIONS,
+	sharesKeyOnPurpose,
+	type KeyActionId
+} from './keyActions';
+import {
+	bindingsCollide,
+	codeMatches,
+	codesOverlap,
+	formatBinding,
+	isModifierCode,
+	type Binding
+} from './keyCodes';
 import type { BindingResolver, BindingSlot } from './conflicts';
 import { getBindings } from './KeyBindingsStore';
 
 /** Property a synthetic (touch) key event carries to name its action. */
 export const ACTION_EVENT_PROPERTY = 'forestAction';
+
+/**
+ * Property marking a synthetic key press that stands for a key's *default* meaning. Touch buttons
+ * send these ("R" in whichever tool is active), so they keep working however keys are rebound.
+ */
+export const DEFAULT_KEY_EVENT_PROPERTY = 'forestDefaultKey';
+
+/** Every action's default keys, ignoring the player's profile. */
+export const defaultBindings: BindingResolver = (id) => findKeyAction(id)?.defaults ?? [null, null];
 
 /** The parts of a `KeyboardEvent` the matcher reads, so tests can pass plain objects. */
 export interface KeyEventLike {
@@ -33,6 +55,7 @@ export interface KeyEventLike {
 	readonly repeat?: boolean;
 	readonly target?: unknown;
 	readonly [ACTION_EVENT_PROPERTY]?: string;
+	readonly [DEFAULT_KEY_EVENT_PROPERTY]?: boolean;
 }
 
 /** The action a synthetic event names, or undefined for a real key press. */
@@ -52,6 +75,16 @@ export function createActionEvent(
 	const [primary, secondary] = resolve(id);
 	const event = new KeyboardEvent(type, { code: (primary ?? secondary)?.code ?? '' });
 	Object.defineProperty(event, ACTION_EVENT_PROPERTY, { value: id });
+	return event;
+}
+
+/**
+ * A `keydown`/`keyup` for `code` that means what that key means by default, whatever the player
+ * has rebound. Used by touch buttons, which mirror the default keyboard controls.
+ */
+export function createDefaultKeyEvent(type: 'keydown' | 'keyup', code: string): KeyboardEvent {
+	const event = new KeyboardEvent(type, { code });
+	Object.defineProperty(event, DEFAULT_KEY_EVENT_PROPERTY, { value: true });
 	return event;
 }
 
@@ -97,10 +130,33 @@ function bindingMatches(
 	if (!codeMatches(binding.code, event.code)) return false;
 	// A lone modifier key (Shift to run) or a hold action: modifiers don't matter.
 	if (hold || isModifierCode(binding.code)) return true;
-	if (!!binding.mod !== (event.ctrlKey || event.metaKey)) return false;
-	if (!!binding.alt !== event.altKey) return false;
-	if (binding.shift) return event.shiftKey;
-	return !event.shiftKey || !shiftChordClaimed(id, binding, resolve);
+	// A missing flag (hand-made events in tests and tools) counts as "not held".
+	if (!!binding.mod !== (!!event.ctrlKey || !!event.metaKey)) return false;
+	if (!!binding.alt !== !!event.altKey) return false;
+	if (binding.shift) return !!event.shiftKey;
+	if (!event.shiftKey) return true;
+	return !findKeyAction(id)?.exactShift && !shiftChordClaimed(id, binding, resolve);
+}
+
+let suspended = 0;
+
+/**
+ * Stops every game key from firing (the Controls screen is choosing keys). Returns a function
+ * that undoes it. Game handlers that run before the screen's own listener still call
+ * `matchesAction`, so this is what keeps K, G and friends quiet while rebinding.
+ */
+export function suspendGameKeys(): () => void {
+	suspended++;
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		suspended--;
+	};
+}
+
+export function gameKeysSuspended(): boolean {
+	return suspended > 0;
 }
 
 /** Does this key event trigger the action, with its current bindings? */
@@ -109,11 +165,38 @@ export function matchesAction(
 	id: KeyActionId,
 	resolve: BindingResolver = getBindings
 ): boolean {
+	if (suspended > 0) return false;
 	const synthetic = actionOfEvent(event);
-	if (synthetic !== undefined) return synthetic === id;
+	if (synthetic !== undefined) {
+		if (synthetic === id) return true;
+		// A touch button for an action that shares its key on purpose (hotbar ↓ and roof rise ↓)
+		// behaves exactly like pressing that key: whichever of the pair is live takes it.
+		const from = findKeyAction(synthetic);
+		const to = findKeyAction(id);
+		return (
+			!!from &&
+			!!to &&
+			sharesKeyOnPurpose(from, to) &&
+			actionsShareKey(from.id as KeyActionId, id, resolve)
+		);
+	}
+	// A touch button's default-key press is matched against the defaults, not the profile.
+	if (event[DEFAULT_KEY_EVENT_PROPERTY]) resolve = defaultBindings;
 	const hold = findKeyAction(id)?.kind === 'hold';
 	return resolve(id).some(
 		(binding) => !!binding && bindingMatches(id, binding, event, hold, resolve)
+	);
+}
+
+/** Are these two actions bound to the same key right now (any slot of each)? */
+export function actionsShareKey(
+	a: KeyActionId,
+	b: KeyActionId,
+	resolve: BindingResolver = getBindings
+): boolean {
+	const right = resolve(b);
+	return resolve(a).some(
+		(left) => !!left && right.some((other) => !!other && bindingsCollide(left, other))
 	);
 }
 
@@ -163,6 +246,9 @@ export class KeyInput {
 	constructor(private readonly resolve: BindingResolver = getBindings) {}
 
 	readonly handleKeyDown = (event: KeyEventLike): void => {
+		// Touch taps of a default key are instant, and that key may mean something else in the
+		// player's profile, so they never count as held.
+		if (event[DEFAULT_KEY_EVENT_PROPERTY]) return;
 		const synthetic = actionOfEvent(event);
 		if (synthetic !== undefined) {
 			this.heldActions.add(synthetic);
@@ -173,6 +259,7 @@ export class KeyInput {
 	};
 
 	readonly handleKeyUp = (event: KeyEventLike): void => {
+		if (event[DEFAULT_KEY_EVENT_PROPERTY]) return;
 		const synthetic = actionOfEvent(event);
 		if (synthetic !== undefined) {
 			this.heldActions.delete(synthetic);
@@ -203,6 +290,7 @@ export class KeyInput {
 
 	/** Is any key bound to this action down right now (or its touch button held)? */
 	isHeld(id: KeyActionId): boolean {
+		if (suspended > 0) return false;
 		if (this.heldActions.has(id)) return true;
 		for (const binding of this.resolve(id)) {
 			if (!binding) continue;

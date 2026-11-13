@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { TreePlacementGenerator, type CellEvaluation } from './TreePlacementGenerator';
+import {
+	TreePlacementGenerator,
+	type CellEvaluation,
+	type TreeBiomeSource
+} from './TreePlacementGenerator';
 import { VegetationRegionSampler } from './VegetationRegionSampler';
 import type { VegetationSettings } from './VegetationTypes';
 import {
@@ -20,7 +24,7 @@ import {
 	type TreeWindUniforms
 } from './trees/treeMaterial';
 import { TreePrototypeCache } from './trees/TreePrototypeCache';
-import { TreeSpeciesSelector } from './trees/TreeSpeciesSelector';
+import { TreeSpeciesSelector, type TreeSpeciesBiomeSource } from './trees/TreeSpeciesSelector';
 import { getTreeSpecies } from './trees/treeSpecies';
 import type { TreeSpeciesDefinition } from './trees/TreeSpeciesTypes';
 import type { FoundationManager } from '../building/FoundationManager';
@@ -125,6 +129,8 @@ export interface TreeManagerOptions {
 	seed: string;
 	/** Rejects trees standing in river channels and lakes. Omitted, placement ignores water. */
 	waterDepthAt?: (worldX: number, worldZ: number) => number;
+	/** Biome forests: density bands and species per biome (no effect while a world's biomes are off). */
+	biomes?: TreeBiomeSource & TreeSpeciesBiomeSource;
 }
 
 /** Horizontal canopy radius at scale 1 (metres) — for keeping crowns clear of buildings. */
@@ -132,6 +138,9 @@ function canopyRadius(species: TreeSpeciesDefinition): number {
 	const canopy = species.canopy;
 	if (canopy.kind === 'blobs') return canopy.width[1] / 2;
 	if (canopy.kind === 'tiers') return canopy.baseRadius[1];
+	if (canopy.kind === 'stalks')
+		return canopy.spread[1] + canopy.leafSize[1] + canopy.lean[1] * canopy.height[1];
+	if (canopy.kind === 'columnar') return canopy.radius[1] + canopy.armReach[1];
 	return canopy.radius[1];
 }
 
@@ -202,6 +211,7 @@ export class TreeManager {
 		this.vegetationRegionSampler = new VegetationRegionSampler(this.settings);
 		this.vegetationRegionSampler.setSeed(options.seed);
 		this.speciesSelector = new TreeSpeciesSelector(this.settings.species);
+		this.speciesSelector.setBiomeSource(options.biomes ?? null);
 		this.treePlacementGenerator = new TreePlacementGenerator(
 			this.terrainHeightSampler,
 			this.vegetationRegionSampler,
@@ -210,7 +220,8 @@ export class TreeManager {
 				speciesSelector: this.speciesSelector,
 				getPrototypesPerSpecies: () => this.settings.rendering.prototypesPerSpecies,
 				getDensityScale: () => this.quality.densityScale,
-				waterDepthAt: options.waterDepthAt
+				waterDepthAt: options.waterDepthAt,
+				biomes: options.biomes
 			}
 		);
 		this.treePlacementGenerator.setSeed(options.seed);

@@ -1,4 +1,8 @@
-import { audioSettingsCategory, tutorialSettingsCategory } from './personalSettingsCatalog';
+import {
+	audioSettingsCategory,
+	controlsSettingsCategory,
+	tutorialSettingsCategory
+} from './personalSettingsCatalog';
 import { HDRI_PRESETS, resolveHdriPreset } from '../sky/hdriPresets';
 import { ensureDayCycleSettings, formatDayClock } from '../sky/dayNightMath';
 import type {
@@ -731,6 +735,94 @@ function lockGroup(groupItem: SettingsGroup, reason: string | undefined): Settin
 	};
 }
 
+/**
+ * World → Biomes. Part of the "world" (land) category, so it's locked in online worlds. Switching
+ * biomes on or off goes through a confirmation (decision Q9) rather than a plain toggle, because it
+ * changes the look of the whole world; the other values regenerate the ground when committed.
+ */
+function biomeGroup(
+	biomes: NonNullable<GameSettingsHost['biomes']>,
+	actions: GameSettingsHost['actions']
+): SettingsGroup {
+	const regenerate = actions.biomeSettings;
+	const fields: SettingsField[] = [];
+	if (actions.biomeToggleRequest) {
+		fields.push({
+			kind: 'button',
+			id: 'world.biomes.toggle',
+			label: biomes.enabled ? 'Turn biomes off…' : 'Turn biomes on…',
+			onClick: actions.biomeToggleRequest
+		});
+	}
+	const off = !biomes.enabled;
+	fields.push(
+		{
+			...selectField(
+				'world.biomes.size',
+				'Biome size',
+				biomes,
+				'size',
+				[
+					{ value: 'small', label: 'Small' },
+					{ value: 'normal', label: 'Normal' },
+					{ value: 'large', label: 'Large' }
+				],
+				regenerate
+			),
+			disabled: off
+		},
+		numberField(
+			'world.biomes.temperatureBias',
+			'Warmer (+) or colder (−)',
+			biomes,
+			'temperatureBias',
+			-0.3,
+			0.3,
+			0.01,
+			undefined,
+			regenerate,
+			off
+		),
+		numberField(
+			'world.biomes.moistureBias',
+			'Wetter (+) or drier (−)',
+			biomes,
+			'moistureBias',
+			-0.3,
+			0.3,
+			0.01,
+			undefined,
+			regenerate,
+			off
+		),
+		numberField(
+			'world.biomes.variantRarity',
+			'Rare biome share',
+			biomes,
+			'variantRarity',
+			0,
+			0.4,
+			0.01,
+			undefined,
+			regenerate,
+			off
+		),
+		numberField(
+			'world.biomes.borderSharpness',
+			'Border sharpness',
+			biomes,
+			'borderSharpness',
+			1,
+			6,
+			0.1,
+			undefined,
+			regenerate,
+			off
+		)
+	);
+	return group('world-biomes', biomes.enabled ? 'Biomes' : 'Biomes (off)', fields);
+}
+
 function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 	const { terrain, vegetation, sky, graphics, building, music, sustain, musicVisual, actions } =
 		host;
@@ -752,6 +844,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 	};
 
 	return [
+		controlsSettingsCategory(),
 		audioSettingsCategory(),
 		tutorialSettingsCategory(),
 		{
@@ -792,6 +885,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						shape
 					)
 				]),
+				...(host.biomes ? [biomeGroup(host.biomes, actions)] : []),
 				group('chunk-loading', 'Chunk loading', [
 					numberField(
 						'world.chunkSize',
@@ -3515,6 +3609,13 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'showLocatorBar',
 						actions.graphicsLocatorBar
 					),
+					boolField(
+						'graphics.biomeNames',
+						'Show biome names',
+						graphics,
+						'showBiomeNames',
+						actions.graphicsBiomeNames
+					),
 					numberField(
 						'graphics.fov',
 						'Field of view (°)',
@@ -3751,8 +3852,10 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'debugView',
 						[
 							{ value: 'normal', label: 'Normal' },
-							{ value: 'biomeColors', label: 'Biome colours' },
-							{ value: 'biomeMask', label: 'Biome mask' },
+							{ value: 'biomeMap', label: 'Biome map' },
+							{ value: 'climate', label: 'Climate (temperature, moisture)' },
+							{ value: 'biomeColors', label: 'Landform colours' },
+							{ value: 'biomeMask', label: 'Landform mask' },
 							{ value: 'elevation', label: 'Elevation' },
 							{ value: 'forestDensity', label: 'Forest density' },
 							{ value: 'terrainPlusForest', label: 'Terrain + forest' },

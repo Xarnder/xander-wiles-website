@@ -109,7 +109,9 @@ describe('weather state and transitions', () => {
 		expect(out.rain).toBe(0);
 		lerpWeatherEnvironment(to, from, 0.5, out);
 		expect(out.rain).toBeLessThan(to.rain * 0.2);
-		expect(out.cloudiness).toBeGreaterThan(from.cloudiness + (to.cloudiness - from.cloudiness) * 0.5);
+		expect(out.cloudiness).toBeGreaterThan(
+			from.cloudiness + (to.cloudiness - from.cloudiness) * 0.5
+		);
 	});
 
 	it('a thunderstorm is more than heavy rain: darker, windier, with lightning', () => {
@@ -117,7 +119,9 @@ describe('weather state and transitions', () => {
 		const storm = envOf('thunderstorm', 1);
 		expect(storm.sunScale).toBeLessThan(rain.sunScale);
 		expect(storm.cloudDarkness).toBeGreaterThan(rain.cloudDarkness);
-		expect(Math.hypot(storm.windX, storm.windZ)).toBeGreaterThan(Math.hypot(rain.windX, rain.windZ));
+		expect(Math.hypot(storm.windX, storm.windZ)).toBeGreaterThan(
+			Math.hypot(rain.windX, rain.windZ)
+		);
 		expect(storm.lightning).toBeGreaterThan(0);
 		expect(rain.lightning).toBe(0);
 		// Still playable: never pitch black.
@@ -303,7 +307,8 @@ describe('precipitation', () => {
 		expect(frames.get(WEATHER_RAIN_FIELD.id)!.shelterEnabled).toBe(true);
 		// Outside again (re-probed within a fifth of a second): nothing hidden.
 		view.x = 20;
-		for (let i = 0; i < 4; i++) precipitation.update(0.1, envOf('rain', 0.8), view, { rain: 1, snow: 1 });
+		for (let i = 0; i < 4; i++)
+			precipitation.update(0.1, envOf('rain', 0.8), view, { rain: 1, snow: 1 });
 		expect(precipitation.shelter.active).toBe(false);
 	});
 
@@ -471,7 +476,9 @@ describe('weather look', () => {
 		const base = resolveEffectiveSky(sky);
 		const snow = applyWeatherToLook(base, envOf('snow', 0.8));
 		const storm = applyWeatherToLook(base, envOf('thunderstorm', 0.8));
-		expect(snow.atmosphere.hemisphereIntensity).toBeGreaterThan(storm.atmosphere.hemisphereIntensity);
+		expect(snow.atmosphere.hemisphereIntensity).toBeGreaterThan(
+			storm.atmosphere.hemisphereIntensity
+		);
 		expect(snow.clouds.brightness).toBeGreaterThan(storm.clouds.brightness);
 	});
 });
@@ -483,7 +490,14 @@ describe('weather save / load', () => {
 			controller.setManual(createWeatherState(type, 0.7), 20);
 			for (let i = 0; i < 25; i++) controller.update(1);
 			const save = JSON.parse(JSON.stringify(controller.save()));
-			expect(Object.keys(save).sort()).toEqual(['allowSnow', 'manual', 'mode', 'seed', 'time', 'version']);
+			expect(Object.keys(save).sort()).toEqual([
+				'allowSnow',
+				'manual',
+				'mode',
+				'seed',
+				'time',
+				'version'
+			]);
 			const restored = new WeatherController(1);
 			restored.load(sanitizeWeatherSave(save)!);
 			expect(restored.state).toEqual(controller.state);
@@ -514,7 +528,9 @@ describe('weather save / load', () => {
 
 	it('rejects junk and keeps old worlds (no weather) valid', () => {
 		expect(sanitizeWeatherSave(null)).toBeNull();
-		expect(sanitizeWeatherSave({ mode: 'manual', manual: { type: 'hail' } })?.mode).toBe('schedule');
+		expect(sanitizeWeatherSave({ mode: 'manual', manual: { type: 'hail' } })?.mode).toBe(
+			'schedule'
+		);
 		const world = richWorld();
 		delete (world.environment as { weather?: unknown }).weather;
 		expect(validateWorldDefinition(world).ok).toBe(true);

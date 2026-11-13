@@ -621,6 +621,66 @@ vec3 fsShore(vec2 p, float stone, float wet, float viewDist, out float roughness
 }
 `;
 
+/**
+ * Biome ground cover, layered into the terrain's ground-cover shader where the terrain mesh's
+ * `aGround` attribute says so (x = snow, y = sand, z = dry soil, w = litter — see
+ * biomes/BiomeSurface.ts). Per pixel, in world metres, fading to the layer average with distance:
+ *
+ *   snow   — soft drifts with blue shadows in the hollows and a faint sparkle up close;
+ *   sand   — wind ripples bent by noise over two grain scales;
+ *   soil   — dry red-tan earth with grit and scattered gravel;
+ *   litter — dark loam speckled with leaves, needles and twigs.
+ *
+ * The cover colours average to `GROUND_LAYER_RGB` in biomeSurfaceProfiles.ts, which the vertex
+ * colours (flat look, far away) use.
+ */
+const GROUND = /* glsl */ `
+vec3 fsGround(vec2 p, vec4 cover, float viewDist, out float roughness) {
+	float detail = 1.0 - smoothstep(22.0, 70.0, viewDist);
+	float total = max(cover.x + cover.y + cover.z + cover.w, 1e-4);
+	vec3 color = vec3(0.0);
+	roughness = 0.0;
+	if (cover.x > 0.001) {
+		float drift = fsFbmN(p * 0.18, 2);
+		vec3 snow = mix(vec3(0.80, 0.85, 0.93), vec3(0.95, 0.96, 0.98), smoothstep(0.25, 0.7, drift));
+		snow *= 0.97 + 0.05 * fsNoise(p * 3.1);
+		float sparkle = step(0.992, fsHash12(floor(p * 28.0))) * detail;
+		snow += sparkle * 0.12;
+		color += snow * cover.x;
+		roughness += mix(0.82, 0.55, sparkle) * cover.x;
+	}
+	if (cover.y > 0.001) {
+		float grain = fsNoise(p * 6.0) * 0.6 + fsNoise(p * 21.0) * 0.4;
+		float bend = fsNoise(p * 0.12) * 9.0 + fsNoise(p * 0.7) * 1.4;
+		float ripple = smoothstep(-0.4, 1.0, sin(dot(p, vec2(0.61, 0.79)) * 2.6 + bend)) * detail;
+		vec3 sand = mix(vec3(0.64, 0.49, 0.29), vec3(0.82, 0.65, 0.41), grain);
+		sand *= 0.92 + 0.12 * ripple;
+		color += sand * cover.y;
+		roughness += 0.98 * cover.y;
+	}
+	if (cover.z > 0.001) {
+		float grit = fsNoise(p * 9.0) * 0.5 + fsNoise(p * 31.0) * 0.5;
+		vec3 soil = mix(vec3(0.36, 0.21, 0.11), vec3(0.52, 0.33, 0.19), grit);
+		soil *= 0.9 + 0.18 * fsFbmN(p * 0.6, 2);
+		float gravel = step(0.78, fsNoise(p * 14.0 + 3.7)) * detail;
+		soil = mix(soil, vec3(0.46, 0.43, 0.38) * (0.85 + 0.3 * fsHash12(floor(p * 14.0))), gravel * 0.7);
+		color += soil * cover.z;
+		roughness += 1.0 * cover.z;
+	}
+	if (cover.w > 0.001) {
+		float leaves = fsNoise(p * 6.5);
+		float twigs = fsNoise(p * 19.0 + 11.0);
+		vec3 litter = mix(vec3(0.11, 0.08, 0.05), vec3(0.22, 0.155, 0.09), leaves);
+		litter = mix(litter, vec3(0.34, 0.20, 0.08), step(0.82, twigs) * detail * 0.6);
+		litter = mix(litter, vec3(0.20, 0.22, 0.09), smoothstep(0.62, 0.8, fsNoise(p * 1.3)) * 0.5);
+		color += litter * cover.w;
+		roughness += 1.0 * cover.w;
+	}
+	roughness /= total;
+	return color / total;
+}
+`;
+
 export function applySurfaceShader(
 	material: THREE.Material,
 	kind: SurfaceShaderKind | null,
@@ -635,6 +695,7 @@ export function applySurfaceShader(
 	}
 	const structured = kind === 'coursed' || kind === 'cellular';
 	const shore = kind === 'cover' && material.userData.fsShore === true;
+	const ground = kind === 'cover' && material.userData.fsGround === true;
 	const hook: THREE.Material['onBeforeCompile'] = (shader) => {
 		Object.assign(shader.uniforms, uniforms);
 		const defines = [
@@ -649,16 +710,18 @@ export function applySurfaceShader(
 				'#include <common>',
 				`#include <common>\nvarying vec2 vFsUv;\nuniform float uFsUvToMetres;\n${
 					shore ? 'attribute vec3 aShore;\nvarying vec3 vFsShore;\n' : ''
-				}`
+				}${ground ? 'attribute vec4 aGround;\nvarying vec4 vFsGround;\n' : ''}`
 			)
 			.replace(
 				'#include <uv_vertex>',
-				`#include <uv_vertex>\nvFsUv = uv * uFsUvToMetres;${shore ? '\nvFsShore = aShore;' : ''}`
+				`#include <uv_vertex>\nvFsUv = uv * uFsUvToMetres;${shore ? '\nvFsShore = aShore;' : ''}${
+					ground ? '\nvFsGround = aGround;' : ''
+				}`
 			);
 
 		let fragment = shader.fragmentShader.replace(
 			'#include <common>',
-			`#include <common>\n${shore ? 'varying vec3 vFsShore;\n' : ''}${defines}\n${COMMON}\n${structured ? STONE : kind === 'cover' ? COVER : ''}${shore ? SHORE : ''}`
+			`#include <common>\n${shore ? 'varying vec3 vFsShore;\n' : ''}${ground ? 'varying vec4 vFsGround;\n' : ''}${defines}\n${COMMON}\n${structured ? STONE : kind === 'cover' ? COVER : ''}${shore ? SHORE : ''}${ground ? GROUND : ''}`
 		);
 		fragment = withNoTile(fragment);
 		if (kind !== 'noTile') {
@@ -666,6 +729,21 @@ export function applySurfaceShader(
 				.replace(
 					'#include <color_fragment>',
 					`#include <color_fragment>\nFsSurface fsSurface = fsEvaluate(vFsUv);\ndiffuseColor.rgb *= fsSurface.color;${
+						ground
+							? `\nfloat fsGroundMask = 0.0;\nfloat fsGroundRough = 1.0;\n{
+	vec4 groundCover = max(vFsGround, vec4(0.0));
+	float groundTotal = groundCover.x + groundCover.y + groundCover.z + groundCover.w;
+	if (groundTotal > 0.002) {
+		// Ragged, pixel-scale edge where bare ground meets grass.
+		fsGroundMask = smoothstep(0.2, 0.8, groundTotal + (fsNoise(vFsUv * 0.9 + 5.3) - 0.5) * 0.4);
+		if (fsGroundMask > 0.001) {
+			vec3 groundColor = fsGround(vFsUv, groundCover, length(vViewPosition), fsGroundRough);
+			diffuseColor.rgb = mix(diffuseColor.rgb, groundColor, fsGroundMask);
+		}
+	}
+}`
+							: ''
+					}${
 						shore
 							? `\nfloat fsShoreMask = 0.0;\nfloat fsShoreRough = 1.0;\n{
 	float shoreWet = clamp(vFsShore.z, 0.0, 1.0);
@@ -683,8 +761,8 @@ export function applySurfaceShader(
 				.replace(
 					'#include <roughnessmap_fragment>',
 					`#include <roughnessmap_fragment>\nroughnessFactor *= fsSurface.roughness;${
-						shore ? '\nroughnessFactor = mix(roughnessFactor, fsShoreRough, fsShoreMask);' : ''
-					}`
+						ground ? '\nroughnessFactor = mix(roughnessFactor, fsGroundRough, fsGroundMask);' : ''
+					}${shore ? '\nroughnessFactor = mix(roughnessFactor, fsShoreRough, fsShoreMask);' : ''}`
 				)
 				.replace(
 					'#include <normal_fragment_maps>',
@@ -704,7 +782,7 @@ export function applySurfaceShader(
 	setOwnShaderHook(
 		material,
 		hook,
-		`fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}${shore ? ':shore' : ''}:wx`,
+		`fs:${kind}:${quality}:${relief ? 'relief' : 'flat'}${shore ? ':shore' : ''}${ground ? ':ground' : ''}:wx`,
 		{ ...uniforms, ...WEATHER_SURFACE_UNIFORMS }
 	);
 }

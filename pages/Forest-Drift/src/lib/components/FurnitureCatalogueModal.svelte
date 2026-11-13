@@ -48,8 +48,7 @@
 				entries: group.entries.filter((item) => {
 					if (!needle) return true;
 					return (
-						item.name.toLowerCase().includes(needle) ||
-						item.category.toLowerCase().includes(needle)
+						item.name.toLowerCase().includes(needle) || item.category.toLowerCase().includes(needle)
 					);
 				})
 			}))

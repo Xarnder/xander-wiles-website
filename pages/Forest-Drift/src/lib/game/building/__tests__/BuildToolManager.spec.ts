@@ -869,7 +869,8 @@ describe('Hotbar slot variants (↑/↓)', () => {
 
 	it('slot 8 is a single Place Object tool that keeps ↑/↓ for its own recent-object cycling', () => {
 		const { torchTool, key, hotbarStates } = buildHarness(pointerLocked);
-		torchTool.isCapturingKey = (code: string) => code === 'ArrowUp' || code === 'ArrowDown';
+		torchTool.capturesKeyOf = (action) =>
+			action === 'build.slotPrevious' || action === 'build.slotNext';
 
 		key('Digit8');
 		expect(torchTool.activateCount).toBe(1);
@@ -1040,13 +1041,13 @@ describe('BuildToolManager placement height (E)', () => {
 	it('lets the roof own E while drawing and opens height once adjustment begins', () => {
 		const { buildToolManager, roofTool, key } = buildHarness(pointerLocked);
 		const capture = vi.fn().mockReturnValue(true);
-		(roofTool as BuildTool).isCapturingKey = capture;
+		(roofTool as BuildTool).capturesKeyOf = capture;
 		key('Digit4');
 		key('ArrowDown');
 		key('ArrowDown');
 		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(false);
-		expect(capture).toHaveBeenCalledWith('KeyE');
+		expect(capture).toHaveBeenCalledWith('build.customise');
 		capture.mockReturnValue(false);
 		key('KeyE');
 		expect(buildToolManager.isPlacementHeightOpen()).toBe(true);

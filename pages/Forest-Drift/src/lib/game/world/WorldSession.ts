@@ -25,6 +25,8 @@ export interface WorldSessionOptions {
 	onStatsUpdate?: (stats: SceneStats) => void;
 	onPointerLockChange?: (locked: boolean) => void;
 	onFlightChange?: (state: FlightState) => void;
+	onBiomeChange?: ThreeSceneOptions['onBiomeChange'];
+	onBiomeToggleRequest?: ThreeSceneOptions['onBiomeToggleRequest'];
 	onHotbarChange?: (state: HotbarUiState) => void;
 	onBuildHudChange?: (hud: BuildUiState | null) => void;
 	onLookedAtDoorChange?: (openingId: string | null) => void;
@@ -91,6 +93,8 @@ export class WorldSession {
 			onStatsUpdate: options.onStatsUpdate,
 			onPointerLockChange: options.onPointerLockChange,
 			onFlightChange: options.onFlightChange,
+			onBiomeChange: options.onBiomeChange,
+			onBiomeToggleRequest: options.onBiomeToggleRequest,
 			onHotbarChange: options.onHotbarChange,
 			onBuildHudChange: options.onBuildHudChange,
 			onLookedAtDoorChange: options.onLookedAtDoorChange,

@@ -24,7 +24,7 @@ describe('furniture placement math', () => {
 		const degrees: number[] = [];
 		for (let i = 0; i < 4; i++) {
 			yaw = cycleFurnitureRotation(yaw);
-			degrees.push((((snapFurnitureRotation(yaw) * 180) / Math.PI) % 360 + 360) % 360);
+			degrees.push(((((snapFurnitureRotation(yaw) * 180) / Math.PI) % 360) + 360) % 360);
 		}
 		expect(degrees).toEqual([90, 180, 270, 0]);
 	});

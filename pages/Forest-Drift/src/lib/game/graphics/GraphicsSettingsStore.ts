@@ -4,6 +4,7 @@ const STORAGE_KEY = 'forest-drift.graphics.v1';
 const FOV_STORAGE_KEY = 'forest-drift.fov.v1';
 const FPS_COUNTER_STORAGE_KEY = 'forest-drift.fps-counter.v1';
 const LOCATOR_BAR_STORAGE_KEY = 'forest-drift.locator-bar.v1';
+const BIOME_NAMES_STORAGE_KEY = 'forest-drift.biome-names.v1';
 
 const VALID_QUALITIES: readonly GraphicsQuality[] = ['low', 'medium', 'high', 'ultra'];
 
@@ -88,6 +89,26 @@ export class GraphicsSettingsStore {
 		if (!storage) return;
 		try {
 			storage.setItem(LOCATOR_BAR_STORAGE_KEY, show ? '1' : '0');
+		} catch {
+			// Only cross-session persistence is lost.
+		}
+	}
+
+	getShowBiomeNames(): boolean {
+		const storage = getStorage();
+		if (!storage) return true;
+		try {
+			return storage.getItem(BIOME_NAMES_STORAGE_KEY) !== '0';
+		} catch {
+			return true;
+		}
+	}
+
+	setShowBiomeNames(show: boolean): void {
+		const storage = getStorage();
+		if (!storage) return;
+		try {
+			storage.setItem(BIOME_NAMES_STORAGE_KEY, show ? '1' : '0');
 		} catch {
 			// Only cross-session persistence is lost.
 		}

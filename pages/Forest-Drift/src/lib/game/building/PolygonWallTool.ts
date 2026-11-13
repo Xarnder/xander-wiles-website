@@ -1,4 +1,6 @@
 import { wallCornersForPlacement } from './wallCornerSnap';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import { snapToNearestCorner } from './polygonDrawSnap';
 import * as THREE from 'three';
 import {
@@ -152,7 +154,7 @@ export class PolygonWallTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'tool.snap')) {
 			// Corner Walls only snaps to existing wall corners or not at all (an axis snap would line
 			// the opposite corner up with the first and flatten the room).
 			this.snapMode =
@@ -166,12 +168,12 @@ export class PolygonWallTool implements BuildTool {
 		}
 		if (this.state !== 'drawing') return;
 		if (this.shape === 'rectangle') {
-			if (event.code === 'Backspace') this.undoLastPoint();
+			if (matchesAction(event, 'tool.undoPoint')) this.undoLastPoint();
 			return;
 		}
-		if (event.code === 'Enter') {
+		if (matchesAction(event, 'tool.finish')) {
 			this.finishOpenPath();
-		} else if (event.code === 'Backspace') {
+		} else if (matchesAction(event, 'tool.undoPoint')) {
 			this.undoLastPoint();
 		}
 	};
@@ -840,7 +842,9 @@ export class PolygonWallTool implements BuildTool {
 				...(problem ? [problem, ''] : []),
 				this.shape === 'rectangle' ? 'Click: First corner' : 'Click to start',
 				...this.snapHudLines(),
-				this.shape === 'rectangle' ? 'B: Snap to wall corners' : 'B: Cycle snap',
+				this.shape === 'rectangle'
+					? `${keyName('tool.snap')}: Snap to wall corners`
+					: `${keyName('tool.snap')}: Cycle snap`,
 				'E customise'
 			]
 		};
@@ -873,7 +877,7 @@ export class PolygonWallTool implements BuildTool {
 					'',
 					...this.snapHudLines(),
 					'Click: Opposite corner',
-					'B: Snap to wall corners',
+					`${keyName('tool.snap')}: Snap to wall corners`,
 					'E customise',
 					'Right click: Cancel'
 				]
@@ -919,9 +923,9 @@ export class PolygonWallTool implements BuildTool {
 				'',
 				...this.snapHudLines(),
 				'Click: Add point',
-				'Enter: Finish',
-				'Backspace: Undo point',
-				'B: Cycle snap',
+				`${keyName('tool.finish')}: Finish`,
+				`${keyName('tool.undoPoint')}: Undo point`,
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E customise',
 				'Right click: Cancel'
 			]
@@ -946,7 +950,13 @@ export class PolygonWallTool implements BuildTool {
 				reason,
 				'',
 				...this.snapHudLines(),
-				...(rectangle ? [] : ['Enter: Finish', 'Backspace: Undo point', 'B: Cycle snap']),
+				...(rectangle
+					? []
+					: [
+							`${keyName('tool.finish')}: Finish`,
+							`${keyName('tool.undoPoint')}: Undo point`,
+							`${keyName('tool.snap')}: Cycle snap`
+						]),
 				'Right click: Cancel'
 			]
 		};

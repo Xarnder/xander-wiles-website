@@ -12,6 +12,8 @@
 	interface Props {
 		worldName: string;
 		seed: string;
+		/** The biome the player is in; null while the world's biomes are off. */
+		biomeName?: string | null;
 		saveStatus: SaveStatus;
 		saveError: string | null;
 		busy: boolean;
@@ -24,6 +26,8 @@
 		onQuit: () => void;
 		onOpenSettings: () => void;
 		onOpenControls: () => void;
+		/** The full-screen key mapping screen. */
+		onOpenKeyBindings: () => void;
 		onOpenCreatureLab: () => void;
 		onOpenDebug: () => void;
 		onOpenMultiplayer: () => void;
@@ -52,6 +56,7 @@
 	const {
 		worldName,
 		seed,
+		biomeName = null,
 		saveStatus,
 		saveError,
 		busy,
@@ -64,6 +69,7 @@
 		onQuit,
 		onOpenSettings,
 		onOpenControls,
+		onOpenKeyBindings,
 		onOpenCreatureLab,
 		onOpenDebug,
 		onOpenMultiplayer,
@@ -196,6 +202,9 @@
 			<p class="pause-eyebrow">TAKE A BREATHER</p>
 			<h2>Paused</h2>
 			<p class="world-line" data-testid="pause-world-name">{worldName}</p>
+			{#if biomeName}
+				<p class="biome-line" data-testid="pause-biome">You're in <strong>{biomeName}</strong></p>
+			{/if}
 			<div class="status-line" data-testid="save-status" data-status={saveStatus}>
 				<span class="dot" data-status={saveStatus}></span>
 				{STATUS_TEXT[saveStatus]}
@@ -219,6 +228,7 @@
 				<div class="tool-grid">
 					<button data-testid="pause-settings" onclick={onOpenSettings}>Settings</button>
 					<button data-testid="pause-controls" onclick={onOpenControls}>Help</button>
+					<button data-testid="pause-key-bindings" onclick={onOpenKeyBindings}>Controls</button>
 					<button data-testid="pause-creature-lab" onclick={onOpenCreatureLab}>Creature Lab</button>
 					<button data-testid="pause-waypoints" onclick={() => (panel = 'waypoints')}>
 						Waypoints
@@ -606,6 +616,13 @@
 		text-align: center;
 		font-size: 0.85rem;
 		opacity: 0.75;
+	}
+
+	.biome-line {
+		margin: 2px 0 0;
+		text-align: center;
+		font-size: 0.82rem;
+		opacity: 0.85;
 	}
 
 	.seed-line {

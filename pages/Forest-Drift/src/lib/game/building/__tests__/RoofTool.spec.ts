@@ -235,11 +235,11 @@ describe('RoofTool footprint placement', () => {
 
 	it('reserves E for drawing mode until height adjustment and preserves rise and rotation controls', () => {
 		const h = harness();
-		expect(h.tool.isCapturingKey('KeyE')).toBe(true);
+		expect(h.tool.capturesKeyOf('build.customise')).toBe(true);
 		h.click(2, 3);
 		h.click(18, 23);
-		expect(h.tool.isCapturingKey('KeyE')).toBe(false);
-		expect(h.tool.isCapturingKey('ArrowUp')).toBe(true);
+		expect(h.tool.capturesKeyOf('build.customise')).toBe(false);
+		expect(h.tool.capturesKeyOf('build.slotPrevious')).toBe(true);
 		h.key('ArrowUp', true);
 		h.key('KeyR');
 		h.tool.onPrimaryAction();

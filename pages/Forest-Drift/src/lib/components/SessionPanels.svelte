@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keyLabel } from '#lib/game/input/keyLabels.svelte';
 	import MultiplayerRoster from './MultiplayerRoster.svelte';
 	import MultiplayerUsage from './MultiplayerUsage.svelte';
 	import type { UsageAccess } from '#lib/game/net/CloudflareUsage';
@@ -109,7 +110,11 @@
 	{#if online}
 		<p>{status} · {players.length} / 20 players</p>
 		<MultiplayerRoster {players} {selfSlot} {trackedPlayerId} {onTrack} />
-		<p class="hint">Tracking is just for you. Stop from the compass or press U while playing.</p>
+		<p class="hint">
+			Tracking is just for you. Stop from the compass or press {keyLabel(
+				'multiplayer.stopTracking'
+			)} while playing.
+		</p>
 		{#if multiplayerOpen}<MultiplayerUsage access={usageAccess} />{/if}
 	{:else}
 		<p>

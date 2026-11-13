@@ -571,5 +571,8 @@ export function applySolidWoodShader(
 		// Rain and snow on exposed decks, paths and framing tops (see weatherSurface.ts).
 		injectWeatherSurface(shader);
 	};
-	setOwnShaderHook(material, hook, `wood:${quality}:wx`, { ...uniforms, ...WEATHER_SURFACE_UNIFORMS });
+	setOwnShaderHook(material, hook, `wood:${quality}:wx`, {
+		...uniforms,
+		...WEATHER_SURFACE_UNIFORMS
+	});
 }

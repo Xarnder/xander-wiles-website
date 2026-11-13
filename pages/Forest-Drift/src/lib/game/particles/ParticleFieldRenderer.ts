@@ -205,8 +205,7 @@ export class ParticleFieldRenderer {
 			transparent: true,
 			depthWrite: false,
 			fog: true,
-			blending:
-				definition.blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending
+			blending: definition.blending === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending
 		});
 		this.material.uniforms.uAtlas.value = getParticleAtlasTexture(atlas);
 		this.material.uniforms.uLight = lightUniform;

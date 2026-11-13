@@ -31,7 +31,7 @@ function latticeHash(x: number, z: number, seed: number): number {
 }
 
 /** Smooth 2D value noise in [0, 1] from absolute world coordinates — seamless across chunks. */
-function groundNoise(x: number, z: number, seed: number): number {
+export function groundNoise(x: number, z: number, seed: number): number {
 	const ix = Math.floor(x);
 	const iz = Math.floor(z);
 	const fx = x - ix;

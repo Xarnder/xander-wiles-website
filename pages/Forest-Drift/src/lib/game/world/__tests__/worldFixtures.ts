@@ -1,4 +1,5 @@
 import { cloneBarrierStyle, getBarrierPreset } from '../../building/BarrierTypes';
+import { createDefaultBiomeSettings } from '../../biomes/BiomeTypes';
 import { createDefaultCreatureState } from '../../creatures/CreaturePersistence';
 import { createDefaultHydrologySettings } from '../../hydrology/HydrologyTypes';
 import { createDefaultSkySettings } from '../../sky/SkyTypes';
@@ -23,7 +24,8 @@ export function defaultEnvironment(): WorldEnvironmentDefinition {
 		terrain: createDefaultTerrainSettings(),
 		vegetation: createDefaultVegetationSettings(),
 		sky: createDefaultSkySettings(),
-		hydrology: createDefaultHydrologySettings()
+		hydrology: createDefaultHydrologySettings(),
+		biomes: createDefaultBiomeSettings()
 	};
 }
 

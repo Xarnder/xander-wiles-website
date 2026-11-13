@@ -58,8 +58,7 @@ export class WeatherEnvironmentController {
 			return this.snow;
 		}
 		const target = env.snow > 0.05 ? Math.min(1, 0.3 + env.snow * 0.8) : 0;
-		const rate =
-			target > this.snow ? (0.15 + env.snow) / 140 : env.rain > 0.05 ? 1 / 70 : 1 / 600;
+		const rate = target > this.snow ? (0.15 + env.snow) / 140 : env.rain > 0.05 ? 1 / 70 : 1 / 600;
 		const step = Math.min(Math.abs(target - this.snow), rate * Math.max(0, deltaSeconds));
 		this.snow = clamp01(this.snow + Math.sign(target - this.snow) * step);
 		return this.snow;
@@ -136,8 +135,7 @@ export function applyWeatherToLook(
 		coverage: Math.min(0.98, Math.max(0.05, look.clouds.coverage + (cloud - 0.3) * 0.75)),
 		opacity: look.clouds.opacity + (1 - look.clouds.opacity) * smoothstep(0.4, 1, cloud),
 		brightness: look.clouds.brightness * (1 - 0.55 * clamp01(env.cloudDarkness)) + f * 1.6,
-		shadowTint:
-			look.clouds.shadowTint + (1 - look.clouds.shadowTint) * clamp01(env.cloudDarkness),
+		shadowTint: look.clouds.shadowTint + (1 - look.clouds.shadowTint) * clamp01(env.cloudDarkness),
 		edgeSoftness: look.clouds.edgeSoftness * (1 + overcast * 0.6),
 		coolTint: clamp01(look.clouds.coolTint + cool * 0.4),
 		warmth: look.clouds.warmth * (1 - overcast * 0.7),
@@ -187,7 +185,12 @@ function toHex(r: number, g: number, b: number): string {
  * Pulls a colour toward a grey of the same luminance (so a night sky stays dark and a noon sky
  * stays bright), cooled toward blue-grey by `cool`, then scaled by `darken`.
  */
-export function weatherColor(hex: string, desaturate: number, cool: number, darken: number): string {
+export function weatherColor(
+	hex: string,
+	desaturate: number,
+	cool: number,
+	darken: number
+): string {
 	const [r, g, b] = parse(hex);
 	const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 	const gr = l * (1 - cool * 0.1);

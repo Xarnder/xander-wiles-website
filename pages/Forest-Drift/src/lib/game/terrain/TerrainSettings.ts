@@ -30,7 +30,11 @@ export type TerrainDebugView =
 	| 'elevation'
 	| 'forestDensity'
 	| 'terrainPlusForest'
-	| 'water';
+	| 'water'
+	/** Each biome's flat colour, blended at borders (biomes/biomeDebugColor.ts). */
+	| 'biomeMap'
+	/** Temperature (blue → red) and moisture (green) behind the biome layout. */
+	| 'climate';
 
 /** Fog now lives in SkySettings' "Sun & Atmosphere" group — see sky/SkyTypes.ts — so it can match the sky's horizon colour without this module needing to know about the sky system. */
 export interface RenderingSettings {

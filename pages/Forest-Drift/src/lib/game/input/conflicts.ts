@@ -8,11 +8,12 @@
  */
 import {
 	anyContextsOverlap,
+	findKeyAction,
 	KEY_ACTIONS,
 	sharesKeyOnPurpose,
 	type KeyActionId
 } from './keyActions';
-import { bindingsCollide, type Binding } from './keyCodes';
+import { bindingsCollide, refusalReason, warningReason, type Binding } from './keyCodes';
 
 export type BindingSlot = 0 | 1;
 
@@ -57,4 +58,45 @@ export function findConflicts(resolve: BindingResolver): KeyConflict[] {
 /** The conflicts one action is part of. */
 export function conflictsFor(id: KeyActionId, conflicts: readonly KeyConflict[]): KeyConflict[] {
 	return conflicts.filter((c) => c.first.id === id || c.second.id === id);
+}
+
+/** What happens if `binding` goes into this action's slot. */
+export interface CandidateCheck {
+	/** Why the key can't be used at all, or null. */
+	readonly refused: string | null;
+	/** An amber caution, or null. */
+	readonly warning: string | null;
+	/** Actions that would then clash with it (can fire at the same time). */
+	readonly conflicts: readonly { readonly id: KeyActionId; readonly slot: BindingSlot }[];
+	/** Actions on the same key that never clash (another tool, or shared on purpose). */
+	readonly harmless: readonly KeyActionId[];
+}
+
+export function checkCandidate(
+	id: KeyActionId,
+	binding: Binding,
+	resolve: BindingResolver,
+	apple?: boolean
+): CandidateCheck {
+	const action = findKeyAction(id);
+	const refused = action?.locked ? 'This control is fixed.' : refusalReason(binding, apple);
+	const conflicts: { id: KeyActionId; slot: BindingSlot }[] = [];
+	const harmless: KeyActionId[] = [];
+	if (action && !refused) {
+		for (const other of KEY_ACTIONS) {
+			if (other.id === id) continue;
+			const pair = resolve(other.id);
+			for (const slot of [0, 1] as const) {
+				const existing = pair[slot];
+				if (!existing || !bindingsCollide(existing, binding)) continue;
+				if (
+					anyContextsOverlap(action.contexts, other.contexts) &&
+					!sharesKeyOnPurpose(action, other)
+				)
+					conflicts.push({ id: other.id, slot });
+				else if (!harmless.includes(other.id)) harmless.push(other.id);
+			}
+		}
+	}
+	return { refused, warning: refused ? null : warningReason(binding, apple), conflicts, harmless };
 }

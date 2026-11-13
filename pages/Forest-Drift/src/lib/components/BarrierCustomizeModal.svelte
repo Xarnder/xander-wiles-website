@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keyLabel } from '#lib/game/input/keyLabels.svelte';
 	import {
 		applyBarrierPreset,
 		BARRIER_BALUSTER_STYLES,
@@ -438,9 +439,11 @@
 		</div>
 
 		<p class="hint">
-			E or Esc to close — applies to the next fence you draw. Aim at an existing fence with the tool
-			and press R to apply these settings to it (Q copies its style here). Base “Auto” follows the
-			ground outdoors, stays level on a floor, and slopes between points on a stair.
+			{keyLabel('build.customise')} or Esc to close — applies to the next fence you draw. Aim at an existing
+			fence with the tool and press {keyLabel('barrier.restyle')} to apply these settings to it ({keyLabel(
+				'barrier.copyStyle'
+			)} copies its style here). Base “Auto” follows the ground outdoors, stays level on a floor, and
+			slopes between points on a stair.
 		</p>
 	</div>
 </div>

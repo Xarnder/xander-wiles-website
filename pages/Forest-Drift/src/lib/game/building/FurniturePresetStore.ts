@@ -128,10 +128,10 @@ export class FurniturePresetStore {
 	remember(kind: FurnitureKind, settings: FurnitureKindSettings): void {
 		this.state.lastKind = kind;
 		this.state.byKind[kind] = { ...settings };
-		this.state.recentKinds = [kind, ...this.state.recentKinds.filter((entry) => entry !== kind)].slice(
-			0,
-			8
-		);
+		this.state.recentKinds = [
+			kind,
+			...this.state.recentKinds.filter((entry) => entry !== kind)
+		].slice(0, 8);
 		this.persist();
 	}
 

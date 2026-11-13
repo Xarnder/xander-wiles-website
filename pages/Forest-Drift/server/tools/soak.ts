@@ -12,7 +12,11 @@
  * Options: --server (default http://localhost:8787), --bots (3), --minutes (5), --interval ms (250).
  */
 import { PROTOCOL_VERSION, GENERATOR_VERSION } from '../../src/lib/game/net/protocol';
-import type { CommitMessage, RejectMessage, ServerJsonMessage } from '../../src/lib/game/net/protocol';
+import type {
+	CommitMessage,
+	RejectMessage,
+	ServerJsonMessage
+} from '../../src/lib/game/net/protocol';
 import { WorldReplica, type ReplicaRow } from '../../src/lib/game/net/WorldReplica';
 import type { WorldOp } from '../../src/lib/game/net/worldEntities';
 
@@ -145,11 +149,16 @@ class Bot {
 					kind: 'furniture',
 					id: target.id,
 					set: { x: Math.random() * 20, rotationY: Math.random() * 6 },
-					seen: { x: this.replica.fieldRev(key, 'x'), rotationY: this.replica.fieldRev(key, 'rotationY') }
+					seen: {
+						x: this.replica.fieldRev(key, 'x'),
+						rotationY: this.replica.fieldRev(key, 'rotationY')
+					}
 				}
 			];
 		} else if (mine.length > 0) {
-			ops = [{ op: 'del', kind: 'furniture', id: mine[Math.floor(Math.random() * mine.length)]!.id }];
+			ops = [
+				{ op: 'del', kind: 'furniture', id: mine[Math.floor(Math.random() * mine.length)]!.id }
+			];
 		} else {
 			return;
 		}
@@ -173,7 +182,8 @@ while (Date.now() < end) {
 	await sleep(interval);
 }
 // Settle: no new edits, wait for the last commits and refusals to arrive.
-for (let i = 0; i < 40 && bots.some((bot) => bot.replica.pendingBatches.length > 0); i++) await sleep(250);
+for (let i = 0; i < 40 && bots.some((bot) => bot.replica.pendingBatches.length > 0); i++)
+	await sleep(250);
 await sleep(500);
 const room = await snapshot();
 const report = {

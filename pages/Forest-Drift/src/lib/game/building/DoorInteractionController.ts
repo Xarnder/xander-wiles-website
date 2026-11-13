@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { matchesAction } from '../input/KeyInput';
 import {
 	DOOR_INTERACT_AIM_RADIUS,
 	DOOR_INTERACT_MAX_DISTANCE,
@@ -65,9 +66,7 @@ export class DoorInteractionController {
 	private readonly leafDirection = new THREE.Vector3();
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (event.code !== 'KeyK' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
-			return;
-		}
+		if (!matchesAction(event, 'interact.use') || event.repeat) return;
 		if (isTypingTarget(event.target)) return;
 		this.toggleLookedAtDoor();
 	};

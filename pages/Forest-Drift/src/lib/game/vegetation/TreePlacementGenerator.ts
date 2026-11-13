@@ -7,7 +7,7 @@ import {
 	type ProceduralTreeDefinition,
 	type TreePlacementSettings
 } from './VegetationTypes';
-import type { VegetationRegionSampler } from './VegetationRegionSampler';
+import { createForestVariation, type VegetationRegionSampler } from './VegetationRegionSampler';
 import { clamp01, smoothstep } from '../terrain/mathUtils';
 import { createHeightSample, type TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import { TREE_WATER_CLEARANCE } from '../hydrology/HydrologyTypes';
@@ -50,6 +50,16 @@ export interface TreePlacementOptions {
 	getDensityScale?: () => number;
 	/** Water-column depth at a world point. Trees deeper than `TREE_WATER_CLEARANCE` are rejected. */
 	waterDepthAt?: (worldX: number, worldZ: number) => number;
+	/**
+	 * Biome forests (biomes/BiomeTrees.ts). While it reports enabled, forest density comes from the
+	 * biome's band; omitted or off, placement is exactly the pre-biome forest.
+	 */
+	biomes?: TreeBiomeSource;
+}
+
+export interface TreeBiomeSource {
+	enabled(): boolean;
+	forestDensity(worldX: number, worldZ: number, variation: number, clearing: number): number;
 }
 
 export interface CellEvaluation {
@@ -79,7 +89,9 @@ export class TreePlacementGenerator {
 	private readonly vegetationRegionSampler: VegetationRegionSampler;
 	private readonly settings: TreePlacementSettings;
 	private readonly speciesSelector: TreeSpeciesSelector;
-	private readonly options: Required<Omit<TreePlacementOptions, 'speciesSelector'>>;
+	private readonly options: Required<Omit<TreePlacementOptions, 'speciesSelector' | 'biomes'>>;
+	private readonly biomes: TreeBiomeSource | null;
+	private readonly variation = createForestVariation();
 	private seedHash = 0;
 
 	constructor(
@@ -98,6 +110,7 @@ export class TreePlacementGenerator {
 			getDensityScale: options.getDensityScale ?? (() => 1),
 			waterDepthAt: options.waterDepthAt ?? (() => 0)
 		};
+		this.biomes = options.biomes ?? null;
 	}
 
 	setSeed(seed: string): void {
@@ -128,7 +141,13 @@ export class TreePlacementGenerator {
 			worldZ
 		};
 
-		const density = this.vegetationRegionSampler.getForestDensity(worldX, worldZ);
+		let density: number;
+		if (this.biomes?.enabled()) {
+			const v = this.vegetationRegionSampler.getForestVariation(worldX, worldZ, this.variation);
+			density = this.biomes.forestDensity(worldX, worldZ, v.variation, v.clearing);
+		} else {
+			density = this.vegetationRegionSampler.getForestDensity(worldX, worldZ);
+		}
 		// The density scale multiplies the acceptance probability against the same roll, so a lower
 		// scale keeps a stable SUBSET of the trees a higher one plants — quality changes never reshuffle.
 		let acceptProbability =

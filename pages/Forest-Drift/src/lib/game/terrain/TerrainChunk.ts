@@ -18,6 +18,37 @@ import type { TerrainSurfaceLattice } from './terrainSurfaceLattice';
 import type { VegetationRegionSampler } from '../vegetation/VegetationRegionSampler';
 
 /**
+ * Biome hooks wired in by ThreeScene (see biomes/). `debug` colours the 'biomeMap' / 'climate'
+ * debug views; `surface`, when it reports enabled, replaces the countryside colour with the biome's
+ * ground and fills the `aGround` cover attribute. With no hooks, or biomes off, chunks are built
+ * exactly as before.
+ */
+export interface TerrainBiomeHooks {
+	debug(
+		view: 'biomeMap' | 'climate',
+		worldX: number,
+		worldZ: number,
+		out: Float32Array,
+		offset: number
+	): void;
+	surface: {
+		enabled(): boolean;
+		writeTerrain(
+			height: number,
+			normalY: number,
+			worldX: number,
+			worldZ: number,
+			shoreCover: number,
+			shoreStone: number,
+			color: Float32Array,
+			colorOffset: number,
+			ground: Float32Array,
+			groundOffset: number
+		): void;
+	};
+}
+
+/**
  * Optional extra colouring of the normal terrain view, applied in place to the vertex colour at
  * `offset` (e.g. distant flower meadows — see PlantManager.terrainTint).
  */
@@ -91,6 +122,8 @@ export const terrainMaterial = new THREE.MeshStandardMaterial({
 });
 /** The grass shader reads `aShore` and replaces the green tint on the river shelf. */
 terrainMaterial.userData.fsShore = true;
+/** …and `aGround` (snow, sand, soil, litter) where a biome has bare ground. */
+terrainMaterial.userData.fsGround = true;
 
 const borderMaterial = new THREE.LineBasicMaterial({ color: 0xff5533 });
 
@@ -115,6 +148,8 @@ export class TerrainChunk {
 	private readonly colors: Float32Array;
 	private readonly uvs: Float32Array;
 	private readonly shores: Float32Array;
+	/** Biome ground cover per vertex: snow, sand, soil, litter (all 0 without biomes). */
+	private readonly grounds: Float32Array;
 	private readonly shoreTint = { cover: 0, stone: 0, wet: 0 };
 
 	private coordSprite: THREE.Sprite | null = null;
@@ -131,6 +166,7 @@ export class TerrainChunk {
 		this.colors = new Float32Array(vertexCount * 3);
 		this.uvs = new Float32Array(vertexCount * 2);
 		this.shores = new Float32Array(vertexCount * 3);
+		this.grounds = new Float32Array(vertexCount * 4);
 
 		this.geometry = new THREE.BufferGeometry();
 		this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
@@ -138,6 +174,7 @@ export class TerrainChunk {
 		this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
 		this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2));
 		this.geometry.setAttribute('aShore', new THREE.BufferAttribute(this.shores, 3));
+		this.geometry.setAttribute('aGround', new THREE.BufferAttribute(this.grounds, 4));
 		this.geometry.setIndex(new THREE.BufferAttribute(getSharedIndices(resolution), 1));
 
 		this.mesh = new THREE.Mesh(this.geometry, terrainMaterial);
@@ -168,6 +205,7 @@ export class TerrainChunk {
 		vegetationRegionSampler: VegetationRegionSampler | null = null,
 		waterAt: ((worldX: number, worldZ: number, out: HydrologySample) => void) | null = null,
 		groundTint: TerrainGroundTint | null = null,
+		biome: TerrainBiomeHooks | null = null,
 		dirty?: { minX: number; maxX: number; minZ: number; maxZ: number }
 	): Generator<void> {
 		this.chunkX = chunkX;
@@ -183,6 +221,8 @@ export class TerrainChunk {
 		const needsBiomeWeights = debugView === 'biomeColors' || debugView === 'terrainPlusForest';
 		const biomeWeights: BiomeWeights | null = needsBiomeWeights ? createBiomeWeights() : null;
 		const waterSample = debugView === 'water' ? createHydrologySample() : null;
+		// Decided once per chunk: a world's biomes are either on or off for the whole build.
+		const biomeSurface = biome?.surface.enabled() ? biome.surface : null;
 
 		for (let zi = 0; zi < verticesPerSide; zi++) {
 			const worldZ = originZ + zi * step;
@@ -207,6 +247,11 @@ export class TerrainChunk {
 				this.shores[shoreIndex] = 0;
 				this.shores[shoreIndex + 1] = 0;
 				this.shores[shoreIndex + 2] = 0;
+				const groundIndex = vertexIndex * 4;
+				this.grounds[groundIndex] = 0;
+				this.grounds[groundIndex + 1] = 0;
+				this.grounds[groundIndex + 2] = 0;
+				this.grounds[groundIndex + 3] = 0;
 
 				switch (debugView) {
 					case 'biomeColors':
@@ -233,6 +278,11 @@ export class TerrainChunk {
 						writeCombinedDebugColor(biomeWeights as BiomeWeights, density, this.colors, p);
 						break;
 					}
+					case 'biomeMap':
+					case 'climate':
+						if (biome) biome.debug(debugView, worldX, worldZ, this.colors, p);
+						else writeScalarDebugColor(0.5, this.colors, p);
+						break;
 					case 'water': {
 						if (waterAt && waterSample) {
 							waterAt(worldX, worldZ, waterSample);
@@ -248,16 +298,30 @@ export class TerrainChunk {
 						this.shores[shoreIndex + 1] = this.shoreTint.stone;
 						this.shores[shoreIndex + 2] = this.shoreTint.wet;
 						// Vertex colours (procedural materials off): beach and wet bed in one flat tint.
-						writeTerrainColor(
-							sample.height,
-							sample.normalY,
-							this.colors,
-							p,
-							worldX,
-							worldZ,
-							Math.max(this.shoreTint.cover, this.shoreTint.wet),
-							this.shoreTint.stone
-						);
+						if (biomeSurface)
+							biomeSurface.writeTerrain(
+								sample.height,
+								sample.normalY,
+								worldX,
+								worldZ,
+								Math.max(this.shoreTint.cover, this.shoreTint.wet),
+								this.shoreTint.stone,
+								this.colors,
+								p,
+								this.grounds,
+								groundIndex
+							);
+						else
+							writeTerrainColor(
+								sample.height,
+								sample.normalY,
+								this.colors,
+								p,
+								worldX,
+								worldZ,
+								Math.max(this.shoreTint.cover, this.shoreTint.wet),
+								this.shoreTint.stone
+							);
 						// Distant meadow colour (flower colonies), never on beaches or steep rock.
 						if (groundTint && this.shoreTint.cover < 0.3 && sample.normalY > 0.8)
 							groundTint(worldX, worldZ, sample.height, this.colors, p);
@@ -272,17 +336,18 @@ export class TerrainChunk {
 				const first = Math.max(0, Math.ceil((dirty.minX - 1 - originX) / step));
 				const last = Math.min(resolution, Math.floor((dirty.maxX + 1 - originX) / step));
 				if (last >= first)
-					for (const name of ['position', 'normal', 'color', 'aShore']) {
-						(this.geometry.getAttribute(name) as THREE.BufferAttribute).addUpdateRange(
-							(zi * verticesPerSide + first) * 3,
-							(last - first + 1) * 3
+					for (const name of ['position', 'normal', 'color', 'aShore', 'aGround']) {
+						const attribute = this.geometry.getAttribute(name) as THREE.BufferAttribute;
+						attribute.addUpdateRange(
+							(zi * verticesPerSide + first) * attribute.itemSize,
+							(last - first + 1) * attribute.itemSize
 						);
 					}
 			}
 			yield;
 		}
 		if (!dirty)
-			for (const name of ['position', 'normal', 'color', 'aShore'])
+			for (const name of ['position', 'normal', 'color', 'aShore', 'aGround'])
 				(this.geometry.getAttribute(name) as THREE.BufferAttribute).clearUpdateRanges();
 
 		this.geometry.attributes.position.needsUpdate = true;
@@ -290,6 +355,7 @@ export class TerrainChunk {
 		this.geometry.attributes.color.needsUpdate = true;
 		if (!dirty) this.geometry.attributes.uv.needsUpdate = true;
 		this.geometry.attributes.aShore.needsUpdate = true;
+		this.geometry.attributes.aGround.needsUpdate = true;
 		this.geometry.computeBoundingBox();
 		this.geometry.computeBoundingSphere();
 

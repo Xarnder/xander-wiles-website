@@ -23,7 +23,7 @@ export function cycleFurnitureRotation(rotationY: number): number {
 }
 
 export function furnitureRotationDegrees(rotationY: number): number {
-	const deg = (((snapFurnitureRotation(rotationY) * 180) / Math.PI) % 360 + 360) % 360;
+	const deg = ((((snapFurnitureRotation(rotationY) * 180) / Math.PI) % 360) + 360) % 360;
 	return Math.round(deg);
 }
 
@@ -116,7 +116,12 @@ export function aabbOverlapsWallRect(
 		minT = Math.min(minT, t);
 		maxT = Math.max(maxT, t);
 	}
-	return minU < rect.halfLength && maxU > -rect.halfLength && minT < rect.halfThickness && maxT > -rect.halfThickness;
+	return (
+		minU < rect.halfLength &&
+		maxU > -rect.halfLength &&
+		minT < rect.halfThickness &&
+		maxT > -rect.halfThickness
+	);
 }
 
 export function furnitureCollisionRect(

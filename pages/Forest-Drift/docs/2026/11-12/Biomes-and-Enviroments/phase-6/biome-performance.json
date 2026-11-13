@@ -1,0 +1,335 @@
+{
+	"label": "phase-6-final",
+	"spots": [
+		{
+			"biome": "jungle",
+			"at": {
+				"x": 451.16729574091295,
+				"z": 3523.230346039531
+			}
+		},
+		{
+			"biome": "bambooJungle",
+			"at": {
+				"x": 751.0055422860439,
+				"z": 4838.058151309846
+			}
+		},
+		{
+			"biome": "darkForest",
+			"at": {
+				"x": -143.99999999999994,
+				"z": 249.41531628991834
+			}
+		},
+		{
+			"biome": "silverwood",
+			"at": {
+				"x": -300.35417287724357,
+				"z": 1896.3616139426642
+			}
+		},
+		{
+			"biome": "cherryGrove",
+			"at": {
+				"x": 150.6247261415343,
+				"z": 1817.7701152441657
+			}
+		},
+		{
+			"biome": "swamp",
+			"at": {
+				"x": -293.90087605638894,
+				"z": 709.5394809686682
+			}
+		},
+		{
+			"biome": "snowyTaiga",
+			"at": {
+				"x": -1948.8561689507187,
+				"z": 2374.6881127303286
+			}
+		},
+		{
+			"biome": "desert",
+			"at": {
+				"x": -2103.136032105273,
+				"z": -1156.208817844116
+			}
+		},
+		{
+			"biome": "snowyPlains",
+			"at": {
+				"x": 3074.4195703663318,
+				"z": 2754.692052725404
+			}
+		}
+	],
+	"errors": [],
+	"results": [
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "baseline forest (biomes off)",
+			"fps": 161.7,
+			"avgFrameMs": 6.19,
+			"p95FrameMs": 11.9,
+			"cpuFrameMs": 6.02,
+			"drawCalls": 477,
+			"triangles": 4158806,
+			"visibleTrees": 944
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "jungle",
+			"fps": 137.9,
+			"avgFrameMs": 7.25,
+			"p95FrameMs": 14.3,
+			"cpuFrameMs": 7.1,
+			"drawCalls": 477,
+			"triangles": 6323746,
+			"visibleTrees": 2433
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "bambooJungle",
+			"fps": 134.1,
+			"avgFrameMs": 7.46,
+			"p95FrameMs": 14.5,
+			"cpuFrameMs": 7.32,
+			"drawCalls": 527,
+			"triangles": 8782810,
+			"visibleTrees": 3541
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "darkForest",
+			"fps": 135.8,
+			"avgFrameMs": 7.36,
+			"p95FrameMs": 14.1,
+			"cpuFrameMs": 7.21,
+			"drawCalls": 516,
+			"triangles": 6389482,
+			"visibleTrees": 2787
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "silverwood",
+			"fps": 147.9,
+			"avgFrameMs": 6.76,
+			"p95FrameMs": 13.2,
+			"cpuFrameMs": 6.63,
+			"drawCalls": 439,
+			"triangles": 4755644,
+			"visibleTrees": 3940
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "cherryGrove",
+			"fps": 168.9,
+			"avgFrameMs": 5.92,
+			"p95FrameMs": 11.7,
+			"cpuFrameMs": 5.77,
+			"drawCalls": 497,
+			"triangles": 2811140,
+			"visibleTrees": 2091
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "swamp",
+			"fps": 154.8,
+			"avgFrameMs": 6.46,
+			"p95FrameMs": 12.3,
+			"cpuFrameMs": 6.29,
+			"drawCalls": 464,
+			"triangles": 4549816,
+			"visibleTrees": 3226
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "snowyTaiga",
+			"fps": 165.7,
+			"avgFrameMs": 6.04,
+			"p95FrameMs": 11.8,
+			"cpuFrameMs": 5.9,
+			"drawCalls": 480,
+			"triangles": 2547904,
+			"visibleTrees": 3155
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "desert",
+			"fps": 212.9,
+			"avgFrameMs": 4.7,
+			"p95FrameMs": 8.3,
+			"cpuFrameMs": 4.57,
+			"drawCalls": 217,
+			"triangles": 464474,
+			"visibleTrees": 96
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "desert (GROUND layer off)",
+			"fps": 219.6,
+			"avgFrameMs": 4.55,
+			"p95FrameMs": 8,
+			"cpuFrameMs": 4.4,
+			"drawCalls": 221,
+			"triangles": 479586,
+			"visibleTrees": 96
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "snowyPlains",
+			"fps": 176.4,
+			"avgFrameMs": 5.67,
+			"p95FrameMs": 11.1,
+			"cpuFrameMs": 5.53,
+			"drawCalls": 467,
+			"triangles": 1668898,
+			"visibleTrees": 1870
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "high",
+			"scene": "snowyPlains (GROUND layer off)",
+			"fps": 180.1,
+			"avgFrameMs": 5.55,
+			"p95FrameMs": 10.5,
+			"cpuFrameMs": 5.41,
+			"drawCalls": 471,
+			"triangles": 1678122,
+			"visibleTrees": 1870
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "baseline forest (biomes off)",
+			"fps": 347.9,
+			"avgFrameMs": 2.87,
+			"p95FrameMs": 3.7,
+			"cpuFrameMs": 2.75,
+			"drawCalls": 118,
+			"triangles": 499728,
+			"visibleTrees": 242
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "jungle",
+			"fps": 329.3,
+			"avgFrameMs": 3.04,
+			"p95FrameMs": 4.2,
+			"cpuFrameMs": 2.95,
+			"drawCalls": 109,
+			"triangles": 807620,
+			"visibleTrees": 747
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "bambooJungle",
+			"fps": 300.5,
+			"avgFrameMs": 3.33,
+			"p95FrameMs": 4.3,
+			"cpuFrameMs": 3.25,
+			"drawCalls": 102,
+			"triangles": 661838,
+			"visibleTrees": 822
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "darkForest",
+			"fps": 318.9,
+			"avgFrameMs": 3.14,
+			"p95FrameMs": 4.3,
+			"cpuFrameMs": 3.06,
+			"drawCalls": 113,
+			"triangles": 854242,
+			"visibleTrees": 769
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "silverwood",
+			"fps": 317.6,
+			"avgFrameMs": 3.15,
+			"p95FrameMs": 4.3,
+			"cpuFrameMs": 3.07,
+			"drawCalls": 104,
+			"triangles": 608244,
+			"visibleTrees": 903
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "cherryGrove",
+			"fps": 284.3,
+			"avgFrameMs": 3.52,
+			"p95FrameMs": 4.5,
+			"cpuFrameMs": 3.42,
+			"drawCalls": 120,
+			"triangles": 398390,
+			"visibleTrees": 528
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "swamp",
+			"fps": 342.5,
+			"avgFrameMs": 2.92,
+			"p95FrameMs": 3.8,
+			"cpuFrameMs": 2.84,
+			"drawCalls": 116,
+			"triangles": 549966,
+			"visibleTrees": 787
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "snowyTaiga",
+			"fps": 307.7,
+			"avgFrameMs": 3.25,
+			"p95FrameMs": 4.4,
+			"cpuFrameMs": 3.17,
+			"drawCalls": 100,
+			"triangles": 267934,
+			"visibleTrees": 766
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "desert",
+			"fps": 265.3,
+			"avgFrameMs": 3.77,
+			"p95FrameMs": 4.3,
+			"cpuFrameMs": 3.69,
+			"drawCalls": 56,
+			"triangles": 105628,
+			"visibleTrees": 13
+		},
+		{
+			"label": "phase-6-final",
+			"quality": "low",
+			"scene": "snowyPlains",
+			"fps": 295.7,
+			"avgFrameMs": 3.38,
+			"p95FrameMs": 4.3,
+			"cpuFrameMs": 3.13,
+			"drawCalls": 79,
+			"triangles": 165988,
+			"visibleTrees": 423
+		}
+	]
+}

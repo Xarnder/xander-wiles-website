@@ -1,4 +1,6 @@
 import type { TreeManager, TreeTrunkHit } from '../vegetation/TreeManager';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { MusicPlantPlacementTool } from '../music/MusicPlantPlacementTool';
 import { fitBoundsHighlight } from '../miniBuild/MiniBuildGhost';
 import type { MiniBuildSystem } from '../miniBuild/MiniBuildSystem';
@@ -120,9 +122,10 @@ export class RemoveTool implements BuildTool {
 	private miniBuildId?: string;
 	private barriers?: BarrierManager;
 	private barrierTarget: { id: string; segmentIndex: number } | null = null;
+	/** The Remove whole key (Shift by default) is held: remove the whole fence or run. */
 	private shiftHeld = false;
 	private readonly handleShift = (event: KeyboardEvent) => {
-		if (event.key !== 'Shift' || this.shiftHeld === (event.type === 'keydown')) return;
+		if (!matchesAction(event, 'remove.whole')) return;
 		this.shiftHeld = event.type === 'keydown';
 	};
 	private musicHighlight = new THREE.BoxHelper(new THREE.Group(), 0xff6655);
@@ -291,7 +294,12 @@ export class RemoveTool implements BuildTool {
 				toolId: 'remove',
 				crosshair: 'valid',
 				notice: 'Tree',
-				hintLines: ['REMOVE TREE', 'Aim at the trunk', 'Click / tap: remove tree', 'X: exit']
+				hintLines: [
+					'REMOVE TREE',
+					'Aim at the trunk',
+					'Click / tap: remove tree',
+					`${keyName('build.removeMode')}: exit`
+				]
 			});
 			return;
 		}
@@ -766,7 +774,7 @@ export class RemoveTool implements BuildTool {
 				'Look at a building element or tree trunk',
 				'Left Click: Remove one piece',
 				'Delete: whole foundation under the crosshair',
-				'X / Right Click: Exit'
+				`${keyName('build.removeMode')} / Right Click: Exit`
 			]
 		};
 	}

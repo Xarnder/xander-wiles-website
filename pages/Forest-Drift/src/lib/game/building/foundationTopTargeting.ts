@@ -217,7 +217,10 @@ export function raycastStairPlacement(
 		}
 	}
 
-	if (planeGrid && isStairGridPointNearFoundation(planeGrid.gridX, planeGrid.gridZ, cellsX, cellsZ)) {
+	if (
+		planeGrid &&
+		isStairGridPointNearFoundation(planeGrid.gridX, planeGrid.gridZ, cellsX, cellsZ)
+	) {
 		return { foundationId, gridPoint: planeGrid };
 	}
 

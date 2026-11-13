@@ -42,6 +42,22 @@ describe('touchToolActions', () => {
 		expect(finish.at(-1)?.code).toBe('Enter');
 	});
 
+	it('still finds its buttons when the hints show rebound keys', () => {
+		expect(ids(['Z: Undo point', 'Shift + O: Auto / manual offset'])).toEqual([
+			'undo-pt',
+			'offset'
+		]);
+		expect(ids(['Shift + B  Copy Bench', 'Ctrl + F  Edit Bench'], false, 'place-object')).toEqual([
+			'copy-object',
+			'edit-object'
+		]);
+		// Move Mode's "Edit object" line is not Place Object's edit button.
+		expect(ids(['E    Edit object'], false, 'move')).toEqual([]);
+		expect(
+			ids(['I K Pitch · J L Vibrancy', '1–5 Instrument · Click: Plant · P Play/Pause'])
+		).toContain('play');
+	});
+
 	it('covers skirting, fence copy, objects, and the music garden', () => {
 		expect(ids(['O: Auto / manual offset'])).toEqual(['offset']);
 		expect(ids(['R: Apply these settings to this fence', 'Q: Copy its style'])).toEqual([
@@ -49,13 +65,17 @@ describe('touchToolActions', () => {
 			'apply-style'
 		]);
 		expect(
-			ids([
-				'R    Rotate (Shift: back)',
-				'T    Snap angle (Shift: coarser)',
-				'B    Copy Bench',
-				'F    Edit Bench',
-				'↑/↓  Recent objects'
-			])
+			ids(
+				[
+					'R    Rotate (Shift: back)',
+					'T    Snap angle (Shift: coarser)',
+					'B    Copy Bench',
+					'F    Edit Bench',
+					'↑/↓  Recent objects'
+				],
+				false,
+				'place-object'
+			)
 		).toEqual(['snap-angle', 'copy-object', 'edit-object', 'recent-prev', 'recent-next']);
 		expect(
 			ids(['↑ ↓ Pitch · ← → Vibrancy', '1–5 Instrument · Click: Plant · J Play/Pause'])
@@ -63,10 +83,10 @@ describe('touchToolActions', () => {
 	});
 
 	it('sends B for opening snap, path mode, and other build tools', () => {
-		expect(snapKeyForHints(['B cycle snap'])).toBe('KeyB');
-		expect(snapKeyForHints(['B path mode'])).toBe('KeyB');
+		expect(snapKeyForHints()).toBe('KeyB');
+		expect(snapKeyForHints()).toBe('KeyB');
 		expect(snapLabelForHints(['B path mode'])).toBe('Mode');
-		expect(snapKeyForHints(['B: Cycle snap'])).toBe('KeyB');
+		expect(snapKeyForHints()).toBe('KeyB');
 		expect(snapLabelForHints(['B: Cycle snap'])).toBe('Snap');
 	});
 });
@@ -74,7 +94,7 @@ describe('touchToolActions', () => {
 describe('roof footprint touch controls', () => {
 	it('labels the snap button Polygon before switching, then restores Snap for polygon drawing', () => {
 		const hints = ['Roof', 'E: Polygon mode', 'B: Polygon mode (Snap)'];
-		expect(snapKeyForHints(hints)).toBe('KeyB');
+		expect(snapKeyForHints()).toBe('KeyB');
 		expect(snapLabelForHints(hints)).toBe('Polygon');
 		expect(snapLabelForHints(['Roof', 'B: Cycle snap'])).toBe('Snap');
 	});

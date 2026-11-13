@@ -82,13 +82,21 @@ export class TreePrototypeCache {
 		this.worldSeed = worldSeed;
 	}
 
-	/** Variant actually used for a LOD (LOD3 collapses to one silhouette per species). */
-	static effectiveVariant(variant: number, lod: TreeLod): number {
-		return lod === 3 ? 0 : variant;
+	/**
+	 * Variant actually used for a LOD: LOD3 collapses to one silhouette per species, and species with
+	 * `sharedVariantsFromLod` collapse from that LOD on.
+	 */
+	static effectiveVariant(speciesId: TreeSpeciesId, variant: number, lod: TreeLod): number {
+		return lod >= TreePrototypeCache.sharedFromLod(speciesId) ? 0 : variant;
+	}
+
+	/** The first LOD at which all of a species' variants share one prototype. */
+	static sharedFromLod(speciesId: TreeSpeciesId): TreeLod {
+		return getTreeSpecies(speciesId).sharedVariantsFromLod ?? 3;
 	}
 
 	static key(speciesId: TreeSpeciesId, variant: number, lod: TreeLod): string {
-		return `${speciesId}:${TreePrototypeCache.effectiveVariant(variant, lod)}:${lod}`;
+		return `${speciesId}:${TreePrototypeCache.effectiveVariant(speciesId, variant, lod)}:${lod}`;
 	}
 
 	setWorldSeed(seed: string): void {
@@ -98,7 +106,7 @@ export class TreePrototypeCache {
 	}
 
 	private design(speciesId: TreeSpeciesId, variant: number, lod: TreeLod): TreeDesign {
-		const designVariant = TreePrototypeCache.effectiveVariant(variant, lod);
+		const designVariant = TreePrototypeCache.effectiveVariant(speciesId, variant, lod);
 		const designKey = `${speciesId}:${designVariant}`;
 		let design = this.designs.get(designKey);
 		if (!design) {

@@ -94,6 +94,15 @@ export interface GrassChunkInput {
 	exclusions: Float32Array;
 	/** Keep accepted world positions for the candidate-points debug view. */
 	collectDebug?: boolean;
+	/** Biome tuft colour (biomes on). Omitted: the countryside colour, `writeTerrainColor`. */
+	grassColor?: (
+		height: number,
+		normalY: number,
+		worldX: number,
+		worldZ: number,
+		out: Float32Array,
+		offset: number
+	) => void;
 }
 
 export interface GrassChunkData {
@@ -246,7 +255,8 @@ export function generateGrassChunk(input: GrassChunkInput): GrassChunkData {
 			// Bigger tufts rank earlier, so far LODs keep the larger clumps and lose the small ones.
 			const rank = Math.min(0.999, roll(Channel.Rank) * 0.72 + (1 - height01) * 0.28);
 
-			writeTerrainColor(surface.height, surface.normalY, color, 0, x, z);
+			if (input.grassColor) input.grassColor(surface.height, surface.normalY, x, z, color, 0);
+			else writeTerrainColor(surface.height, surface.normalY, color, 0, x, z);
 			const shade = 0.93 + roll(Channel.Tint) * 0.14;
 			const r = color[0] * shade * (1 + warmth * 0.12);
 			const g = color[1] * shade * (1 + warmth * 0.03);

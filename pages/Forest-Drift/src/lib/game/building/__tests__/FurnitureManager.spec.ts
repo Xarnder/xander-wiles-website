@@ -89,9 +89,9 @@ describe('FurnitureManager', () => {
 		expect(manager.getPickMesh().count).toBe(1);
 		expect(manager.idAtInstance(0)).toBe('t');
 		expect(manager.getAll()).toHaveLength(2);
-		expect(manager.idFromObject(manager.getPickMeshes().find((obj) => obj !== manager.getPickMesh())!)).toBe(
-			'c'
-		);
+		expect(
+			manager.idFromObject(manager.getPickMeshes().find((obj) => obj !== manager.getPickMesh())!)
+		).toBe('c');
 		expect(manager.getCollisionRects()).toHaveLength(1);
 		manager.dispose();
 	});

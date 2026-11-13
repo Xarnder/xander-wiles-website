@@ -105,7 +105,9 @@ function setup() {
 	];
 
 	foundationManager.addFoundation(makeFoundation());
-	foundationManager.addFoundation(makeFoundation({ id: 'foundation-b', minGridX: 20, maxGridX: 30 }));
+	foundationManager.addFoundation(
+		makeFoundation({ id: 'foundation-b', minGridX: 20, maxGridX: 30 })
+	);
 	buildingManager.addWall({
 		start: { foundationId: 'foundation-a', gridX: 0, gridZ: 0 },
 		end: { foundationId: 'foundation-a', gridX: 6, gridZ: 0 },
@@ -189,9 +191,9 @@ describe('deleteFoundationAndBuilding', () => {
 		const { foundationManager, buildingManager, levelManager, furnitureManager, placed, deps } =
 			setup();
 
-		expect(
-			deleteFoundationAndBuilding(deps, 'foundation-a', FOUNDATION_DELETE_CONFIRMATION)
-		).toBe(true);
+		expect(deleteFoundationAndBuilding(deps, 'foundation-a', FOUNDATION_DELETE_CONFIRMATION)).toBe(
+			true
+		);
 
 		expect(foundationManager.getFoundation('foundation-a')).toBeUndefined();
 		expect(buildingManager.getBuildingForFoundation('foundation-a').walls).toHaveLength(0);

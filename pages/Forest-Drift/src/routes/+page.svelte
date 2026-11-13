@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ShovelSettings from '#lib/components/ShovelSettings.svelte';
 	import { IMPORT_LIMITS } from '#lib/game/world/WorldValidation';
+	import { labelForAction, labelsForAction, matchesAction } from '#lib/game/input/KeyInput';
 	import { captureWorldContent } from '#lib/game/world/WorldSerializer';
 	import type { InteractionPrompt } from '#lib/game/player/PlayerInteractionController';
 	let miniBuildInteractionPrompt = $state<InteractionPrompt | null>(null);
@@ -23,6 +24,38 @@
 	onMount(() => {
 		window.addEventListener('forest:creature-lab', openCreatureLab);
 		return () => window.removeEventListener('forest:creature-lab', openCreatureLab);
+	});
+
+	import KeyBindingsScreen from '#lib/components/KeyBindingsScreen.svelte';
+	import { subscribeKeyBindings, watchKeyBindingsStorage } from '#lib/game/input/KeyBindingsStore';
+	import type { KeyActionId } from '#lib/game/input/keyActions';
+	/** Bumped when key bindings change, so every key name on the page is re-read. */
+	let bindingsRevision = $state(0);
+	onMount(() => subscribeKeyBindings(() => bindingsRevision++));
+	/** The key for this action right now, for prompts and help ("Unbound" when none). */
+	function keyName(id: KeyActionId): string {
+		return bindingsRevision >= 0 ? labelForAction(id) : '';
+	}
+	/** Every key bound to the action: "Delete / Backspace". */
+	function keyNames(id: KeyActionId): string {
+		return bindingsRevision >= 0 ? labelsForAction(id).join(' / ') || 'Unbound' : '';
+	}
+	/** The full-screen Controls (key mapping) screen. Opened by `forest:open-key-bindings`. */
+	let keyBindingsOpen = $state(false);
+	function openKeyBindings() {
+		session?.scene.closePlacementCustomize();
+		session?.scene.closePlacementHeight();
+		document.exitPointerLock?.();
+		keyBindingsOpen = true;
+	}
+	onMount(() => {
+		window.addEventListener('forest:open-key-bindings', openKeyBindings);
+		// Another tab saving new bindings updates this one too.
+		const unwatch = watchKeyBindingsStorage();
+		return () => {
+			window.removeEventListener('forest:open-key-bindings', openKeyBindings);
+			unwatch();
+		};
 	});
 
 	import MidiImportModal from '#lib/components/MidiImportModal.svelte';
@@ -93,6 +126,8 @@
 	import ConfirmRemoveOthersDialog from '#lib/components/ConfirmRemoveOthersDialog.svelte';
 	import InviteLinksDialog from '#lib/components/InviteLinksDialog.svelte';
 	import LocatorBar from '#lib/components/LocatorBar.svelte';
+	import BiomeIndicator from '#lib/components/BiomeIndicator.svelte';
+	import ConfirmBiomesDialog from '#lib/components/ConfirmBiomesDialog.svelte';
 	import RestorePointsDialog from '#lib/components/RestorePointsDialog.svelte';
 	import JoinWorldDialog from '#lib/components/JoinWorldDialog.svelte';
 	import OnlineStatus from '#lib/components/OnlineStatus.svelte';
@@ -152,6 +187,7 @@
 	import { formatDayClock } from '#lib/game/sky/dayNightMath';
 	import { createDefaultSkySettings } from '#lib/game/sky/SkyTypes';
 	import { createDefaultHydrologySettings } from '#lib/game/hydrology/HydrologyTypes';
+	import { createDefaultBiomeSettings, type BiomeSize } from '#lib/game/biomes/BiomeTypes';
 	import { createDefaultTerrainSettings } from '#lib/game/terrain/TerrainSettings';
 	import { createDefaultVegetationSettings } from '#lib/game/vegetation/VegetationTypes';
 	import {
@@ -181,6 +217,13 @@
 	let stats = $state<SceneStats | null>(null);
 	/** Free flight (B): shown as a badge while on; speed follows the scroll wheel. */
 	let flight = $state<{ flying: boolean; speed: number }>({ flying: false, speed: 0 });
+	/** Biome under the player (null while the world's biomes are off), and the card to show. */
+	let currentBiomeName = $state<string | null>(null);
+	let biomeCardName = $state<string | null>(null);
+	let biomeCardToken = $state(0);
+	/** Pending "turn biomes on/off?" confirmation (true = turning them on). */
+	let biomeTogglePrompt = $state<boolean | null>(null);
+	let settingsRevision = $state(0);
 	/** The player's health as last reported by the scene (only on change, never per frame). */
 	let health = $state.raw<HealthSnapshot | null>(null);
 	/** Bumped per hit so the vignette replays. */
@@ -220,9 +263,9 @@
 		// Riding, K gets off even with a door in view; on foot, a door or seat takes K first.
 		const key =
 			riding && action === 'dismount' && !miniBuildInteractionPrompt
-				? '[K] Get off'
+				? `[${keyName('interact.use')}] Get off`
 				: !riding && action === 'putDown' && !miniBuildInteractionPrompt && !lookedAtDoorId
-					? '[K] Put down'
+					? `[${keyName('interact.use')}] Put down`
 					: null;
 		const fire = carryState?.carrying && !carryState.stowed ? 'Left click to fire' : null;
 		return [key, fire].filter(Boolean).join(' · ') || null;
@@ -672,7 +715,7 @@
 
 		// Cmd/Ctrl+S is the desktop-editor convention for "save now", and must beat the browser's own
 		// save-page action — but only while a world is actually open and the player isn't typing.
-		if ((event.metaKey || event.ctrlKey) && event.code === 'KeyS') {
+		if (matchesAction(event, 'world.save')) {
 			if (screen === 'game' && !typing) {
 				event.preventDefault();
 				void manualSave();
@@ -680,17 +723,17 @@
 			return;
 		}
 
-		if (placementCustomizeOpen && event.code === 'Escape') {
+		if (placementCustomizeOpen && matchesAction(event, 'ui.back')) {
 			session?.scene.closePlacementCustomize();
 			return;
 		}
-		if (placementHeightOpen && event.code === 'Escape') {
+		if (placementHeightOpen && matchesAction(event, 'ui.back')) {
 			session?.scene.closePlacementHeight();
 			return;
 		}
 		if (screen !== 'game' || typing) return;
 		if (debugControlsOpen || multiplayerMenuOpen) {
-			if (event.code === 'Escape') {
+			if (matchesAction(event, 'ui.back')) {
 				closeDebugControls();
 				multiplayerMenuOpen = false;
 				paused = true;
@@ -700,19 +743,19 @@
 		if (placementCustomizeOpen || placementHeightOpen) return;
 		if (miniBuildEditor || miniBuildEditChoice) return;
 		if (settingsOpen) {
-			if (event.code === 'Escape') closeSettings();
+			if (matchesAction(event, 'ui.back')) closeSettings();
 			return;
 		}
 		if (creatureLabOpen) {
-			if (event.code === 'Escape') closeCreatureLab();
+			if (matchesAction(event, 'ui.back')) closeCreatureLab();
 			return;
 		}
 		if (midiOpen) {
-			if (event.code === 'Escape') closeMidi();
+			if (matchesAction(event, 'ui.back')) closeMidi();
 			return;
 		}
 
-		if (event.code === 'Escape') {
+		if (matchesAction(event, 'ui.back')) {
 			if (showHelp) {
 				showHelp = false;
 			} else if (performance.now() - lastPauseToggleTime > 150) {
@@ -720,11 +763,11 @@
 			}
 			return;
 		}
-		if (event.code === 'KeyH') {
+		if (matchesAction(event, 'ui.help')) {
 			showHelp = !showHelp;
 			return;
 		}
-		if (event.code === 'F3') {
+		if (matchesAction(event, 'ui.renderStats')) {
 			event.preventDefault();
 			if (!session) return;
 			const on = session.scene.toggleRenderStats();
@@ -732,24 +775,18 @@
 			return;
 		}
 		if (paused) return;
-		if (
-			event.code === 'KeyU' &&
-			!event.ctrlKey &&
-			!event.metaKey &&
-			!event.altKey &&
-			trackedPlayerId
-		) {
+		if (matchesAction(event, 'multiplayer.stopTracking') && trackedPlayerId) {
 			event.preventDefault();
 			multiplayerSession?.trackPlayer(null);
 			return;
 		}
 
-		if (event.code === 'Backslash') {
+		if (matchesAction(event, 'ui.screenshot')) {
 			event.preventDefault();
 			void captureBestScreenshot();
 			return;
 		}
-		if (event.code === 'KeyF') {
+		if (matchesAction(event, 'flight.toggle')) {
 			if (!session || event.repeat) return;
 			const current = hotbar;
 			const placingObject =
@@ -758,7 +795,8 @@
 				current.slots.some(
 					(slot) => slot.slot === current.activeSlot && slot.toolId === 'place-object'
 				);
-			if (placingObject) return;
+			// Place Object uses the same key (F by default) to edit the aimed object.
+			if (placingObject && matchesAction(event, 'placeObject.edit')) return;
 			if (session.scene.isFlightDisabled()) {
 				showSaveToast('Flying is off in online worlds');
 				return;
@@ -771,7 +809,7 @@
 			);
 			return;
 		}
-		if (event.code === 'KeyL') session?.scene.cycleGraphicsQuality();
+		if (matchesAction(event, 'ui.graphicsQuality')) session?.scene.cycleGraphicsQuality();
 	}
 
 	async function refreshWorlds() {
@@ -833,7 +871,7 @@
 		});
 	}
 
-	async function createWorld(name: string, seed: string) {
+	async function createWorld(name: string, seed: string, biomeSize: BiomeSize = 'normal') {
 		await withBusy(async () => {
 			const result = await worldManager!.createWorld({
 				name,
@@ -844,7 +882,8 @@
 					terrain: createDefaultTerrainSettings(),
 					vegetation: createDefaultVegetationSettings(),
 					sky: createDefaultSkySettings(),
-					hydrology: createDefaultHydrologySettings()
+					hydrology: createDefaultHydrologySettings(),
+					biomes: createDefaultBiomeSettings(biomeSize)
 				}
 			});
 			if (!result.ok) {
@@ -926,6 +965,14 @@
 					saveError = error;
 				},
 				onStatsUpdate: (next) => (stats = next),
+				onBiomeToggleRequest: (enable) => (biomeTogglePrompt = enable),
+				onBiomeChange: (change) => {
+					currentBiomeName = change.name;
+					if (change.announce && change.name) {
+						biomeCardName = change.name;
+						biomeCardToken++;
+					}
+				},
 				onFlightChange: (next) => {
 					const speedChanged = next.flying && flight.flying && next.speed !== flight.speed;
 					flight = next;
@@ -1002,7 +1049,7 @@
 					playCreatureSound(event.type);
 					creatureAnnouncement =
 						event.type === 'mount'
-							? `Riding ${event.species}. Press K to get off.`
+							? `Riding ${event.species}. Press ${keyName('interact.use')} to get off.`
 							: `Got off ${event.species}.`;
 				},
 				onCarryEvent: (event) => {
@@ -1563,7 +1610,7 @@
 			onPlay={(id) => void openWorld(id)}
 			onPlayDefault={() => void playDefaultWorld()}
 			onResetDefault={() => void resetDefaultWorld()}
-			onCreate={(name, seed) => void createWorld(name, seed)}
+			onCreate={(name, seed, biomeSize) => void createWorld(name, seed, biomeSize)}
 			onRename={(id, name) => void renameWorld(id, name)}
 			onDuplicate={(id) => void duplicateWorld(id)}
 			onExport={(id) => void exportWorld(id)}
@@ -1750,7 +1797,7 @@
 							<span class:active={level === graphicsNotice}>{graphicsQualityLabel(level)}</span>
 						{/each}
 					</div>
-					<div class="graphics-notice-hint">Press L to change</div>
+					<div class="graphics-notice-hint">Press {keyName('ui.graphicsQuality')} to change</div>
 				</div>
 			{/if}
 
@@ -1921,38 +1968,49 @@
 
 						<h3>Movement</h3>
 						<dl>
-							<dt>WASD</dt>
+							<dt>
+								{keyName('move.forward')}{keyName('move.left')}{keyName('move.back')}{keyName(
+									'move.right'
+								)}
+							</dt>
 							<dd>Move</dd>
-							<dt>Shift</dt>
+							<dt>{keyName('move.run')}</dt>
 							<dd>Run</dd>
-							<dt>Space</dt>
+							<dt>{keyName('move.jump')}</dt>
 							<dd>Jump</dd>
 							<dt>Left click (online, not building)</dt>
 							<dd>Punch the player in front of you</dd>
-							<dt>K on a small creature</dt>
-							<dd>Pick it up under your arm; K again puts it down</dd>
-							<dt>K on a two-legged creature</dt>
+							<dt>{keyName('interact.use')} on a small creature</dt>
+							<dd>Pick it up under your arm; {keyName('interact.use')} again puts it down</dd>
+							<dt>{keyName('interact.use')} on a two-legged creature</dt>
 							<dd>
-								Ride it: astride its neck if it's small, on its right shoulder if it's large. WASD
-								steers, Shift sprints, K gets off. You can bring a carried creature along and fire
-								from the seat.
+								Ride it: astride its neck if it's small, on its right shoulder if it's large.
+								{keyName('move.forward')}{keyName('move.left')}{keyName('move.back')}{keyName(
+									'move.right'
+								)} steers,
+								{keyName('move.run')} sprints, {keyName('interact.use')} gets off. You can bring a carried
+								creature along and fire from the seat.
 							</dd>
 							<dt>Left click (carrying a creature)</dt>
 							<dd>
 								Fire a seed pellet from its mouth; hold to keep firing (5 shots, 1 back every 1.5 s)
 							</dd>
-							<dt>\</dt>
+							<dt>{keyName('ui.screenshot')}</dt>
 							<dd>
 								Best-quality screenshot: locks movement, switches to Ultra, waits for everything to
 								load, saves a PNG, then returns to your graphics setting
 							</dd>
-							<dt>C (hold)</dt>
+							<dt>{keyName('camera.zoom')} (hold)</dt>
 							<dd>Zoom in (field of view: Settings &rarr; Graphics &rarr; Display)</dd>
-							<dt>F</dt>
+							<dt>{keyName('flight.toggle')}</dt>
 							<dd>
-								Toggle flying. W/S fly where you look, A/D strafe, Space up, Shift down; the scroll
-								wheel sets the fly speed (default twice running speed, up to 600 m/s). While Place
-								Object is selected, F edits the object you are looking at instead.
+								Toggle flying. {keyName('move.forward')}/{keyName('move.back')} fly where you look, {keyName(
+									'move.left'
+								)}/{keyName('move.right')} strafe, {keyName('flight.up')} up, {keyName(
+									'flight.down'
+								)} down; the scroll wheel sets the fly speed (default twice running speed, up to 600 m/s).
+								While Place Object is selected, {keyName('placeObject.edit')} edits the object you are
+								looking at instead.
 							</dd>
 							<dt>Mouse</dt>
 							<dd>Look around</dd>
@@ -1965,27 +2023,33 @@
 
 						<h3>Building — general</h3>
 						<dl>
-							<dt>G</dt>
+							<dt>{keyName('build.toggle')}</dt>
 							<dd>
 								Toggle Build Mode and the hotbar. Independent from M, which toggles Compose Mode.
 								Tools and placement sleep while Build Mode is off; the selected slot is remembered.
 							</dd>
-							<dt>1&ndash;6, 8</dt>
+							<dt>
+								{keyName('build.slot1')}&ndash;{keyName('build.slot6')}, {keyName('build.slot8')}
+							</dt>
 							<dd>
 								Select hotbar slot — 1 Foundation, 2 Walls, 3 Openings, 4 Slabs, 5 Stairs, 6 Floor
 								Detailing, 8 Place Object. Slot 7 is reserved.
 							</dd>
-							<dt>8 then E</dt>
+							<dt>{keyName('build.slot8')} then {keyName('build.customise')}</dt>
 							<dd>
 								Open the Object Library — My Builds, Default Designs and Lights, or Create New to
 								build your own object from up to 16 cuboids in the Mini Build Editor.
 							</dd>
-							<dt>8: R / C / F</dt>
+							<dt>
+								{keyName('build.slot8')}: {keyName('tool.rotate')} / {keyName('placeObject.copy')} / {keyName(
+									'placeObject.edit'
+								)}
+							</dt>
 							<dd>
 								Rotate the object 90° · Copy the object you are looking at (same design) · Edit the
 								object you are looking at (shared design or Make Unique).
 							</dd>
-							<dt>↑ / ↓</dt>
+							<dt>{keyName('build.slotPrevious')} / {keyName('build.slotNext')}</dt>
 							<dd>
 								Cycle tools inside the selected slot — Corner Walls / Poly Wall / Wall / Fence &amp;
 								Railing / Skirting / Wooden Pillars, Door / Window / Beam, Ceiling / Floor / Roof,
@@ -1997,24 +2061,24 @@
 							<dd>Place / confirm</dd>
 							<dt>Right click</dt>
 							<dd>Cancel / deselect</dd>
-							<dt>−</dt>
+							<dt>{keyName('build.undo')}</dt>
 							<dd>
 								Undo the last placement (wall, continuous wall, window, door, beam, ceiling, floor,
 								roof, or floor detailing). Keeps the last five actions.
 							</dd>
-							<dt>] / [</dt>
+							<dt>{keyName('build.levelUp')} / {keyName('build.levelDown')}</dt>
 							<dd>
 								Change current building level (] up, [ down) — Page Up / Page Down still work, or
 								click the ▲ / ▼ floor selector on the left edge of the screen whenever a level-aware
 								tool is active
 							</dd>
-							<dt>B</dt>
+							<dt>{keyName('tool.snap')}</dt>
 							<dd>
 								Cycle draw-snap mode (Off &rarr; Axis &rarr; Axis + Inline &rarr; Wall Corners) —
 								Wall, Continuous Wall, Ceiling, Floor, Roof. Wall Corners (default) snaps walls to
 								existing corners and ceilings/floors/roofs to wall corners below.
 							</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>
 								Customise the selected wall, window, door, beam, stairs, or floor detailing
 								(carpets, paths, planks, tiles) before placing. On Ceiling, Floor, or Roof, set how
@@ -2042,15 +2106,15 @@
 
 						<h3>Continuous Wall / Ceiling / Floor</h3>
 						<dl>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>
 								On Wall or Continuous Wall — set the next wall's height and width (thickness). On
 								Ceiling or Floor — set how high the next slab sits above this storey's floor. Length
 								still comes from the points you click.
 							</dd>
-							<dt>Backspace</dt>
+							<dt>{keyName('tool.undoPoint')}</dt>
 							<dd>Undo last point</dd>
-							<dt>Enter</dt>
+							<dt>{keyName('tool.finish')}</dt>
 							<dd>Finish an open wall path (Continuous Wall only)</dd>
 							<dt>Click first point again</dt>
 							<dd>Close the loop / shape</dd>
@@ -2064,14 +2128,14 @@
 								open ground (fences that follow the land). Click the first point again to close a
 								loop.
 							</dd>
-							<dt>Enter / Backspace</dt>
+							<dt>{keyName('tool.finish')} / {keyName('tool.undoPoint')}</dt>
 							<dd>
 								Finish the path without closing the loop · Undo the last point. On a touch screen,
 								Finish fence does the same.
 							</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>Style, height, spacing, posts, balusters, rails, wood and base mode</dd>
-							<dt>R / Q</dt>
+							<dt>{keyName('barrier.restyle')} / {keyName('barrier.copyStyle')}</dt>
 							<dd>Apply the current settings to the fence you're aiming at · Copy its style</dd>
 						</dl>
 
@@ -2082,9 +2146,9 @@
 								Click along a wall's centre line like drawing the wall; boards go on the face toward
 								you. Click the first point again to close a room.
 							</dd>
-							<dt>O</dt>
+							<dt>{keyName('skirting.offsetMode')}</dt>
 							<dd>Offset: Auto (half the wall found on that line) / Manual</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>Offset, height, depth and colour</dd>
 						</dl>
 
@@ -2092,23 +2156,23 @@
 						<dl>
 							<dt>Left click</dt>
 							<dd>Choose two opposite corners for a rectangular roof footprint</dd>
-							<dt>V</dt>
+							<dt>{keyName('roof.type')}</dt>
 							<dd>
 								After the footprint is closed, cycle roof type (Flat, Shed, Gable, Hip, Gambrel,
 								Mansard, Butterfly, M-Shaped, Dutch Gable)
 							</dd>
-							<dt>R</dt>
+							<dt>{keyName('tool.rotate')}</dt>
 							<dd>Rotate a sloped roof (ridge / high edge)</dd>
-							<dt>↑ / ↓</dt>
+							<dt>{keyName('roof.riseUp')} / {keyName('roof.riseDown')}</dt>
 							<dd>
 								Adjust rise (hold Shift for a finer step). These keys do not change hotbar variant
 								while you are adjusting a roof
 							</dd>
-							<dt>B</dt>
+							<dt>{keyName('tool.snap')}</dt>
 							<dd>
 								Switch to polygon drawing; in polygon mode, cycle draw-snap including Wall Corners
 							</dd>
-							<dt>E</dt>
+							<dt>{keyName('roof.footprint')}</dt>
 							<dd>
 								Switch between rectangle and polygon drawing, keeping the first corner. In polygon
 								mode, click the first point again to close the footprint. After the footprint is
@@ -2120,24 +2184,24 @@
 
 						<h3>Windows / Doors / Beams</h3>
 						<dl>
-							<dt>K</dt>
+							<dt>{keyName('interact.use')}</dt>
 							<dd>Open or close the door or window shutters under the crosshair</dd>
 							<dt>Left click</dt>
 							<dd>Place a window/door hole or a timber beam on the wall</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>
 								Customise the next window, door, or beam — width, height (windows, doors, and
 								horizontal beams), sill / from-floor height (windows and doors), and colour. Applies
 								to the next piece you place, not ones already built.
 							</dd>
-							<dt>C</dt>
+							<dt>{keyName('tool.snap')}</dt>
 							<dd>
 								Cycle wall-division snap (Grid &rarr; Half &rarr; Thirds &hellip; Sixteenths) —
 								snaps the window, door, or beam centre to even splits of this wall's length, up to
 								16. A horizontal beam's height follows the look point; a vertical beam spans the
 								wall.
 							</dd>
-							<dt>R</dt>
+							<dt>{keyName('opening.beamOrientation')}</dt>
 							<dd>
 								Flip the next beam between vertical (default, floor to top of the wall) and
 								horizontal
@@ -2152,16 +2216,16 @@
 							<dd>
 								Two-click rectangle on the current floor or foundation, then confirm the footprint
 							</dd>
-							<dt>Left / Right Arrow</dt>
+							<dt>{keyName('stairs.turnLeft')} / {keyName('stairs.turnRight')}</dt>
 							<dd>Change stair direction</dd>
-							<dt>Enter / Left click</dt>
+							<dt>{keyName('tool.finish')} / Left click</dt>
 							<dd>Confirm stairs</dd>
-							<dt>] / [</dt>
+							<dt>{keyName('build.levelUp')} / {keyName('build.levelDown')}</dt>
 							<dd>
 								Build on the selected storey. Stairs connect that floor to the one their rise
 								reaches
 							</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>
 								Customise the next stair's colour, framing, railings, hole, and hole framing before
 								placing. Esc or E again closes. Applies to the next stair, not ones already built.
@@ -2170,7 +2234,11 @@
 
 						<h3>Floor Detailing</h3>
 						<dl>
-							<dt>6 / ↑ / ↓</dt>
+							<dt>
+								{keyName('build.slot6')} / {keyName('build.slotPrevious')} / {keyName(
+									'build.slotNext'
+								)}
+							</dt>
 							<dd>
 								Slot 6 — ↑/↓ cycles Carpet / Path / Planks / Tiles. The last choice is remembered.
 							</dd>
@@ -2180,29 +2248,29 @@
 								in Axis or Free mode; Bezier adds a third click that pulls the bend. Sits on the
 								current floor or foundation plane, just above it. Visual only — no collision.
 							</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>
 								Customise the next piece — 3D/2D (3D boards and tiles by default; 2D is a thin
 								plane), Colour 1 / Colour 2, plank width and direction, tile size and pattern (Solid
 								/ Checker / Diamond / Running bond), path width and timber framing. Reset on each
 								field restores that variant's default. Applies to the next piece you place.
 							</dd>
-							<dt>C</dt>
+							<dt>{keyName('floorDetail.pathMode')}</dt>
 							<dd>
 								On Path — cycle Axis snap (horizontal/vertical), Free (any heading), and Bezier
 								(start, end, then pull the curve)
 							</dd>
-							<dt>R</dt>
+							<dt>{keyName('floorDetail.cycle')}</dt>
 							<dd>Cycle plank direction (X/Z), tile pattern, or path framing on/off</dd>
-							<dt>X</dt>
+							<dt>{keyName('build.removeMode')}</dt>
 							<dd>Remove Mode works on placed detailing</dd>
-							<dt>−</dt>
+							<dt>{keyName('build.undo')}</dt>
 							<dd>Undo the last detailing placement</dd>
 						</dl>
 
 						<h3>Remove Mode</h3>
 						<dl>
-							<dt>X</dt>
+							<dt>{keyName('build.removeMode')}</dt>
 							<dd>
 								Toggle Remove Mode — a global overlay independent of the hotbar; the tool you had
 								selected is remembered and restored when you exit
@@ -2213,34 +2281,34 @@
 								staircase, floor detailing, or music plant. Clicking the foundation itself starts a
 								whole-foundation delete
 							</dd>
-							<dt>Delete / Backspace</dt>
+							<dt>{keyNames('remove.deleteFoundation')}</dt>
 							<dd>
 								Delete the foundation under the crosshair and everything built on it. You must type
 								Confirm Delete before anything is removed. The cleared ground can be built on again
 							</dd>
-							<dt>X / Right click / Esc</dt>
+							<dt>{keyName('build.removeMode')} / Right click / Esc</dt>
 							<dd>Exit Remove Mode</dd>
 						</dl>
 
 						<h3>Paint Mode</h3>
 						<dl>
-							<dt>P</dt>
+							<dt>{keyName('build.paintMode')}</dt>
 							<dd>
 								Toggle Paint Mode — another global overlay, mutually exclusive with Remove Mode
 								(pressing the other key switches straight over); the tool you had selected is
 								remembered and restored when you exit
 							</dd>
-							<dt>C</dt>
+							<dt>{keyName('paint.palette')}</dt>
 							<dd>Open the colour palette — releases the mouse so you can click a swatch</dd>
 							<dt>Left click</dt>
 							<dd>Paint the highlighted wall, wall segment, ceiling, floor, roof, or foundation</dd>
-							<dt>P / Right click / Esc</dt>
+							<dt>{keyName('build.paintMode')} / Right click / Esc</dt>
 							<dd>Exit Paint Mode</dd>
 						</dl>
 
 						<h3>Move Mode</h3>
 						<dl>
-							<dt>M</dt>
+							<dt>{keyName('build.moveMode')}</dt>
 							<dd>
 								Toggle Move Mode — pick up existing objects, drag them around, rotate, and edit them
 							</dd>
@@ -2249,9 +2317,9 @@
 								Pick up the highlighted object (or drag it). Click again to place it at the new
 								location
 							</dd>
-							<dt>R</dt>
+							<dt>{keyName('tool.rotate')}</dt>
 							<dd>Rotate the held object in 90° increments</dd>
-							<dt>E</dt>
+							<dt>{keyName('build.customise')}</dt>
 							<dd>Edit the object's dimensions, colors, and parameters in the catalogue modal</dd>
 							<dt>Right click / Esc</dt>
 							<dd>
@@ -2269,46 +2337,46 @@
 							so flowers close to the tree play early and flowers further out play later.
 						</p>
 						<dl>
-							<dt>N</dt>
+							<dt>{keyName('build.musicMode')}</dt>
 							<dd>Enter / exit Compose Mode. The nearest Music Tree becomes active.</dd>
 							<dt>Aim + Left click</dt>
 							<dd>
 								Plant the ghost preview at the snapped ring under your crosshair. Right click / Esc
 								cancels the current preview
 							</dd>
-							<dt>Q / E</dt>
+							<dt>{keyName('music.instrumentPrevious')} / {keyName('music.instrumentNext')}</dt>
 							<dd>Cycle the instrument, the same five choices as hotbar slots 1&ndash;5</dd>
-							<dt>&uarr; / &darr;</dt>
+							<dt>{keyName('music.pitchUp')} / {keyName('music.pitchDown')}</dt>
 							<dd>
 								Grow the plant taller or shorter before placing &mdash; this sets its pitch (short =
 								low note, tall = high note)
 							</dd>
-							<dt>&larr; / &rarr;</dt>
+							<dt>{keyName('music.volumeDown')} / {keyName('music.volumeUp')}</dt>
 							<dd>
 								Make the plant paler or more vivid before placing &mdash; this sets its volume (pale
 								= quiet, vivid = loud)
 							</dd>
-							<dt>, / .</dt>
+							<dt>{keyName('music.shorter')} / {keyName('music.longer')}</dt>
 							<dd>Shorten or lengthen the note (duration in steps)</dd>
-							<dt>1&ndash;5</dt>
+							<dt>{keyName('music.instrument1')}&ndash;{keyName('music.instrument5')}</dt>
 							<dd>
 								Choose the instrument on the music hotbar &mdash; 1 Flower, 2 Mushroom, 3 Fern, 4
 								Reed, 5 Crystal. Click a slot to do the same
 							</dd>
-							<dt>J</dt>
+							<dt>{keyName('music.playLoop')}</dt>
 							<dd>Play / pause the tree's music loop</dd>
 							<dt>Import MIDI</dt>
 							<dd>
 								Button on the music HUD. Preview a file, then click open ground to grow the imported
 								garden (right click cancels)
 							</dd>
-							<dt>X</dt>
+							<dt>{keyName('build.removeMode')}</dt>
 							<dd>Switch to Remove Mode to delete a planted flower &mdash; aim at it and click</dd>
 						</dl>
 
 						<h3>Other</h3>
 						<dl>
-							<dt>H</dt>
+							<dt>{keyName('ui.help')}</dt>
 							<dd>
 								Toggle this help · G toggles Build Mode · N opens Music Garden · M toggles Move Mode
 							</dd>
@@ -2322,7 +2390,7 @@
 							<dd>Pause &rarr; Settings — world, terrain, building, music, sky, and graphics</dd>
 							<dt>Creature Lab</dt>
 							<dd>Pause &rarr; Creature Lab — design a creature, then place it in the world</dd>
-							<dt>F3</dt>
+							<dt>{keyName('ui.renderStats')}</dt>
 							<dd>Show or hide render stats (also Graphics &rarr; Show render stats)</dd>
 							<dt>FPS</dt>
 							<dd>
@@ -2330,7 +2398,7 @@
 								second, and the render mode (Low, Medium, High, or Ultra). Graphics &rarr; Show FPS
 								counter turns it off.
 							</dd>
-							<dt>L</dt>
+							<dt>{keyName('ui.graphicsQuality')}</dt>
 							<dd>
 								Cycle graphics quality (Low &rarr; Medium &rarr; High &rarr; Ultra) — applies
 								instantly and is remembered next time you visit
@@ -2340,7 +2408,7 @@
 								Release the mouse, then press again for the pause menu — Save, World (rename /
 								export / duplicate), Settings, Help, Creature Lab, and Quit to Worlds
 							</dd>
-							<dt>Cmd / Ctrl + S</dt>
+							<dt>{keyName('world.save')}</dt>
 							<dd>
 								Save the world now. Worlds also autosave a couple of seconds after you stop building
 							</dd>
@@ -2775,6 +2843,7 @@
 				<!-- Small, always-present save state. Deliberately understated: autosave is meant to be
 		     something the player never has to think about, so this only becomes prominent (colour +
 		     wording) when something actually needs attention. -->
+				<BiomeIndicator name={biomeCardName} token={biomeCardToken} />
 				<!-- Players online, and waypoints anywhere. -->
 				<LocatorBar
 					bind:element={locatorElement}
@@ -2833,7 +2902,7 @@
 				>
 					{showTouchControls
 						? ''
-						: '[K] '}{miniBuildInteractionPrompt.label}{miniBuildInteractionPrompt.active &&
+						: `[${keyName('interact.use')}] `}{miniBuildInteractionPrompt.label}{miniBuildInteractionPrompt.active &&
 					!showTouchControls
 						? ' · WASD / Jump to exit · V to view pose'
 						: ''}
@@ -2852,7 +2921,7 @@
 					data-testid="carry-prompt"
 					onclick={() => session?.scene.useCreatureKey()}
 				>
-					[K] {creaturePrompt.label}
+					[{keyName('interact.use')}] {creaturePrompt.label}
 				</button>
 			{/if}
 
@@ -2868,7 +2937,7 @@
 							if (e.key === 'Enter' || e.key === ' ') session?.scene.toggleLookedAtDoor();
 						}}
 					>
-						Press K to {lookedAtOpening?.open ? 'close' : 'open'} the {lookedAtOpening?.kind ===
+						Press {keyName('interact.use')} to {lookedAtOpening?.open ? 'close' : 'open'} the {lookedAtOpening?.kind ===
 						'shutters'
 							? 'shutters'
 							: 'door'}
@@ -3013,6 +3082,7 @@
 			<PauseMenu
 				worldName={currentWorldName}
 				seed={currentWorldSeed}
+				biomeName={currentBiomeName}
 				{saveStatus}
 				{saveError}
 				busy={worldsBusy}
@@ -3072,6 +3142,7 @@
 				}}
 				onOpenSettings={openSettings}
 				onOpenControls={() => (showHelp = true)}
+				onOpenKeyBindings={openKeyBindings}
 				onOpenCreatureLab={openCreatureLab}
 				onOpenDebug={() => {
 					debugControlsOpen = true;
@@ -3084,7 +3155,22 @@
 			/>
 		{/if}
 		{#if settingsOpen && session}
-			<SettingsMenu host={session.scene.settingsHost} onClose={closeSettings} />
+			<SettingsMenu
+				host={session.scene.settingsHost}
+				onClose={closeSettings}
+				revision={settingsRevision}
+			/>
+		{/if}
+		{#if biomeTogglePrompt !== null && session}
+			<ConfirmBiomesDialog
+				enable={biomeTogglePrompt}
+				onConfirm={() => {
+					session?.scene.setBiomesEnabled(biomeTogglePrompt === true);
+					biomeTogglePrompt = null;
+					settingsRevision++;
+				}}
+				onCancel={() => (biomeTogglePrompt = null)}
+			/>
 		{/if}
 	</div>
 	<SessionPanels
@@ -3119,6 +3205,10 @@
 
 {#if saveToast}
 	<div class="app-toast" data-testid="save-toast">{saveToast}</div>
+{/if}
+
+{#if keyBindingsOpen}
+	<KeyBindingsScreen onClose={() => (keyBindingsOpen = false)} />
 {/if}
 
 <style>

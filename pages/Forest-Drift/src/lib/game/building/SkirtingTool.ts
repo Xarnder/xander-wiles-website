@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import {
 	createActiveLevelWatch,
@@ -103,16 +105,16 @@ export class SkirtingTool implements BuildTool {
 		if (!this.active) return;
 		const target = event.target as HTMLElement | null;
 		if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'tool.snap')) {
 			this.snapMode = cycleSnapMode(this.snapMode, this.points.length);
 			this.refresh();
-		} else if (event.code === 'KeyO') {
+		} else if (matchesAction(event, 'skirting.offsetMode')) {
 			const draft = this.options.buildingSettings.skirtingRun;
 			draft.offsetMode = draft.offsetMode === 'auto' ? 'manual' : 'auto';
 			this.refresh();
-		} else if (this.drawing && event.code === 'Enter') {
+		} else if (this.drawing && matchesAction(event, 'tool.finish')) {
 			this.finish(false);
-		} else if (this.drawing && event.code === 'Backspace') {
+		} else if (this.drawing && matchesAction(event, 'tool.undoPoint')) {
 			this.undoPoint();
 		}
 	};
@@ -476,18 +478,18 @@ export class SkirtingTool implements BuildTool {
 				'',
 				...(snap ? [snap] : []),
 				check.closing ? 'Click: Close the room' : 'Click: Add point',
-				'Enter: Finish',
-				'Backspace: Undo point',
-				'O: Auto / manual offset',
-				'B: Cycle snap · E: Customise',
+				`${keyName('tool.finish')}: Finish`,
+				`${keyName('tool.undoPoint')}: Undo point`,
+				`${keyName('skirting.offsetMode')}: Auto / manual offset`,
+				`${keyName('tool.snap')}: Cycle snap · ${keyName('build.customise')}: Customise`,
 				'Right click: Cancel'
 			);
 		} else {
 			lines.push(
 				'Click along a wall line to start',
 				...(snap ? [snap] : []),
-				'O: Auto / manual offset',
-				'B: Cycle snap · E: Customise'
+				`${keyName('skirting.offsetMode')}: Auto / manual offset`,
+				`${keyName('tool.snap')}: Cycle snap · ${keyName('build.customise')}: Customise`
 			);
 		}
 		return {

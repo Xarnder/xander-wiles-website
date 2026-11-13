@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { BarrierManager } from './BarrierManager';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildingMaterialManager } from './BuildingMaterialManager';
@@ -109,7 +111,7 @@ export class PaintTool implements BuildTool {
 	}
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || event.code !== 'KeyB') return;
+		if (!this.active || !matchesAction(event, 'paint.palette')) return;
 		this.togglePalette();
 	};
 
@@ -440,8 +442,8 @@ export class PaintTool implements BuildTool {
 				'No paintable surface',
 				'',
 				'Left Click: Paint',
-				'B: Colours',
-				'P: Exit'
+				`${keyName('paint.palette')}: Colours`,
+				`${keyName('build.paintMode')}: Exit`
 			]
 		};
 	}

@@ -19,6 +19,16 @@
 				"exact": "7e5d6050",
 				"coarse": "7dca5695",
 				"count": 571
+			},
+			"biomes": {
+				"exact": "d3991a6d",
+				"coarse": "168dcca2",
+				"count": 4096
+			},
+			"biomeTrees": {
+				"exact": "32b793f1",
+				"coarse": "43446e3f",
+				"count": 864
 			}
 		},
 		{
@@ -39,6 +49,16 @@
 				"exact": "12d67f83",
 				"coarse": "84df0c94",
 				"count": 613
+			},
+			"biomes": {
+				"exact": "f3cd2d94",
+				"coarse": "e154b0cf",
+				"count": 4096
+			},
+			"biomeTrees": {
+				"exact": "3881da44",
+				"coarse": "03990200",
+				"count": 913
 			}
 		},
 		{
@@ -59,6 +79,16 @@
 				"exact": "5aa33c58",
 				"coarse": "bc42a97b",
 				"count": 555
+			},
+			"biomes": {
+				"exact": "e38aca21",
+				"coarse": "54440a30",
+				"count": 4096
+			},
+			"biomeTrees": {
+				"exact": "53630c09",
+				"coarse": "2d26cd32",
+				"count": 812
 			}
 		}
 	]

@@ -172,8 +172,7 @@ export class LightningController {
 			while (this.clock >= this.nextStrike) {
 				this.strike(this.nextStrike, listenerX, listenerZ, level);
 				// A quarter of strikes are followed quickly by another: storms cluster.
-				this.nextStrike +=
-					this.random() < 0.25 ? 0.6 + this.random() * 2.2 : this.nextWait(level);
+				this.nextStrike += this.random() < 0.25 ? 0.6 + this.random() * 2.2 : this.nextWait(level);
 			}
 		}
 		for (let i = this.active.length - 1; i >= 0; i--) {
@@ -222,11 +221,11 @@ export class LightningController {
 		const { minDistance, maxDistance } = this.options;
 		// Near-biased but mostly distant: median about a kilometre.
 		const distance =
-			forcedDistance ??
-			minDistance + (maxDistance - minDistance) * Math.pow(this.random(), 1.4);
+			forcedDistance ?? minDistance + (maxDistance - minDistance) * Math.pow(this.random(), 1.4);
 		const randomBearing = this.random() * Math.PI * 2;
 		const bearing = forcedBearing ?? randomBearing;
-		this.eventSeed = (Math.imul(this.eventSeed ^ (this.strikeCount + 1), 0x9e3779b1) + 0x7f4a7c15) >>> 0;
+		this.eventSeed =
+			(Math.imul(this.eventSeed ^ (this.strikeCount + 1), 0x9e3779b1) + 0x7f4a7c15) >>> 0;
 		const event: LightningEvent = {
 			time,
 			x: listenerX + Math.sin(bearing) * distance,

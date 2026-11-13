@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import { compileBarrierLevel } from './BarrierGeometryCompiler';
 import { layoutBarrier } from './barrierLayout';
@@ -160,18 +162,18 @@ export class BarrierTool implements BuildTool {
 		if (!this.active) return;
 		const target = event.target as HTMLElement | null;
 		if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'tool.snap')) {
 			this.snapMode = cycleSnapMode(this.snapMode, this.points.length);
 			this.refresh();
 			return;
 		}
 		if (!this.drawing) {
-			if (event.code === 'KeyR') this.restyleAimed();
-			else if (event.code === 'KeyQ') this.copyAimedStyle();
+			if (matchesAction(event, 'barrier.restyle')) this.restyleAimed();
+			else if (matchesAction(event, 'barrier.copyStyle')) this.copyAimedStyle();
 			return;
 		}
-		if (event.code === 'Enter') this.finish(false);
-		else if (event.code === 'Backspace') this.undoPoint();
+		if (matchesAction(event, 'tool.finish')) this.finish(false);
+		else if (matchesAction(event, 'tool.undoPoint')) this.undoPoint();
 	};
 
 	constructor(options: BarrierToolOptions) {
@@ -774,11 +776,22 @@ export class BarrierTool implements BuildTool {
 		const snap = snapModeLabel(this.snapMode);
 		const lines = [...where, '', 'FENCE / RAILING', presetName, ''];
 		if (!this.drawing) {
-			lines.push('Click to start', ...(snap ? [snap] : []), 'B: Cycle snap', 'E: Customise');
+			lines.push(
+				'Click to start',
+				...(snap ? [snap] : []),
+				`${keyName('tool.snap')}: Cycle snap`,
+				`${keyName('build.customise')}: Customise`
+			);
 			if (this.aimedBarrierId)
-				lines.push('R: Apply these settings to this fence', 'Q: Copy its style');
+				lines.push(
+					`${keyName('barrier.restyle')}: Apply these settings to this fence`,
+					`${keyName('barrier.copyStyle')}: Copy its style`
+				);
 			else if (this.aimedStairId)
-				lines.push("R: Apply this style to the stair's railings", 'Q: Copy their style');
+				lines.push(
+					`${keyName('barrier.restyle')}: Apply this style to the stair's railings`,
+					`${keyName('barrier.copyStyle')}: Copy their style`
+				);
 			return {
 				toolId: 'barrier',
 				snapMode: this.snapMode,
@@ -796,10 +809,10 @@ export class BarrierTool implements BuildTool {
 		lines.push(
 			...(snap ? [snap] : []),
 			check.closing ? 'Click: Close loop' : 'Click: Add point',
-			'Enter: Finish',
-			'Backspace: Undo point',
-			'B: Cycle snap',
-			'E: Customise',
+			`${keyName('tool.finish')}: Finish`,
+			`${keyName('tool.undoPoint')}: Undo point`,
+			`${keyName('tool.snap')}: Cycle snap`,
+			`${keyName('build.customise')}: Customise`,
 			'Right click: Cancel'
 		);
 		return {

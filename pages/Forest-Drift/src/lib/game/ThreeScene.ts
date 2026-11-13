@@ -204,6 +204,26 @@ import { CloudSystem } from './sky/CloudSystem';
 import { HdriEnvironmentSystem } from './sky/HdriEnvironmentSystem';
 import { SkySystem } from './sky/SkySystem';
 import { createDefaultSkySettings, type SkySettings } from './sky/SkyTypes';
+import { BiomeField } from './biomes/BiomeField';
+import { BiomeSurface } from './biomes/BiomeSurface';
+import { applyBiomeAtmosphere } from './biomes/biomeAtmosphere';
+import { readBiomeKillSwitch } from './biomes/biomeKillSwitch';
+import { BiomePlants } from './biomes/BiomePlants';
+import { LocalClimate } from './biomes/LocalClimate';
+import { BiomeTrees } from './biomes/BiomeTrees';
+import { writeBiomeMapColor, writeClimateColor } from './biomes/biomeDebugColor';
+import { getBiomeDefinition } from './biomes/biomeDefinitions';
+import { BiomeTracker } from './biomes/BiomeTracker';
+import {
+	BIOME_IDS,
+	createBiomeWeightVector,
+	createClimateSample,
+	createDefaultBiomeSettings,
+	createLegacyBiomeSettings,
+	sanitizeBiomeSettings,
+	type BiomeId,
+	type BiomeSettings
+} from './biomes/BiomeTypes';
 import { BaseTerrainSampler } from './hydrology/BaseTerrainSampler';
 import { HydrologyDebugView } from './hydrology/HydrologyDebugView';
 import { HydrologySystem } from './hydrology/HydrologySystem';
@@ -257,6 +277,7 @@ import {
 } from './vegetation/VegetationTypes';
 import type { WorldRevisionCounters, WorldRuntime } from './world/WorldSerializer';
 import { sanitizePlayerState } from './world/WorldSerializer';
+import { createDefaultKeyEvent, matchesAction } from './input/KeyInput';
 import {
 	createEmptyProceduralOverrides,
 	resolveWorldRules,
@@ -476,6 +497,12 @@ export type RideFeedbackEvent =
 	/** Online: the room said no to climbing on. */
 	| { type: 'refused'; reason: string };
 
+export interface BiomeChange {
+	id: BiomeId | null;
+	name: string | null;
+	announce: boolean;
+}
+
 export interface ThreeSceneOptions {
 	container: HTMLElement;
 	settings: TerrainSettings;
@@ -486,6 +513,13 @@ export interface ThreeSceneOptions {
 	onPointerLockChange?: (locked: boolean) => void;
 	/** Flying toggled (F) or its speed changed (scroll wheel while flying). */
 	onFlightChange?: (state: FlightState) => void;
+	/**
+	 * The biome under the player changed (after a few seconds' hold), or biomes were switched
+	 * on/off (`id` null). `announce` says whether to show the biome-name card now.
+	 */
+	onBiomeChange?: (change: BiomeChange) => void;
+	/** Settings → Biomes → "Turn biomes on/off…": confirm with the player, then `setBiomesEnabled`. */
+	onBiomeToggleRequest?: (enable: boolean) => void;
 	/** The player's displayed health changed (never sent every frame). */
 	onHealthChange?: (snapshot: HealthSnapshot) => void;
 	/** Points were taken, for the vignette and landing sound. */
@@ -589,6 +623,9 @@ export class ThreeScene implements WorldRuntime {
 	private readonly vegetationSettings: VegetationSettings;
 	private readonly skySettings: SkySettings;
 	private readonly onStatsUpdate?: (stats: SceneStats) => void;
+	private readonly onBiomeChange?: (change: BiomeChange) => void;
+	private readonly onBiomeToggleRequest?: (enable: boolean) => void;
+	private readonly biomeTracker = new BiomeTracker();
 	private readonly onMiniBuildNotice?: (message: string) => void;
 	private readonly onHealthChange?: ThreeSceneOptions['onHealthChange'];
 	private readonly onPlayerDamaged?: ThreeSceneOptions['onPlayerDamaged'];
@@ -599,6 +636,17 @@ export class ThreeScene implements WorldRuntime {
 	private readonly renderer: THREE.WebGLRenderer;
 	private readonly terrainManager: TerrainManager;
 	private readonly hydrologySettings: HydrologySettings;
+	/** The world's biome settings (saved in `environment.biomes`); mutated in place on load. */
+	private readonly biomeSettings: BiomeSettings;
+	/** The one biome cache every system reads (see biomes/BiomeField.ts). */
+	private readonly biomeField: BiomeField;
+	/** Biome ground and grass for terrain chunks and grass (no-op while the world's biomes are off). */
+	private readonly biomeSurface: BiomeSurface;
+	/** Biome forests and plants (no-op while the world's biomes are off). */
+	private readonly biomeTrees: BiomeTrees;
+	private readonly biomePlants: BiomePlants;
+	/** Biome climate at the camera: local rain/snow/dry, fog tint (biomes Phase 5). */
+	private readonly localClimate: LocalClimate;
 	private readonly hydrologyDebug: HydrologyDebugSettings;
 	private readonly hydrologyVisual: HydrologyVisualSettings;
 	private readonly hydrology: HydrologySystem;
@@ -775,6 +823,8 @@ export class ThreeScene implements WorldRuntime {
 		this.vegetationSettings = options.vegetationSettings;
 		this.skySettings = options.skySettings;
 		this.onStatsUpdate = options.onStatsUpdate;
+		this.onBiomeChange = options.onBiomeChange;
+		this.onBiomeToggleRequest = options.onBiomeToggleRequest;
 		this.onMiniBuildNotice = options.onMiniBuildNotice;
 		this.onHealthChange = options.onHealthChange;
 		this.onPlayerDamaged = options.onPlayerDamaged;
@@ -812,6 +862,7 @@ export class ThreeScene implements WorldRuntime {
 		if (savedGraphicsQuality) this.graphicsSettings.quality = savedGraphicsQuality;
 		this.graphicsSettings.showFpsCounter = this.graphicsSettingsStore.getShowFpsCounter();
 		this.graphicsSettings.showLocatorBar = this.graphicsSettingsStore.getShowLocatorBar();
+		this.graphicsSettings.showBiomeNames = this.graphicsSettingsStore.getShowBiomeNames();
 		this.graphicsSettings.fieldOfView = clampFieldOfView(
 			this.graphicsSettingsStore.getFieldOfView() ?? this.graphicsSettings.fieldOfView
 		);
@@ -871,6 +922,31 @@ export class ThreeScene implements WorldRuntime {
 			this.settings.seed
 		);
 		heightSampler.attachHydrology(this.hydrology);
+		readBiomeKillSwitch(location.search);
+		// Biomes read only the pre-water, pre-edit terrain, so neither rivers nor shovel edits move them.
+		this.biomeSettings = createDefaultBiomeSettings();
+		this.biomeField = new BiomeField(heightSampler, this.biomeSettings);
+		this.biomeField.setSeed(this.settings.seed);
+		this.biomeSurface = new BiomeSurface(this.biomeField);
+		this.biomeTrees = new BiomeTrees(this.biomeField);
+		this.biomePlants = new BiomePlants(this.biomeField, this.biomeTrees);
+		this.localClimate = new LocalClimate(this.biomeField);
+		{
+			const weights = createBiomeWeightVector();
+			const climate = createClimateSample();
+			this.terrainManager.setBiomeHooks({
+				surface: this.biomeSurface,
+				debug: (view, x, z, out, offset) => {
+					if (view === 'biomeMap') {
+						this.biomeField.weightsAt(x, z, weights);
+						writeBiomeMapColor(weights, out, offset);
+					} else {
+						this.biomeField.climateAt(x, z, climate);
+						writeClimateColor(climate.temperature, climate.moisture, out, offset);
+					}
+				}
+			});
+		}
 		this.terrainManager.setHydrologyGate({
 			ready: (x, z) => this.hydrology.isReady(x, z),
 			tick: () => this.hydrology.tick(),
@@ -879,6 +955,10 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.water = new WaterRenderer();
 		this.water.setQuality(this.graphicsSettings.quality);
+		// Biome water tint (white while a world's biomes are off).
+		this.water.setTintSource((x, z, out, offset) => {
+			if (this.localClimate?.active()) this.localClimate.waterTintAt(x, z, out, offset);
+		});
 		this.water.applyLook(this.hydrologyVisual);
 		this.scene.add(this.water.group);
 		this.hydrologyDebugView = new HydrologyDebugView();
@@ -1165,6 +1245,7 @@ export class ThreeScene implements WorldRuntime {
 			this.settings.seed
 		);
 		this.weather.setQuality(this.graphicsSettings.quality);
+		this.weather.setLocalClimate(this.localClimate);
 		this.scene.add(this.weather.group);
 		// Transparent effects must not cast ambient occlusion (dark halos round drops and bolts).
 		this.graphicsPipeline.excludeFromAo(this.weather.group);
@@ -1205,7 +1286,8 @@ export class ThreeScene implements WorldRuntime {
 			terrainHeightSampler: this.terrainManager.getHeightSampler(),
 			foundationManager: this.foundationManager,
 			seed: this.settings.seed,
-			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z)
+			waterDepthAt: (x, z) => this.hydrology.waterColumnDepth(x, z),
+			biomes: this.biomeTrees
 		});
 		this.scene.add(this.treeManager.group);
 		// Alpha-tested foliage cards would draw as solid quads in the AO pre-pass (dark halos).
@@ -1229,6 +1311,7 @@ export class ThreeScene implements WorldRuntime {
 			heightSampler: this.terrainManager.getHeightSampler(),
 			vegetationRegionSampler: this.treeManager.getVegetationRegionSampler(),
 			groundCover: (x, z) => this.plantManager?.flowerCover(x, z) ?? 0,
+			biomeSurface: this.biomeSurface,
 			getExclusions: () => [
 				...this.foundationManager.getFootprints(),
 				...this.terrainEdits.getFootprints()
@@ -1278,7 +1361,8 @@ export class ThreeScene implements WorldRuntime {
 					this.hydrology.riversNear(x, z, radius).length > 0 ||
 					this.hydrology.lakesNear(x, z, radius).length > 0
 				);
-			}
+			},
+			biomes: this.biomePlants
 		});
 		this.scene.add(this.plantManager.group);
 		this.graphicsPipeline.excludeFromAo(this.plantManager.group);
@@ -1972,7 +2056,10 @@ export class ThreeScene implements WorldRuntime {
 			miniBuildDisplay: this.miniBuildPreferences.display,
 			worldAccess: 'local',
 			rules: this.rulesSettingsPort(),
+			biomes: this.biomeSettings,
 			actions: {
+				biomeSettings: () => this.regenerateBiomes(),
+				biomeToggleRequest: () => this.onBiomeToggleRequest?.(!this.biomeSettings.enabled),
 				miniBuildDisplay: () => {
 					this.miniBuildChunkBoundaries.setEnabled(
 						this.miniBuildPreferences.display.showChunkBoundaries
@@ -2136,6 +2223,9 @@ export class ThreeScene implements WorldRuntime {
 				},
 				graphicsLocatorBar: () => {
 					this.graphicsSettingsStore.setShowLocatorBar(this.graphicsSettings.showLocatorBar);
+				},
+				graphicsBiomeNames: () => {
+					this.graphicsSettingsStore.setShowBiomeNames(this.graphicsSettings.showBiomeNames);
 				},
 				graphicsExposure: () =>
 					this.graphicsPipeline.setToneMappingExposure(this.graphicsSettings.toneMappingExposure),
@@ -2378,6 +2468,11 @@ export class ThreeScene implements WorldRuntime {
 				enabled: false
 			});
 		this.hydrology.setSeed(seed);
+		// Worlds saved before biomes existed have them off (migration v9 → v10, decision Q6).
+		Object.assign(
+			this.biomeSettings,
+			sanitizeBiomeSettings(environment.biomes) ?? createLegacyBiomeSettings()
+		);
 		this.materialLibrary.setWorldSeed(seed);
 		this.weather.load(environment.weather, seed);
 		this.weatherExposure?.invalidate();
@@ -2396,10 +2491,57 @@ export class ThreeScene implements WorldRuntime {
 
 		this.terrainManager.notifyTopologyChanged();
 		this.terrainManager.notifySeedChanged();
+		// After the terrain sampler has its new seed and shape: biomes read both.
+		this.biomeField.setSeed(seed);
+		this.biomeTracker.reset();
+		this.localClimate.reset();
 		this.treeManager.notifySeedChanged(seed);
 		this.grassManager.setSeed(seed);
 		this.plantManager.setSeed(seed);
 		this.applySkySettings();
+	}
+
+	/**
+	 * Switches the world's biomes on or off (after the player confirmed, decision Q9). The land,
+	 * rivers and buildings never move; the ground and grass regenerate progressively, nearest first.
+	 * Saved with the world. Refused in online worlds, where the land is locked.
+	 */
+	setBiomesEnabled(enabled: boolean): void {
+		if (this.settingsHost.worldAccess && this.settingsHost.worldAccess !== 'local') return;
+		if (this.biomeSettings.enabled === enabled) return;
+		this.biomeSettings.enabled = enabled;
+		this.regenerateBiomes();
+	}
+
+	isBiomesEnabled(): boolean {
+		return this.biomeSettings.enabled;
+	}
+
+	/** After any biome setting changes: reclassify, then rebuild terrain colour and grass. */
+	private regenerateBiomes(): void {
+		this.environmentRevision++;
+		this.biomeField.invalidate();
+		this.biomeTracker.reset();
+		this.localClimate.reset();
+		this.water.clear();
+		this.terrainManager.notifySettingsChanged();
+		this.treeManager.notifyTerrainChanged();
+	}
+
+	/** Feeds the dominant biome under the player to the tracker and reports changes to the page. */
+	private updateBiomeTracker(deltaSeconds: number): void {
+		const position = this.controller.worldPosition;
+		const dominant = this.biomeField.isEnabled()
+			? this.biomeField.dominantAt(position.x, position.z)
+			: null;
+		const change = this.biomeTracker.update(dominant, deltaSeconds);
+		if (!change) return;
+		const id = change.current === null ? null : BIOME_IDS[change.current];
+		this.onBiomeChange?.({
+			id,
+			name: id ? getBiomeDefinition(id).name : null,
+			announce: change.announce && this.graphicsSettings.showBiomeNames
+		});
 	}
 
 	/** F: toggles free flight. Returns the new state (flying, speed). Always off in online worlds. */
@@ -3141,9 +3283,13 @@ export class ThreeScene implements WorldRuntime {
 		return this.isDoorOpen(openingId);
 	}
 
+	/**
+	 * Touch buttons: press `code` as the default controls mean it (the tool's own meaning for R, B,
+	 * ↑ …), so touch keeps working however the player has rebound the keyboard.
+	 */
 	simulateKey(code: string): void {
-		window.dispatchEvent(new KeyboardEvent('keydown', { code }));
-		window.dispatchEvent(new KeyboardEvent('keyup', { code }));
+		window.dispatchEvent(createDefaultKeyEvent('keydown', code));
+		window.dispatchEvent(createDefaultKeyEvent('keyup', code));
 	}
 
 	/** Grass stats against the current camera frustum (for the overlay and benchmarks). */
@@ -3351,6 +3497,7 @@ export class ThreeScene implements WorldRuntime {
 			vegetation,
 			sky,
 			hydrology: structuredClone(this.hydrologySettings),
+			biomes: structuredClone(this.biomeSettings),
 			weather: this.weather.save()
 		};
 	}
@@ -3633,8 +3780,7 @@ export class ThreeScene implements WorldRuntime {
 	// ------------------------------------------------------------------ ranged weapons (carrying)
 
 	private readonly handleCreatureKey = (event: KeyboardEvent): void => {
-		if (event.code !== 'KeyK' || event.repeat || event.ctrlKey || event.altKey || event.metaKey)
-			return;
+		if (!matchesAction(event, 'interact.use') || event.repeat) return;
 		const target = event.target as HTMLElement | null;
 		if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
 		if (this.useCreatureKey()) {
@@ -4501,6 +4647,9 @@ export class ThreeScene implements WorldRuntime {
 		frame.feetY = this.controller.worldPosition.y - this.settings.player.eyeHeight;
 		frame.viewportHeight = this.renderer.domElement.height || this.container.clientHeight || 1;
 		frame.cloudAltitude = this.skySettings.clouds.altitude;
+		const here = this.controller.worldPosition;
+		// Before the weather reads it: rain becomes snow in the cold, nothing falls in the desert.
+		const climateMoved = this.localClimate.update(here.x, here.z, deltaSeconds);
 		if (this.multiplayer) this.weather.update(deltaSeconds, frame, this.sharedWeatherTime());
 		else this.weather.update(this.simulationPaused ? 0 : deltaSeconds, frame);
 		const { smoothedFps, targetFps } = this.graphicsPipeline.getFrameRate();
@@ -4532,7 +4681,7 @@ export class ThreeScene implements WorldRuntime {
 			if (this.lastWeatherPersistRevision >= 0) this.environmentRevision++;
 			this.lastWeatherPersistRevision = persist;
 		}
-		return this.weather.consumeLookChange();
+		return this.weather.consumeLookChange() || climateMoved;
 	}
 
 	/** Apply the window editor selection to the opening under the crosshair. */
@@ -4562,7 +4711,11 @@ export class ThreeScene implements WorldRuntime {
 	private applySkySettings(): void {
 		ensureDayCycleSettings(this.skySettings);
 		// The day/night look first, then the weather on top (clouds, light, fog, lightning flash).
-		const look = this.weather.applyToLook(resolveEffectiveSky(this.skySettings));
+		// Then the local biome's air (humid haze, dust, mist): capped, and nothing while biomes are off.
+		const weathered = this.weather.applyToLook(resolveEffectiveSky(this.skySettings));
+		const look = this.localClimate.active()
+			? applyBiomeAtmosphere(weathered, this.localClimate.state)
+			: weathered;
 		this.dayNightLook = look;
 		this.skySystem.applySettings(look.sky, look.atmosphere);
 		this.cloudSystem.applyDebugSettings(this.skySettings.debug);
@@ -4883,6 +5036,7 @@ export class ThreeScene implements WorldRuntime {
 				);
 			this.terrainManager.notifyTopologyChanged();
 			this.treeManager.notifyTerrainChanged();
+			this.biomeField.invalidate();
 			this.dirty.topology = false;
 			this.dirty.settings = false;
 			this.dirty.seed = false;
@@ -4892,6 +5046,7 @@ export class ThreeScene implements WorldRuntime {
 				this.hydrology.setSeed(this.settings.seed);
 				this.water.clear();
 				this.terrainManager.notifySeedChanged();
+				this.biomeField.setSeed(this.settings.seed);
 				this.treeManager.notifySeedChanged(this.settings.seed);
 				this.grassManager.setSeed(this.settings.seed);
 				this.plantManager.setSeed(this.settings.seed);
@@ -4899,6 +5054,8 @@ export class ThreeScene implements WorldRuntime {
 				this.dirty.settings = false;
 			} else if (this.dirty.settings) {
 				this.hydrology.invalidate();
+				// Landform weights and base height feed the biome classification.
+				this.biomeField.invalidate();
 				this.water.clear();
 				this.terrainManager.notifySettingsChanged();
 				this.treeManager.notifyTerrainChanged();
@@ -4955,6 +5112,7 @@ export class ThreeScene implements WorldRuntime {
 		// The mount moves first, so the eye the controller follows is this frame's seat.
 		this.ride.update(deltaSeconds);
 		this.controller.update(deltaSeconds);
+		this.updateBiomeTracker(deltaSeconds);
 		this.health.poll();
 		this.carry.update(deltaSeconds);
 		this.creatures.setRideCarryClearance(this.rideCarryClearance());

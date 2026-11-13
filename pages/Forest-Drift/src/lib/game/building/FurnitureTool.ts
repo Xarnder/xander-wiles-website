@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName, padKey } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import type { BuildingManager } from './BuildingManager';
 import type { BuildUiState, BuildingSettings, HotbarSlotVariant, ToolId } from './FoundationTypes';
 import type { BuildUndoManager } from './BuildUndoManager';
@@ -111,9 +113,8 @@ export class FurnitureTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active || event.repeat) return;
-		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (isTypingTarget(event.target)) return;
-		if (event.code !== 'KeyR') return;
+		if (!matchesAction(event, 'tool.rotate')) return;
 		this.buildingSettings.furnitureRotationY = cycleFurnitureRotation(
 			this.buildingSettings.furnitureRotationY
 		);
@@ -632,11 +633,11 @@ export class FurnitureTool implements BuildTool {
 				`${input.width.toFixed(2)}m × ${input.depth.toFixed(2)}m × ${input.height.toFixed(2)}m`,
 				`Rotation: ${rotation}°`,
 				'',
-				'↑/↓  Switch object',
+				`${padKey('build.slotPrevious', 'build.slotNext')}Switch object`,
 				'E    Customize',
 				'R    Rotate',
 				placeLine,
-				'X: Remove'
+				`${keyName('build.removeMode')}: Remove`
 			],
 			notice: this.preview && !this.preview.valid ? (this.preview.reason ?? undefined) : undefined
 		});

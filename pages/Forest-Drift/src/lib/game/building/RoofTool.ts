@@ -1,4 +1,5 @@
 import { wallCornersForPlacement } from './wallCornerSnap';
+import { keyName } from '../input/keyNames';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -43,6 +44,8 @@ import { resolveSlabPlacementLocalY } from './slabPlacementMath';
 import { validateSlabPolygon } from './slabMath';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
+import type { KeyActionId } from '../input/keyActions';
+import { actionsShareKey, matchesAction } from '../input/KeyInput';
 
 const MAX_FULL_GRID_POINTS = 4096;
 const FALLBACK_RADIUS_CELLS = 12;
@@ -200,32 +203,34 @@ export class RoofTool implements BuildTool {
 			return;
 
 		if (this.state === 'adjusting') {
-			if (event.code === 'KeyV') {
+			if (matchesAction(event, 'roof.type')) {
 				this.cycleType();
-			} else if (event.code === 'KeyR') {
+			} else if (matchesAction(event, 'tool.rotate')) {
 				this.rotate();
-			} else if (event.code === 'ArrowUp') {
+			} else if (matchesAction(event, 'roof.riseUp')) {
+				// Shift held: finer steps.
 				this.adjustRise(1, event.shiftKey);
-			} else if (event.code === 'ArrowDown') {
+			} else if (matchesAction(event, 'roof.riseDown')) {
 				this.adjustRise(-1, event.shiftKey);
 			}
 			return;
 		}
 
 		if (event.repeat) return;
-		if (event.code === 'KeyE') {
+		if (matchesAction(event, 'roof.footprint')) {
 			this.footprintMode = this.footprintMode === 'rectangle' ? 'polygon' : 'rectangle';
 			// Keep the initial corner when returning from a partly drawn polygon.
 			this.points = this.points.slice(0, 1);
 			this.refreshVisuals();
 			return;
 		}
-		if (event.code === 'KeyB' && this.footprintMode === 'rectangle') {
+		const snap = matchesAction(event, 'tool.snap');
+		if (snap && this.footprintMode === 'rectangle') {
 			this.footprintMode = 'polygon';
 			this.refreshVisuals();
 			return;
 		}
-		if (event.code === 'KeyB') {
+		if (snap) {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersForPlacement(foundationId).length > 0
@@ -235,7 +240,7 @@ export class RoofTool implements BuildTool {
 			return;
 		}
 		if (this.state !== 'drawing') return;
-		if (event.code === 'Backspace') this.undoLastPoint();
+		if (matchesAction(event, 'tool.undoPoint')) this.undoLastPoint();
 	};
 
 	/** Corners of the wall storey directly beneath the placement plane. */
@@ -348,12 +353,11 @@ export class RoofTool implements BuildTool {
 		this.onHudChange?.(null);
 	}
 
-	isCapturingKey(code: string): boolean {
-		return (
-			this.active &&
-			((this.state !== 'adjusting' && code === 'KeyE') ||
-				(this.state === 'adjusting' && (code === 'ArrowUp' || code === 'ArrowDown')))
-		);
+	/** While drawing, the outline toggle's key (E); while adjusting, the rise keys (↑/↓). */
+	capturesKeyOf(action: KeyActionId): boolean {
+		if (!this.active) return false;
+		if (this.state !== 'adjusting') return actionsShareKey('roof.footprint', action);
+		return actionsShareKey('roof.riseUp', action) || actionsShareKey('roof.riseDown', action);
 	}
 
 	update(): void {
@@ -962,8 +966,11 @@ export class RoofTool implements BuildTool {
 
 	private footprintModeHints(): string[] {
 		return this.footprintMode === 'rectangle'
-			? ['E: Polygon mode', 'B: Polygon mode (Snap)']
-			: ['E: Rectangle mode', 'B: Cycle snap'];
+			? [
+					`${keyName('roof.footprint')}: Polygon mode`,
+					`${keyName('tool.snap')}: Polygon mode (Snap)`
+				]
+			: [`${keyName('roof.footprint')}: Rectangle mode`, `${keyName('tool.snap')}: Cycle snap`];
 	}
 
 	private buildIdleHud(): BuildUiState {
@@ -1025,7 +1032,7 @@ export class RoofTool implements BuildTool {
 				...(this.footprintMode === 'rectangle'
 					? ['Click: Opposite corner']
 					: ['Click: Add point', 'Click first point: Close']),
-				'Backspace: Undo point',
+				`${keyName('tool.undoPoint')}: Undo point`,
 				...this.footprintModeHints(),
 				'Right click: Cancel'
 			]
@@ -1046,7 +1053,7 @@ export class RoofTool implements BuildTool {
 				reason,
 				'',
 				...this.snapHudLines(),
-				'Backspace: Undo point',
+				`${keyName('tool.undoPoint')}: Undo point`,
 				...this.footprintModeHints(),
 				'Right click: Cancel'
 			]
@@ -1089,9 +1096,11 @@ export class RoofTool implements BuildTool {
 				'',
 				...statLines,
 				'',
-				'V: Cycle type',
-				...(hasOrientation ? ['R: Rotate'] : []),
-				...(hasSlope ? ['↑/↓: Adjust rise (Shift: fine)'] : []),
+				`${keyName('roof.type')}: Cycle type`,
+				...(hasOrientation ? [`${keyName('tool.rotate')}: Rotate`] : []),
+				...(hasSlope
+					? [`${keyName('roof.riseUp')}/${keyName('roof.riseDown')}: Adjust rise (Shift: fine)`]
+					: []),
 				'E set height',
 				'Click: Place roof',
 				'Right click: Cancel'

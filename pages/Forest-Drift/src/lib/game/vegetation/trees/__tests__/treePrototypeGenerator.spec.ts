@@ -288,6 +288,12 @@ describe('foliage cards', () => {
 
 	it('gives every species cards on LOD0 and LOD1 only, fewer on LOD1', () => {
 		for (const { speciesId, species, design } of designs) {
+			if (species.cards.length === 0) {
+				// Leafless species (cactus) have no cards at any LOD.
+				for (const lod of [0, 1, 2, 3] as const)
+					expect(buildTreeCards(species, design, lod), speciesId).toBeNull();
+				continue;
+			}
 			const lod0 = buildTreeCards(species, design, 0);
 			const lod1 = buildTreeCards(species, design, 1);
 			expect(lod0, speciesId).not.toBeNull();
@@ -306,6 +312,7 @@ describe('foliage cards', () => {
 
 	it('produces valid card geometry: finite, unit normals, UVs inside the layer tile, anchors on the card', () => {
 		for (const { speciesId, species, design } of designs) {
+			if (species.cards.length === 0) continue;
 			for (const lod of [0, 1] as const) {
 				const cards = buildTreeCards(species, design, lod)!;
 				const vertexCount = cards.positions.length / 3;

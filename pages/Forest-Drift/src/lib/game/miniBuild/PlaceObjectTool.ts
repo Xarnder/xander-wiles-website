@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { keyName, padKey } from '../input/keyNames';
 import type { BuildTool } from '../building/BuildToolManager';
+import type { KeyActionId } from '../input/keyActions';
+import { actionsShareKey, firstMatchingAction, matchesAction } from '../input/KeyInput';
 import type { BuildUndoManager } from '../building/BuildUndoManager';
 import type { BuildUiState, ToolId } from '../building/FoundationTypes';
 import { getFurnitureCatalogueEntry } from '../building/furnitureCatalogue';
@@ -80,29 +83,28 @@ export class PlaceObjectTool implements BuildTool {
 	private delegatingToLight = false;
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
-		if (!this.active || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+		if (!this.active || event.repeat) return;
 		if (isTypingTarget(event.target)) return;
-		switch (event.code) {
-			case 'KeyR':
-				if (!this.delegatingToLight) this.rotate(event.shiftKey ? -1 : 1);
-				break;
-			case 'KeyT':
-				if (!this.delegatingToLight) {
-					const step = cycleRotationSnapStep(event.shiftKey ? -1 : 1);
-					this.onNotice?.(`Rotation snap ${formatAngle(step)}`);
-				}
-				break;
-			case 'KeyB':
-				this.copyTarget();
-				break;
-			case 'KeyF':
-				if (this.targetInstanceId) this.onEditInstanceRequest?.(this.targetInstanceId);
-				break;
-			case 'ArrowUp':
-			case 'ArrowDown':
-				event.preventDefault();
-				this.cycleRecent(event.code === 'ArrowUp' ? -1 : 1);
-				break;
+		if (matchesAction(event, 'tool.rotate')) {
+			// Shift held: turn the other way.
+			if (!this.delegatingToLight) this.rotate(event.shiftKey ? -1 : 1);
+		} else if (matchesAction(event, 'tool.rotationStep')) {
+			if (!this.delegatingToLight) {
+				const step = cycleRotationSnapStep(event.shiftKey ? -1 : 1);
+				this.onNotice?.(`Rotation snap ${formatAngle(step)}`);
+			}
+		} else if (matchesAction(event, 'placeObject.copy')) {
+			this.copyTarget();
+		} else if (matchesAction(event, 'placeObject.edit')) {
+			if (this.targetInstanceId) this.onEditInstanceRequest?.(this.targetInstanceId);
+		} else {
+			const recent = firstMatchingAction(event, [
+				'placeObject.recentPrevious',
+				'placeObject.recentNext'
+			] as const);
+			if (!recent) return;
+			event.preventDefault();
+			this.cycleRecent(recent === 'placeObject.recentPrevious' ? -1 : 1);
 		}
 	};
 
@@ -164,8 +166,12 @@ export class PlaceObjectTool implements BuildTool {
 		);
 	}
 
-	isCapturingKey(code: string): boolean {
-		return code === 'ArrowUp' || code === 'ArrowDown';
+	/** ↑/↓ cycle recent objects here, not the hotbar slot. */
+	capturesKeyOf(action: KeyActionId): boolean {
+		return (
+			actionsShareKey('placeObject.recentPrevious', action) ||
+			actionsShareKey('placeObject.recentNext', action)
+		);
 	}
 
 	setSelection(
@@ -355,7 +361,7 @@ export class PlaceObjectTool implements BuildTool {
 				toolId: 'place-object',
 				crosshair: 'default',
 				hintLines: ['PLACE OBJECT', 'Nothing selected', '', 'E    Object Library'],
-				notice: 'Press E to choose an object'
+				notice: `Press ${keyName('build.customise')} to choose an object`
 			});
 			return;
 		}
@@ -380,14 +386,18 @@ export class PlaceObjectTool implements BuildTool {
 			`Rotation: ${formatAngle(this.rotationY)} · snap ${formatAngle(getRotationSnapStep())}`,
 			'',
 			'E    Object Library',
-			'R    Rotate (Shift: back)',
-			'T    Snap angle (Shift: coarser)',
-			'↑/↓  Recent objects'
+			`${padKey('tool.rotate')}Rotate (Shift: back)`,
+			`${padKey('tool.rotationStep')}Snap angle (Shift: coarser)`,
+			`${padKey('placeObject.recentPrevious', 'placeObject.recentNext')}Recent objects`
 		];
-		if (targetName) lines.push(`B    Copy ${targetName}`, `F    Edit ${targetName}`);
+		if (targetName)
+			lines.push(
+				`${padKey('placeObject.copy')}Copy ${targetName}`,
+				`${padKey('placeObject.edit')}Edit ${targetName}`
+			);
 		const readout = this.getPlacementReadout();
 		if (readout) lines.push('', formatAreaDetail(readout));
-		lines.push(placeLine.split('\n')[0], 'X: Remove');
+		lines.push(placeLine.split('\n')[0], `${keyName('build.removeMode')}: Remove`);
 		this.onHudChange?.({
 			toolId: 'place-object',
 			crosshair: this.preview?.valid ? 'valid' : 'invalid',

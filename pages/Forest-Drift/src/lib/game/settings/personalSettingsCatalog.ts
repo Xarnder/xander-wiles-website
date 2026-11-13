@@ -1,4 +1,6 @@
 import { getTutorialPreferences, setTutorialPreferences } from '../tutorials/TutorialPreferences';
+import { findConflicts } from '../input/conflicts';
+import { getActiveProfile, getBindings } from '../input/KeyBindingsStore';
 import type { SettingsCategory, SettingsField } from './GameSettingsHost';
 import { getAudioPreferences, setAudioPreferences } from '../audio/AudioPreferences';
 import { GraphicsSettingsStore } from '../graphics/GraphicsSettingsStore';
@@ -43,6 +45,37 @@ export function audioSettingsCategory(): SettingsCategory {
 					volume('music', 'Music volume'),
 					volume('ambience', 'Ambience & weather volume'),
 					volume('narration', 'Narration volume')
+				]
+			}
+		]
+	};
+}
+
+/**
+ * Controls: a door into the full-screen key mapping screen (it opens on
+ * `forest:open-key-bindings`), with the active profile and any conflicts at a glance.
+ */
+export function controlsSettingsCategory(): SettingsCategory {
+	const profile = getActiveProfile();
+	const conflicts = findConflicts(getBindings).length;
+	return {
+		id: 'controls',
+		title: 'Controls',
+		description:
+			'Change any key, keep several control profiles, and download or load them. Saved on this device.',
+		groups: [
+			{
+				id: 'controls-keys',
+				title: 'Key mapping',
+				fields: [
+					{
+						kind: 'button',
+						id: 'controls.open',
+						label: `Open key mapping · ${profile?.name ?? 'Default'}${
+							conflicts ? ` · ⚠ ${conflicts} conflict${conflicts === 1 ? '' : 's'}` : ''
+						}`,
+						onClick: () => window.dispatchEvent(new Event('forest:open-key-bindings'))
+					}
 				]
 			}
 		]
@@ -155,6 +188,7 @@ export function personalSettingsCatalog(): SettingsCategory[] {
 				}
 			]
 		},
+		controlsSettingsCategory(),
 		audioSettingsCategory(),
 		tutorialSettingsCategory()
 	];

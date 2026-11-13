@@ -11,10 +11,32 @@
  * Nothing here is per placed tree except `TreeInstanceDefinition`, which is a handful of numbers.
  */
 
-export type TreeFamily = 'broadleaf' | 'pine' | 'cypress' | 'ornamental' | 'spruce' | 'weeping';
+export type TreeFamily =
+	'broadleaf' | 'pine' | 'cypress' | 'ornamental' | 'spruce' | 'weeping' | 'bamboo' | 'cactus';
 
 export type TreeSpeciesId =
-	'oak' | 'pine' | 'cypress' | 'ornamental' | 'spruce' | 'birch' | 'scotsPine' | 'willow';
+	| 'oak'
+	| 'pine'
+	| 'cypress'
+	| 'ornamental'
+	| 'spruce'
+	| 'birch'
+	| 'scotsPine'
+	| 'willow'
+	// Biomes (2026-11): tint variants sharing an existing species' shapes.
+	| 'frostedSpruce'
+	| 'frostedPine'
+	| 'warmOak'
+	// Biomes Phase 3: new species.
+	| 'darkBroadleaf'
+	| 'tallBirch'
+	| 'jungleGiant'
+	| 'bamboo'
+	| 'acacia'
+	| 'cherry'
+	| 'paleTree'
+	| 'swampTree'
+	| 'cactus';
 
 /**
  * Index order is part of the runtime data (`TreeChunk` stores species as an index) and of the
@@ -28,7 +50,19 @@ export const TREE_SPECIES_IDS: readonly TreeSpeciesId[] = [
 	'spruce',
 	'birch',
 	'scotsPine',
-	'willow'
+	'willow',
+	'frostedSpruce',
+	'frostedPine',
+	'warmOak',
+	'darkBroadleaf',
+	'tallBirch',
+	'jungleGiant',
+	'bamboo',
+	'acacia',
+	'cherry',
+	'paleTree',
+	'swampTree',
+	'cactus'
 ];
 
 /** Level of detail: 0 near … 3 very far (cheap silhouette). */
@@ -108,7 +142,56 @@ export interface SpindleCanopyRules {
 	lumpiness: number;
 }
 
-export type CanopyRules = BlobCanopyRules | TieredCanopyRules | SpindleCanopyRules;
+/**
+ * A clump of thin, jointed culms with leaf clumps near their tops (bamboo). Replaces the trunk:
+ * the species' `trunk` rules only size the collider around the clump.
+ */
+export interface StalksCanopyRules {
+	kind: 'stalks';
+	culmCount: Range;
+	/** Culm height, metres. */
+	height: Range;
+	/** Culm radius at the base, metres. */
+	radius: Range;
+	/** Radius of the clump the culms rise from, metres. */
+	spread: Range;
+	/** Horizontal lean of each culm top, as a fraction of its height. */
+	lean: Range;
+	/** Leaf clumps for the whole stand, spread along the culms' top thirds. */
+	leafClumps: Range;
+	/** Leaf clump radius, metres. */
+	leafSize: Range;
+	/** Joints along each culm (darker bands). */
+	joints: Range;
+	lumpiness: number;
+}
+
+/**
+ * A ribbed column with upturned arms (cactus). Replaces the trunk and crown; drawn in foliage
+ * colours. The species' `trunk` rules only size the collider around the main column.
+ */
+export interface ColumnarCanopyRules {
+	kind: 'columnar';
+	height: Range;
+	radius: Range;
+	/** Number of arms (0 = a single column). */
+	arms: Range;
+	/** Where arms leave the column, as a fraction of its height. */
+	armStart: Range;
+	/** How far an arm reaches out before turning up, metres. */
+	armReach: Range;
+	/** How far an arm rises after turning, metres. */
+	armRise: Range;
+	/** Vertical ribs around each column. */
+	ribs: number;
+}
+
+export type CanopyRules =
+	| BlobCanopyRules
+	| TieredCanopyRules
+	| SpindleCanopyRules
+	| StalksCanopyRules
+	| ColumnarCanopyRules;
 
 /** Colours as `#RRGGBB` (sRGB). Vertex colours interpolate between these. */
 export interface TreeStyle {
@@ -226,6 +309,13 @@ export interface TreeSpeciesDefinition {
 	/** Wind sway amplitude multiplier (0 = rigid). */
 	windResponse: number;
 	triangleBudget: TriangleBudget;
+	/**
+	 * From this LOD on, every variant draws with variant 0's prototype (render only: placement and
+	 * saves keep the variant). LOD3 always shares. Dense biome species share from LOD2, where a
+	 * crowded stand reads as one texture anyway, so a chunk draws one batch instead of one per
+	 * variant (biomes Phase 6 draw-call budget).
+	 */
+	sharedVariantsFromLod?: TreeLod;
 }
 
 /** One compiled prototype design: which species, which seeded variant. */

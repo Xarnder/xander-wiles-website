@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { keyLabel } from '#lib/game/input/keyLabels.svelte';
 	interface Props {
 		/** The bar's element, for `LocatorBar` (game/hud) to place markers in. */
 		element?: HTMLDivElement | null;
@@ -25,7 +26,9 @@
 		aria-label={`Stop tracking ${trackingName}`}
 		data-testid="stop-tracking"
 	>
-		<span role="status">Tracking {trackingName}</span><span class="stop">Stop <kbd>U</kbd></span>
+		<span role="status">Tracking {trackingName}</span><span class="stop"
+			>Stop <kbd>{keyLabel('multiplayer.stopTracking')}</kbd></span
+		>
 	</button>
 {/if}
 

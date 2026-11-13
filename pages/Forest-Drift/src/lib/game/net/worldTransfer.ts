@@ -1,7 +1,7 @@
 import { migrateWorld } from '../world/WorldMigrationManager';
 import { validateWorldDefinition } from '../world/WorldValidation';
 import type { WorldDefinition } from '../world/WorldTypes';
-import { CURRENT_WORLD_SCHEMA_VERSION } from '../world/WorldTypes';
+import { ONLINE_COMPATIBLE_SCHEMA_VERSIONS } from '../world/WorldTypes';
 import { GENERATOR_VERSION, MAX_WORLD_JSON_BYTES } from './protocol';
 import type { ReplicaRow } from './WorldReplica';
 import { mergePlacedCreatures, unflattenWorld } from './worldEntities';
@@ -130,7 +130,7 @@ export async function fetchOnlineWorld(
 	const manifest = payload.manifest;
 	if (!manifest) return { ok: false, error: 'The server sent an unreadable world.' };
 	if (
-		manifest.schemaVersion !== CURRENT_WORLD_SCHEMA_VERSION ||
+		!ONLINE_COMPATIBLE_SCHEMA_VERSIONS.includes(manifest.schemaVersion) ||
 		manifest.generatorVersion !== GENERATOR_VERSION
 	) {
 		return {

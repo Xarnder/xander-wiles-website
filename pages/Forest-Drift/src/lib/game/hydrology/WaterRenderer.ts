@@ -57,6 +57,11 @@ export class WaterRenderer {
 		applyWaterLook(this.material, visual, this.quality);
 	}
 
+	/** Biome water tint for meshes built from now on (call `clear()` to rebuild existing ones). */
+	setTintSource(source: WaterTintSource | null): void {
+		tintSource = source;
+	}
+
 	clear(): void {
 		for (const mesh of this.sections.values()) this.disposeMesh(mesh);
 		for (const mesh of this.lakes.values()) this.disposeMesh(mesh);
@@ -324,6 +329,18 @@ function ribbonGeometry(
  * back to where the centreline crosses the shoreline, so the ribbon stops exactly at the lake's edge
  * instead of running on under the lake surface.
  */
+/**
+ * Biome water tint at a point (RGB multiplier into `out`), or null for none. Module-level because
+ * the geometry builders are free functions; there is one water renderer per scene.
+ */
+export type WaterTintSource = (
+	worldX: number,
+	worldZ: number,
+	out: Float32Array,
+	offset: number
+) => void;
+let tintSource: WaterTintSource | null = null;
+
 function waterGeometry(
 	positions: Float32Array,
 	normals: Float32Array,
@@ -338,6 +355,12 @@ function waterGeometry(
 	geometry.setAttribute('aFlow', new THREE.BufferAttribute(flows, 2));
 	geometry.setAttribute('aDepth', new THREE.BufferAttribute(depths, 1));
 	geometry.setAttribute('aKind', new THREE.BufferAttribute(kinds, 1));
+	const vertexCount = positions.length / 3;
+	const tints = new Float32Array(vertexCount * 3).fill(1);
+	if (tintSource)
+		for (let v = 0; v < vertexCount; v++)
+			tintSource(positions[v * 3], positions[v * 3 + 2], tints, v * 3);
+	geometry.setAttribute('aTint', new THREE.BufferAttribute(tints, 3));
 	geometry.setIndex(indices);
 	geometry.computeBoundingSphere();
 	return geometry;

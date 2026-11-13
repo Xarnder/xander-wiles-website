@@ -32,6 +32,8 @@ import {
 	type WeatherType
 } from './WeatherTypes';
 
+import { localizeWeather, type LocalWeatherClimate } from './localWeather';
+
 /** Seconds a manual weather pick takes when the settings transition is left at 0. */
 const MANUAL_WEATHER_TRANSITION = 6;
 
@@ -121,6 +123,11 @@ export function weatherSeedFor(worldSeed: string): number {
 	return hashString(`${worldSeed}:weather`);
 }
 
+export interface LocalWeatherSource {
+	active(): boolean;
+	readonly state: LocalWeatherClimate;
+}
+
 export class WeatherSystem {
 	readonly group = new THREE.Group();
 	readonly debug: WeatherDebugSettings = createDefaultWeatherDebugSettings();
@@ -133,6 +140,10 @@ export class WeatherSystem {
 	private readonly bolt = new LightningBoltRenderer();
 	private readonly debugView = new WeatherDebugView();
 	private readonly applied: WeatherEnvironment = createWeatherEnvironment();
+	/** The shared weather as it falls where the player is (biomes on); see `localWeather.ts`. */
+	private readonly localEnvironment: WeatherEnvironment = createWeatherEnvironment();
+	private localClimate: LocalWeatherSource | null = null;
+	private localActive = false;
 	private readonly treeWindParams: TreeWindParams = { strengthScale: 1, dirX: 0, dirZ: 1, lean: 0 };
 	private readonly look = createWeatherEnvironment();
 	private readonly lookDirection = new THREE.Vector3();
@@ -171,9 +182,23 @@ export class WeatherSystem {
 		};
 	}
 
-	/** The environment the world currently shows (neutral while weather is off). */
+	/** The shared environment (neutral while weather is off) — the same for every player online. */
 	get current(): WeatherEnvironment {
 		return this.debug.enabled ? this.controller.environment : NEUTRAL_ENVIRONMENT;
+	}
+
+	/**
+	 * What the player actually sees: `current` with the local climate applied (snow where it's
+	 * cold, none in the desert …) while biomes are on and the weather follows its schedule. A forced
+	 * (manual) weather is shown as chosen, everywhere.
+	 */
+	get local(): WeatherEnvironment {
+		return this.localActive ? this.localEnvironment : this.current;
+	}
+
+	/** Biomes: where the player is, for local rain / snow / dry. Null = the shared weather as-is. */
+	setLocalClimate(source: LocalWeatherSource | null): void {
+		this.localClimate = source;
 	}
 
 	get flashLevel(): number {
@@ -218,7 +243,15 @@ export class WeatherSystem {
 		this.controller.setAllowSnow(this.debug.allowSnow);
 		if (shared) this.controller.followClock(sharedTime);
 		else this.controller.update(dt);
-		const env = this.current;
+		const climate = this.localClimate;
+		this.localActive =
+			this.debug.enabled &&
+			climate !== null &&
+			climate.active() &&
+			this.controller.weatherMode === 'schedule';
+		const env = this.localActive
+			? localizeWeather(this.current, climate!.state, this.localEnvironment)
+			: this.current;
 
 		const camera = frame.camera.position;
 		frame.camera.getWorldDirection(this.lookDirection);
@@ -278,7 +311,7 @@ export class WeatherSystem {
 
 	/** The sky's look with the weather (and any lightning flash) layered on. */
 	applyToLook(look: EffectiveSkyLook): EffectiveSkyLook {
-		copyWeatherEnvironment(this.current, this.look);
+		copyWeatherEnvironment(this.local, this.look);
 		return applyWeatherToLook(look, this.look, this.debug.enabled ? this.flash : 0);
 	}
 
@@ -300,7 +333,7 @@ export class WeatherSystem {
 		this.adaptiveTimer -= deltaSeconds;
 		if (this.adaptiveTimer > 0) return;
 		this.adaptiveTimer = 1;
-		const precipitating = this.current.rain > 0.02 || this.current.snow > 0.02;
+		const precipitating = this.local.rain > 0.02 || this.local.snow > 0.02;
 		const p = this.precipitation;
 		if (precipitating && smoothedFps < targetFps * 0.8 && smoothedFps < 50) {
 			p.densityScale = Math.max(0.35, p.densityScale - 0.1);

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import {
 	createActiveLevelWatch,
 	pullActiveLevelChange,
@@ -162,7 +164,7 @@ export class FloorDetailTool implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'floorDetail.pathMode')) {
 			if (this.kind !== 'path') return;
 			this.pathDrawMode = cycleFloorPathDrawMode(this.pathDrawMode);
 			if (this.state === 'bending') {
@@ -173,7 +175,7 @@ export class FloorDetailTool implements BuildTool {
 			this.refreshVisuals();
 			return;
 		}
-		if (event.code !== 'KeyR') return;
+		if (!matchesAction(event, 'floorDetail.cycle')) return;
 		if (this.kind === 'planks') {
 			this.buildingSettings.floorDetailPlankDirection =
 				this.buildingSettings.floorDetailPlankDirection === 'x' ? 'z' : 'x';
@@ -781,7 +783,7 @@ export class FloorDetailTool implements BuildTool {
 		if (this.kind === 'planks') lines.push('R plank direction');
 		else if (this.kind === 'tiles') lines.push('R tile pattern');
 		else if (this.kind === 'path') {
-			lines.push('B path mode');
+			lines.push(`${keyName('floorDetail.pathMode')} path mode`);
 			lines.push('R path framing');
 		}
 		return lines;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createDefaultBiomeSettings } from '../../biomes/BiomeTypes';
 import { createDefaultBuildingSettings } from '../../building/FoundationTypes';
 import { createDefaultGraphicsSettings } from '../../graphics/GraphicsTypes';
 import type { MusicPlantPlacementTool } from '../../music/MusicPlantPlacementTool';
@@ -93,6 +94,7 @@ describe('buildSettingsCatalog', () => {
 	it('covers every former debug-panel section', () => {
 		const catalog = buildSettingsCatalog(testHost());
 		expect(catalog.map((category) => category.id)).toEqual([
+			'controls',
 			'audio',
 			'tutorials',
 			'world',
@@ -419,4 +421,58 @@ it('keeps personal audio preferences editable for online members', () => {
 	expect(audio.groups.flatMap((group) => group.fields).every((field) => !field.disabled)).toBe(
 		true
 	);
+});
+
+describe('World → Biomes settings', () => {
+	function biomeHost(access: GameSettingsHost['worldAccess'] = 'local') {
+		const biomes = createDefaultBiomeSettings();
+		const actions = {
+			...noopActions(),
+			biomeSettings: vi.fn(),
+			biomeToggleRequest: vi.fn()
+		};
+		const host: GameSettingsHost = { ...testHost(), biomes, actions, worldAccess: access };
+		return { host, biomes, actions };
+	}
+
+	function biomeGroup(host: GameSettingsHost) {
+		const world = buildSettingsCatalog(host).find((category) => category.id === 'world')!;
+		return world.groups.find((group) => group.id === 'world-biomes')!;
+	}
+
+	it('asks for confirmation instead of switching biomes directly', () => {
+		const { host, actions } = biomeHost();
+		const toggle = biomeGroup(host).fields.find((f) => f.id === 'world.biomes.toggle')!;
+		expect(toggle.kind).toBe('button');
+		if (toggle.kind !== 'button') return;
+		expect(toggle.label).toBe('Turn biomes off…');
+		toggle.onClick();
+		expect(actions.biomeToggleRequest).toHaveBeenCalledOnce();
+	});
+
+	it('regenerates when a biome value is committed, and disables values while biomes are off', () => {
+		const { host, biomes, actions } = biomeHost();
+		const size = biomeGroup(host).fields.find((f) => f.id === 'world.biomes.size')!;
+		expect(size.kind).toBe('select');
+		if (size.kind !== 'select') return;
+		size.set('large');
+		size.onChange?.();
+		expect(biomes.size).toBe('large');
+		expect(actions.biomeSettings).toHaveBeenCalledOnce();
+
+		biomes.enabled = false;
+		const off = biomeGroup(host);
+		expect(off.title).toBe('Biomes (off)');
+		expect(off.fields.filter((f) => f.id !== 'world.biomes.toggle').every((f) => f.disabled)).toBe(
+			true
+		);
+		const toggle = off.fields.find((f) => f.id === 'world.biomes.toggle')!;
+		expect(toggle.kind === 'button' && toggle.label).toBe('Turn biomes on…');
+	});
+
+	it.each(['owner', 'member'] as const)('is locked for the %s of an online world', (access) => {
+		const { host } = biomeHost(access);
+		const group = biomeGroup(host);
+		expect(group.fields.every((field) => field.disabled)).toBe(true);
+	});
 });

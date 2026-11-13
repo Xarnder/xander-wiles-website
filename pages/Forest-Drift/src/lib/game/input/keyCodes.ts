@@ -297,3 +297,33 @@ export function formatBinding(binding: Binding, options: { apple?: boolean } = {
 	parts.push(codeLabel(binding.code, apple));
 	return parts.join(' + ');
 }
+
+// ------------------------------------------------------------------ capturing a new key
+
+/** A lone modifier as it's stored: `ShiftLeft` → `Shift`. Cmd / Windows keys give null. */
+export function genericModifier(code: string): string | null {
+	if (code === 'ShiftLeft' || code === 'ShiftRight' || code === 'Shift') return 'Shift';
+	if (code === 'ControlLeft' || code === 'ControlRight' || code === 'Control') return 'Control';
+	if (code === 'AltLeft' || code === 'AltRight' || code === 'Alt') return 'Alt';
+	return null;
+}
+
+/**
+ * The binding a keydown asks for while choosing a key: the key plus whatever modifiers are held
+ * (Ctrl or Cmd both count as `mod`). Null for a modifier on its own; that's bound on release.
+ */
+export function bindingFromKeyDown(event: {
+	code: string;
+	shiftKey: boolean;
+	ctrlKey: boolean;
+	altKey: boolean;
+	metaKey: boolean;
+}): Binding | null {
+	if (!event.code || isModifierCode(event.code)) return null;
+	return normalizeBinding({
+		code: event.code,
+		shift: event.shiftKey,
+		mod: event.ctrlKey || event.metaKey,
+		alt: event.altKey
+	});
+}

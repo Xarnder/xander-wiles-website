@@ -12,6 +12,8 @@ import type {
 	HotbarUiState,
 	ToolId
 } from './FoundationTypes';
+import type { KeyActionId } from '../input/keyActions';
+import { firstMatchingAction, matchesAction } from '../input/KeyInput';
 
 /** Contract every build tool implements. BuildToolManager only ever talks to tools through this. */
 export interface BuildTool {
@@ -25,10 +27,12 @@ export interface BuildTool {
 	/** Right click, or Escape while a selection is pending. */
 	onSecondaryAction(): void;
 	/**
-	 * When true, ↑/↓ stay with this tool instead of cycling the hotbar slot — Roof Tool uses this
-	 * while adjusting rise so those keys don't also switch to Floor/Ceiling.
+	 * True when this tool is using the same key as `action` for itself right now, so the manager
+	 * leaves that key alone. Roof Tool keeps the Customise key (E) for its outline toggle while
+	 * drawing, and ↑/↓ for its rise while adjusting; Place Object keeps ↑/↓ for recent objects.
+	 * Compare keys with `actionsShareKey`, so this follows the player's bindings.
 	 */
-	isCapturingKey?(code: string): boolean;
+	capturesKeyOf?(action: KeyActionId): boolean;
 	setVariant?(variant: HotbarSlotVariant): void;
 	canOpenCustomize?(): boolean;
 	prepareForCustomize?(): void;
@@ -43,25 +47,32 @@ export interface BuildTool {
 	requestFoundationDeletion?(): void;
 }
 
-const DIGIT_TO_SLOT: Record<string, number> = {
-	Digit1: 1,
-	Digit2: 2,
-	Digit3: 3,
-	Digit4: 4,
-	Digit5: 5,
-	Digit6: 6,
-	Digit7: 7,
-	Digit8: 8
-};
+/** Hotbar slots 1–8, in order (keys 1–8 by default). */
+const SLOT_ACTIONS = [
+	'build.slot1',
+	'build.slot2',
+	'build.slot3',
+	'build.slot4',
+	'build.slot5',
+	'build.slot6',
+	'build.slot7',
+	'build.slot8'
+] as const satisfies readonly KeyActionId[];
 
-/** Compose Mode instruments, in hotbar order. Index 0 is key 1. */
-const MUSIC_DIGIT_TO_INDEX: Record<string, number> = {
-	Digit1: 0,
-	Digit2: 1,
-	Digit3: 2,
-	Digit4: 3,
-	Digit5: 4
-};
+/** Compose Mode instruments, in hotbar order (keys 1–5 by default). */
+const MUSIC_INSTRUMENT_ACTIONS = [
+	'music.instrument1',
+	'music.instrument2',
+	'music.instrument3',
+	'music.instrument4',
+	'music.instrument5'
+] as const satisfies readonly KeyActionId[];
+
+/** The hotbar slot this key selects (1–8), or undefined. */
+function slotForEvent(event: KeyboardEvent): number | undefined {
+	const index = SLOT_ACTIONS.findIndex((id) => matchesAction(event, id));
+	return index < 0 ? undefined : index + 1;
+}
 
 /** Which temporary global editing overlay (if any) is active — see the class doc comment. */
 type GlobalMode = 'none' | 'remove' | 'paint' | 'music' | 'move';
@@ -95,7 +106,7 @@ export interface BuildToolManagerOptions {
  *
  * Several numbered slots hold more than one tool (Poly Wall/Wall, Door/Window, Ceiling/Floor/Roof).
  * ↑/↓ cycle the variant on the selected slot and remember it when you leave and come back. A tool
- * may keep those keys via `isCapturingKey` (roof rise while adjusting).
+ * may keep those keys via `capturesKeyOf` (roof rise while adjusting).
  *
  * Also owns the two temporary GLOBAL editing overlays, Remove Mode (`X`) and Paint Mode (`P`),
  * rather than either consuming a hotbar slot — the hotbar is already full at 1-9, and both are
@@ -152,14 +163,16 @@ export class BuildToolManager {
 			const eClosesOverlay = inputType === 'range' || inputType === 'color';
 			if (
 				this.placementCustomizeOpen &&
-				(event.code === 'Escape' || (event.code === 'KeyE' && eClosesOverlay))
+				(matchesAction(event, 'ui.back') ||
+					(matchesAction(event, 'build.customise') && eClosesOverlay))
 			) {
 				this.setPlacementCustomizeOpen(false);
 				return;
 			}
 			if (
 				this.placementHeightOpen &&
-				(event.code === 'Escape' || (event.code === 'KeyE' && eClosesOverlay))
+				(matchesAction(event, 'ui.back') ||
+					(matchesAction(event, 'build.customise') && eClosesOverlay))
 			) {
 				this.setPlacementHeightOpen(false);
 				return;
@@ -167,78 +180,78 @@ export class BuildToolManager {
 			return;
 		}
 		if (event.repeat || this.locked) return;
-		if (event.code === 'KeyG') {
+		if (matchesAction(event, 'build.toggle')) {
 			this.setPlacementCustomizeOpen(false);
 			this.setPlacementHeightOpen(false);
 			this.toggleBuildMode();
 			return;
 		}
-		if (event.code === 'KeyE' && this.canOpenPlacementCustomize()) {
+		if (matchesAction(event, 'build.customise') && this.canOpenPlacementCustomize()) {
 			this.setPlacementHeightOpen(false);
 			this.togglePlacementCustomize();
 			return;
 		}
-		if (event.code === 'KeyE' && this.canOpenPlacementHeight()) {
+		if (matchesAction(event, 'build.customise') && this.canOpenPlacementHeight()) {
 			this.setPlacementCustomizeOpen(false);
 			this.togglePlacementHeight();
 			return;
 		}
 		if (this.placementCustomizeOpen) {
-			if (event.code === 'Escape') this.setPlacementCustomizeOpen(false);
+			if (matchesAction(event, 'ui.back')) this.setPlacementCustomizeOpen(false);
 			return;
 		}
 		if (this.placementHeightOpen) {
-			if (event.code === 'Escape') this.setPlacementHeightOpen(false);
+			if (matchesAction(event, 'ui.back')) this.setPlacementHeightOpen(false);
 			return;
 		}
 		if (this.isInputBlocked?.()) return;
-		if (event.code === 'KeyN' && this.musicTool) {
+		if (matchesAction(event, 'build.musicMode') && this.musicTool) {
 			this.setGlobalMode(this.globalMode === 'music' ? 'none' : 'music');
 			return;
 		}
-		if (event.code === 'KeyM' && this.moveTool) {
+		if (matchesAction(event, 'build.moveMode') && this.moveTool) {
 			this.toggleMoveMode();
 			return;
 		}
 		if (this.globalMode === 'music') {
-			const musicIndex = MUSIC_DIGIT_TO_INDEX[event.code];
-			if (musicIndex !== undefined) {
+			const musicIndex = MUSIC_INSTRUMENT_ACTIONS.findIndex((id) => matchesAction(event, id));
+			if (musicIndex >= 0) {
 				this.selectMusicSpecies(musicIndex);
 				return;
 			}
-			// Other number keys stay in Compose Mode instead of jumping back to a build tool.
-			if (DIGIT_TO_SLOT[event.code] !== undefined) return;
+			// Other slot keys stay in Compose Mode instead of jumping back to a build tool.
+			if (slotForEvent(event) !== undefined) return;
 		}
 		if (!this.buildModeActive) {
 			if (this.globalMode === 'music') {
-				if (event.code === 'KeyX') this.setGlobalMode('remove');
-				else if (event.code === 'Escape') this.setGlobalMode('none');
+				if (matchesAction(event, 'build.removeMode')) this.setGlobalMode('remove');
+				else if (matchesAction(event, 'ui.back')) this.setGlobalMode('none');
 			}
 			return;
 		}
-		if (event.code === 'KeyX' || (event.code === 'Digit9' && this.globalMode !== 'music')) {
+		if (matchesAction(event, 'build.removeMode')) {
 			this.setGlobalMode(this.globalMode === 'remove' ? 'none' : 'remove');
 			return;
 		}
-		if (event.code === 'KeyP') {
+		if (matchesAction(event, 'build.paintMode')) {
 			this.setGlobalMode(this.globalMode === 'paint' ? 'none' : 'paint');
 			return;
 		}
 		// Digit keys always go through selectSlot, active-slot or not — it exits any global mode
 		// itself first when needed (see its doc comment), so this must run BEFORE the globalMode
 		// early-return below, not be swallowed by it.
-		const slot = DIGIT_TO_SLOT[event.code];
+		const slot = slotForEvent(event);
 		if (slot !== undefined) {
 			this.selectSlot(slot);
 			return;
 		}
 		if (this.globalMode !== 'none') {
-			if (this.globalMode === 'remove' && (event.code === 'Delete' || event.code === 'Backspace')) {
+			if (this.globalMode === 'remove' && matchesAction(event, 'remove.deleteFoundation')) {
 				event.preventDefault();
 				this.removeTool.requestFoundationDeletion?.();
 				return;
 			}
-			if (event.code === 'Escape') {
+			if (matchesAction(event, 'ui.back')) {
 				if (this.globalMode === 'move' && this.moveTool?.isHoldingObject?.()) {
 					this.getGlobalTool()?.onSecondaryAction();
 					return;
@@ -247,13 +260,14 @@ export class BuildToolManager {
 			}
 			return;
 		}
-		if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
-			if (this.getActiveTool()?.isCapturingKey?.(event.code)) return;
+		const cycle = firstMatchingAction(event, ['build.slotPrevious', 'build.slotNext'] as const);
+		if (cycle) {
+			if (this.getActiveTool()?.capturesKeyOf?.(cycle)) return;
 			event.preventDefault();
-			this.cycleSlotVariant(event.code === 'ArrowUp' ? -1 : 1);
+			this.cycleSlotVariant(cycle === 'build.slotPrevious' ? -1 : 1);
 			return;
 		}
-		if (event.code === 'Escape') {
+		if (matchesAction(event, 'ui.back')) {
 			if (this.getActiveToolId() !== 'shovel') this.getActiveTool()?.onSecondaryAction();
 		}
 	};
@@ -665,7 +679,7 @@ export class BuildToolManager {
 			this.buildModeActive &&
 			this.globalMode === 'none' &&
 			isSlabHeightTool(this.getActiveToolId()) &&
-			!this.getActiveTool()?.isCapturingKey?.('KeyE') &&
+			!this.getActiveTool()?.capturesKeyOf?.('build.customise') &&
 			!this.isInputBlocked?.()
 		);
 	}

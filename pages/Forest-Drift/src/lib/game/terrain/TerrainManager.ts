@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { chunkKey, worldToChunkCoord, type ChunkKey } from './chunkKey';
-import { TerrainChunk, terrainMaterial, type TerrainGroundTint } from './TerrainChunk';
+import {
+	TerrainChunk,
+	terrainMaterial,
+	type TerrainBiomeHooks,
+	type TerrainGroundTint
+} from './TerrainChunk';
 import { TerrainGenerationQueue, type ChunkJob } from './TerrainGenerationQueue';
 import { TerrainHeightSampler } from './TerrainHeightSampler';
 import type { TerrainSettings } from './TerrainSettings';
@@ -66,6 +71,13 @@ export class TerrainManager {
 	/** Extra ground colouring (distant flower meadows). Takes effect as chunks (re)generate. */
 	setGroundTint(tint: TerrainGroundTint | null): void {
 		this.groundTint = tint;
+	}
+
+	private biomeHooks: TerrainBiomeHooks | null = null;
+
+	/** Wired in by ThreeScene: biome ground colours and the 'biomeMap' / 'climate' debug views. */
+	setBiomeHooks(hooks: TerrainBiomeHooks | null): void {
+		this.biomeHooks = hooks;
 	}
 
 	/** Wired in by ThreeScene once the vegetation system exists — purely for debug-view colouring. */
@@ -190,6 +202,7 @@ export class TerrainManager {
 					this.vegetationRegionSampler,
 					this.sampleWater,
 					this.groundTint,
+					this.biomeHooks,
 					bounds
 				);
 			} else if (affected)
@@ -343,7 +356,8 @@ export class TerrainManager {
 						this.settings.rendering.debugView,
 						this.vegetationRegionSampler,
 						this.sampleWater,
-						this.groundTint
+						this.groundTint,
+						this.biomeHooks
 					)
 				};
 			}
@@ -400,7 +414,8 @@ export class TerrainManager {
 			this.settings.rendering.debugView,
 			this.vegetationRegionSampler,
 			this.sampleWater,
-			this.groundTint
+			this.groundTint,
+			this.biomeHooks
 		);
 		chunk.setActive(true);
 		chunk.setBorderVisible(this.settings.rendering.showChunkBorders);

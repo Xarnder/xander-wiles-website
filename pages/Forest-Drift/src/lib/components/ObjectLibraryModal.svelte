@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { matchesAction } from '#lib/game/input/KeyInput';
 	import { onDestroy, onMount } from 'svelte';
 	import { DEFAULT_MINI_BUILDS } from '#lib/game/miniBuild/defaultMiniBuilds';
 	import { contentHash, gridToMeters } from '#lib/game/miniBuild/miniBuildGrid';
@@ -294,14 +295,15 @@
 			target instanceof HTMLSelectElement ||
 			target instanceof HTMLTextAreaElement;
 		event.stopPropagation();
-		if (event.code === 'Escape') {
+		if (matchesAction(event, 'ui.back')) {
 			event.preventDefault();
 			if (renaming) renaming = null;
 			else if (typing) target?.blur();
 			else onClose();
 			return;
 		}
-		if (!typing && event.code === 'KeyE') {
+		// The key that opened the library (E by default) closes it again.
+		if (!typing && matchesAction(event, 'build.customise')) {
 			event.preventDefault();
 			onClose();
 		}
@@ -405,7 +407,13 @@
 	data-testid="object-library-modal"
 	onclick={onBackdropClick}
 >
-	<div data-ui-surface="panel" class="panel" role="dialog" aria-modal="true" aria-labelledby="object-library-title">
+	<div
+		data-ui-surface="panel"
+		class="panel"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="object-library-title"
+	>
 		<header>
 			<div>
 				<p class="eyebrow">PLACE OBJECT</p>

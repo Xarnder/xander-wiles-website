@@ -11,7 +11,7 @@ import type {
  * in-browser fingerprints with the golden report Vitest pins in Node.
  *
  * Only what players see is compared: heights to the millimetre, water type and level, lake and river
- * counts, and every tree's cell, species and variant. The `exact` (full float64 bit pattern) hashes
+ * counts, every tree's cell, species and variant, and the dominant biome and climate on a 12 km grid. The `exact` (full float64 bit pattern) hashes
  * differ between Node and every browser, and between browsers, because `Math.tanh`/`Math.pow` and
  * friends aren't required to round identically. That last-bit noise never changes the world, so it's
  * attached to the test report rather than asserted.
@@ -33,7 +33,9 @@ function visible(reports: DeterminismReport[]) {
 			lakes: report.hydrology.lakes,
 			rivers: report.hydrology.rivers
 		},
-		trees: section(report.trees)
+		trees: section(report.trees),
+		biomes: section(report.biomes),
+		biomeTrees: section(report.biomeTrees)
 	}));
 }
 
@@ -46,7 +48,7 @@ test('generated world matches the golden fingerprints in this browser engine', a
 	const reports = JSON.parse((await report.textContent()) ?? '[]') as DeterminismReport[];
 
 	const exactDifferences = reports.flatMap((browserReport, i) =>
-		(['terrain', 'hydrology', 'trees'] as const)
+		(['terrain', 'hydrology', 'trees', 'biomes', 'biomeTrees'] as const)
 			.filter((key) => browserReport[key].exact !== golden.reports[i]?.[key].exact)
 			.map((key) => `${browserReport.seed} ${key}`)
 	);

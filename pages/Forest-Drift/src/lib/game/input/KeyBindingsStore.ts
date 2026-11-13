@@ -5,10 +5,12 @@
  * A profile stores **only the keys the player changed** (`overrides`). Anything else uses the
  * action's default, so actions added in later versions just work with old profiles and files.
  *
- * Phase 1 reads profiles; creating, editing and loading them arrives with the Controls screen.
+ * Every change is saved straight away (there's no separate Save button) and can be undone, up to
+ * the last 20 changes. The built-in Default profile is never edited: the first change made while
+ * it is active creates a copy called "My controls" and switches to it.
  */
 import { findKeyAction, isKeyActionId, type KeyActionId } from './keyActions';
-import { normalizeBinding, type Binding } from './keyCodes';
+import { bindingsCollide, normalizeBinding, refusalReason, type Binding } from './keyCodes';
 
 export const KEY_BINDINGS_STORAGE_KEY = 'forest-drift.keybindings.v1';
 export const KEY_BINDINGS_VERSION = 1;
@@ -54,8 +56,9 @@ function normalizePair(value: unknown): BindingPair | null {
 			continue;
 		}
 		const binding = normalizeBinding(slot);
-		// A broken slot means a broken entry: fall back to the defaults rather than guess.
-		if (!binding) return null;
+		// A broken slot (or a key the browser always takes) means a broken entry: fall back to the
+		// defaults rather than guess.
+		if (!binding || refusalReason(binding)) return null;
 		slots.push(binding);
 	}
 	return [slots[0], slots[1]];
@@ -186,9 +189,252 @@ export function watchKeyBindingsStorage(
 	return () => target.removeEventListener('storage', onStorage);
 }
 
-/** For tests: forget the cached state so the next read goes back to storage. */
+// ------------------------------------------------------------------ changing bindings
+
+export const UNDO_LIMIT = 20;
+export const DEFAULT_COPY_NAME = 'My controls';
+let undoStack: KeyBindingsState[] = [];
+
+function now(): string {
+	return new Date().toISOString();
+}
+
+function newProfileId(): string {
+	return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Saves `next`, tells listeners, and (unless undoing) remembers the previous state for Undo. */
+function commit(next: KeyBindingsState, undoable = true): void {
+	if (undoable) {
+		undoStack.push(getKeyBindingsState());
+		if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+	}
+	state = next;
+	revision++;
+	try {
+		globalThis.localStorage?.setItem(KEY_BINDINGS_STORAGE_KEY, JSON.stringify(next));
+	} catch {
+		// Blocked storage: the change still applies for this session.
+	}
+	for (const listener of listeners) listener(next);
+}
+
+export function canUndoKeyBindings(): boolean {
+	return undoStack.length > 0;
+}
+
+/** Puts back the state before the last change. Returns false when there is nothing to undo. */
+export function undoKeyBindings(): boolean {
+	const previous = undoStack.pop();
+	if (!previous) return false;
+	commit(previous, false);
+	return true;
+}
+
+/** `name`, or `name (2)`, `name (3)` … so no two profiles share a name. */
+export function uniqueProfileName(
+	name: string,
+	profiles: readonly Pick<KeyProfile, 'id' | 'name'>[],
+	ignoreId?: string
+): string {
+	const base = normalizeProfileName(name);
+	const taken = new Set(profiles.filter((p) => p.id !== ignoreId).map((p) => p.name.toLowerCase()));
+	taken.add('default');
+	if (!taken.has(base.toLowerCase())) return base;
+	for (let n = 2; ; n++) {
+		const suffix = ` (${n})`;
+		const candidate = base.slice(0, MAX_PROFILE_NAME_LENGTH - suffix.length) + suffix;
+		if (!taken.has(candidate.toLowerCase())) return candidate;
+	}
+}
+
+function pairsEqual(a: BindingPair, b: BindingPair): boolean {
+	return [0, 1].every((slot) => {
+		const left = a[slot];
+		const right = b[slot];
+		if (!left || !right) return left === right;
+		return left.code === right.code && bindingsCollide(left, right);
+	});
+}
+
+/** One slot of one action, set to a key or cleared (`null`). */
+export interface BindingChange {
+	readonly id: KeyActionId;
+	readonly slot: 0 | 1;
+	readonly binding: Binding | null;
+}
+
+export interface ChangeResult {
+	/** Set when the change made a copy of Default (its name). */
+	readonly createdProfile: string | null;
+	/** False when nothing could be saved (the profile limit is reached). */
+	readonly applied: boolean;
+}
+
+/**
+ * Applies several slot changes as one step (one Undo), e.g. a swap. While Default is active it
+ * first makes "My controls" and switches to it, so Default always stays as shipped.
+ */
+export function applyBindingChanges(changes: readonly BindingChange[]): ChangeResult {
+	if (!changes.length) return { createdProfile: null, applied: false };
+	const current = getKeyBindingsState();
+	let profiles = [...current.profiles];
+	let profile = profiles.find((p) => p.id === current.activeProfileId);
+	let createdProfile: string | null = null;
+	if (!profile) {
+		if (profiles.length >= MAX_PROFILES) return { createdProfile: null, applied: false };
+		const stamp = now();
+		profile = {
+			id: newProfileId(),
+			name: uniqueProfileName(DEFAULT_COPY_NAME, profiles),
+			createdAt: stamp,
+			updatedAt: stamp,
+			overrides: {}
+		};
+		profiles.push(profile);
+		createdProfile = profile.name;
+	}
+	const overrides: Partial<Record<KeyActionId, BindingPair>> = { ...profile.overrides };
+	for (const change of changes) {
+		const action = findKeyAction(change.id);
+		if (!action || action.locked) continue;
+		const pair: [Binding | null, Binding | null] = [
+			...resolveBindings(change.id, { ...profile, overrides })
+		] as [Binding | null, Binding | null];
+		pair[change.slot] = change.binding ? normalizeBinding(change.binding) : null;
+		if (pairsEqual(pair, action.defaults)) delete overrides[change.id];
+		else overrides[change.id] = pair;
+	}
+	const id = profile.id;
+	profiles = profiles.map((p) => (p.id === id ? { ...p, overrides, updatedAt: now() } : p));
+	commit({ version: KEY_BINDINGS_VERSION, activeProfileId: id, profiles });
+	return { createdProfile, applied: true };
+}
+
+/** Puts these actions back to their default keys in the active profile. */
+export function resetActions(ids: readonly KeyActionId[]): void {
+	const active = getActiveProfile();
+	if (!active || !ids.some((id) => active.overrides[id])) return;
+	const overrides = { ...active.overrides };
+	for (const id of ids) delete overrides[id];
+	replaceProfile({ ...active, overrides, updatedAt: now() });
+}
+
+/** Every key in the active profile back to its default. */
+export function resetActiveProfile(): void {
+	const active = getActiveProfile();
+	if (!active || !Object.keys(active.overrides).length) return;
+	replaceProfile({ ...active, overrides: {}, updatedAt: now() });
+}
+
+function replaceProfile(profile: KeyProfile): void {
+	const current = getKeyBindingsState();
+	commit({
+		...current,
+		profiles: current.profiles.map((p) => (p.id === profile.id ? profile : p))
+	});
+}
+
+/**
+ * Makes a new profile, from the defaults or a copy of the active profile, and switches to it.
+ * Returns its id, or null at the profile limit.
+ */
+export function createProfile(
+	name: string,
+	from: 'defaults' | 'active' = 'defaults'
+): string | null {
+	const current = getKeyBindingsState();
+	if (current.profiles.length >= MAX_PROFILES) return null;
+	const stamp = now();
+	const profile: KeyProfile = {
+		id: newProfileId(),
+		name: uniqueProfileName(name, current.profiles),
+		createdAt: stamp,
+		updatedAt: stamp,
+		overrides: from === 'active' ? { ...(getActiveProfile()?.overrides ?? {}) } : {}
+	};
+	commit({ ...current, activeProfileId: profile.id, profiles: [...current.profiles, profile] });
+	return profile.id;
+}
+
+export function renameProfile(id: string, name: string): void {
+	const current = getKeyBindingsState();
+	const profile = current.profiles.find((p) => p.id === id);
+	if (!profile) return;
+	const next = uniqueProfileName(name, current.profiles, id);
+	if (next === profile.name) return;
+	replaceProfile({ ...profile, name: next, updatedAt: now() });
+}
+
+/** Deletes a player profile. If it was active, Default becomes active. */
+export function deleteProfile(id: string): void {
+	const current = getKeyBindingsState();
+	if (!current.profiles.some((p) => p.id === id)) return;
+	commit({
+		...current,
+		activeProfileId: current.activeProfileId === id ? DEFAULT_PROFILE_ID : current.activeProfileId,
+		profiles: current.profiles.filter((p) => p.id !== id)
+	});
+}
+
+export function setActiveProfile(id: string): void {
+	const current = getKeyBindingsState();
+	if (id === current.activeProfileId) return;
+	if (id !== DEFAULT_PROFILE_ID && !current.profiles.some((p) => p.id === id)) return;
+	commit({ ...current, activeProfileId: id });
+}
+
+/** A profile read from a file, ready to add. */
+export interface ProfileToAdd {
+	readonly name: string;
+	readonly overrides: Partial<Record<KeyActionId, BindingPair>>;
+	/** Replace this existing profile's keys (keeping its id) instead of adding a new one. */
+	readonly replaceId?: string;
+}
+
+/**
+ * Adds loaded profiles as one step (one Undo). Names are made unique; profiles past the limit are
+ * left out. Returns the ids added or replaced, in order; the first one becomes active if asked.
+ */
+export function addProfiles(items: readonly ProfileToAdd[], activateFirst: boolean): string[] {
+	const current = getKeyBindingsState();
+	let profiles = [...current.profiles];
+	const ids: string[] = [];
+	const stamp = now();
+	for (const item of items) {
+		const overrides = normalizeOverrides(item.overrides);
+		const existing = item.replaceId ? profiles.find((p) => p.id === item.replaceId) : undefined;
+		if (existing) {
+			profiles = profiles.map((p) =>
+				p.id === existing.id ? { ...p, overrides, updatedAt: stamp } : p
+			);
+			ids.push(existing.id);
+			continue;
+		}
+		if (profiles.length >= MAX_PROFILES) break;
+		const profile: KeyProfile = {
+			id: newProfileId(),
+			name: uniqueProfileName(item.name, profiles),
+			createdAt: stamp,
+			updatedAt: stamp,
+			overrides
+		};
+		profiles.push(profile);
+		ids.push(profile.id);
+	}
+	if (!ids.length) return ids;
+	commit({
+		version: KEY_BINDINGS_VERSION,
+		activeProfileId: activateFirst ? ids[0] : current.activeProfileId,
+		profiles
+	});
+	return ids;
+}
+
+/** For tests: forget the cached state and undo history so the next read goes back to storage. */
 export function resetKeyBindingsForTests(): void {
 	state = undefined;
+	undoStack = [];
 	revision++;
 	listeners.clear();
 }

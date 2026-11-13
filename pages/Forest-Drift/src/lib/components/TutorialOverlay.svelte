@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
 	import type { ThreeScene } from '#lib/game/ThreeScene';
+	import { firstMatchingAction, isTypingTarget, matchesAction } from '#lib/game/input/KeyInput';
 	import { formatBytes, formatDuration, type SpeechProgress } from '#lib/game/speech/progress';
 	import { speechErrorMessage } from '#lib/game/speech/errorMessage';
 	import { SpeechWindow } from '#lib/game/speech/SpeechWindow';
@@ -24,6 +25,14 @@
 		setTutorialPreferences,
 		subscribeTutorialPreferences
 	} from '#lib/game/tutorials/TutorialPreferences';
+
+	/** F6–F9 by default. Previous and next only work while a tutorial is running. */
+	const TUTORIAL_KEY_ACTIONS = [
+		'tutorial.previous',
+		'tutorial.next',
+		'tutorial.autoStart',
+		'tutorial.speechOptions'
+	] as const;
 	let {
 		scene,
 		touch,
@@ -520,28 +529,19 @@
 			if (hidden && preparing) cancelPreparation();
 		};
 		const keyboard = (event: KeyboardEvent) => {
-			if (
-				!['F6', 'F7', 'F8', 'F9'].includes(event.code) ||
-				event.repeat ||
-				event.ctrlKey ||
-				event.metaKey ||
-				event.altKey ||
-				event.shiftKey ||
-				(event.target instanceof Element &&
-					event.target.closest('input, textarea, select, [contenteditable="true"]'))
-			)
-				return;
-			if (event.code === 'F7' || event.code === 'F9') {
+			const action = firstMatchingAction(event, TUTORIAL_KEY_ACTIONS);
+			if (!action || event.repeat || isTypingTarget(event.target)) return;
+			if (action === 'tutorial.previous' || action === 'tutorial.next') {
 				if (!running || frozen || event.defaultPrevented) return;
 				event.preventDefault();
 				// Advancing an unfinished action is a skip, not evidence it was completed.
-				if (event.code === 'F7') void withNarratorSound(previous);
+				if (action === 'tutorial.previous') void withNarratorSound(previous);
 				else void withNarratorSound(() => next(catalogue[index].action !== 'continue'));
 				return;
 			}
 			if (blocked && !menu) return;
 			event.preventDefault();
-			if (event.code === 'F8') void autoStart();
+			if (action === 'tutorial.autoStart') void autoStart();
 			else open();
 		};
 		const timer = setInterval(() => {
@@ -658,16 +658,9 @@
 			aria-labelledby="tutorial-title"
 			onkeydown={(event) => {
 				if (
-					event.code === 'F8' &&
+					matchesAction(event, 'tutorial.autoStart') &&
 					!event.repeat &&
-					!event.ctrlKey &&
-					!event.metaKey &&
-					!event.altKey &&
-					!event.shiftKey &&
-					!(
-						event.target instanceof Element &&
-						event.target.closest('input, textarea, select, [contenteditable="true"]')
-					)
+					!isTypingTarget(event.target)
 				) {
 					event.preventDefault();
 					void autoStart();

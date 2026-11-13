@@ -24,10 +24,12 @@ const VERT = /* glsl */ `
 	attribute vec2 aFlow;
 	attribute float aDepth;
 	attribute float aKind;
+	attribute vec3 aTint;
 	varying vec3 vWorld;
 	varying vec2 vFlow;
 	varying float vDepth;
 	varying float vKind;
+	varying vec3 vTint;
 	void main() {
 		vec4 world = modelMatrix * vec4(position, 1.0);
 		vec4 mvPosition = viewMatrix * world;
@@ -36,6 +38,7 @@ const VERT = /* glsl */ `
 		vFlow = aFlow;
 		vDepth = aDepth;
 		vKind = aKind;
+		vTint = aTint;
 		#include <fog_vertex>
 	}
 `;
@@ -58,6 +61,7 @@ const FRAG = /* glsl */ `
 	varying vec2 vFlow;
 	varying float vDepth;
 	varying float vKind;
+	varying vec3 vTint;
 
 	float wHash(vec2 p) {
 		vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -148,6 +152,8 @@ const FRAG = /* glsl */ `
 		float clarity = (transmit.r + transmit.g + transmit.b) / 3.0;
 		// The body colour shifts from the shallow tint to the deep one as the column thickens.
 		vec3 body = mix(uShallowColor, uDeepColor, smoothstep(0.0, 1.8, depth));
+		// Biome water tint (swamps darker and greener, cold water bluer); white without biomes.
+		body *= vTint;
 		body *= mix(vec3(1.0), transmit * 0.5 + 0.5, 0.35);
 		vec3 sunDir = normalize(uSunDirection);
 		float sunUp = clamp(sunDir.y * 2.0 + 0.2, 0.05, 1.0);

@@ -1,4 +1,7 @@
-import { createParticleBurst, type ParticleEffectManager } from '../particles/ParticleEffectManager';
+import {
+	createParticleBurst,
+	type ParticleEffectManager
+} from '../particles/ParticleEffectManager';
 import {
 	createParticleFieldFrame,
 	fieldCyclesFor,
@@ -239,7 +242,8 @@ export class PrecipitationController {
 			this.probeShelter(view);
 		}
 
-		const rainCount = this.quality.rainCapacity * Math.pow(Math.max(0, env.rain), 0.9) * density.rain;
+		const rainCount =
+			this.quality.rainCapacity * Math.pow(Math.max(0, env.rain), 0.9) * density.rain;
 		const snowCount = this.quality.snowCapacity * Math.max(0, env.snow) * density.snow;
 		const rain = this.particles.setFieldCount(
 			WEATHER_RAIN_FIELD.id,
@@ -375,8 +379,7 @@ export class PrecipitationController {
 		let budget = 8; // never more than a few per frame, however long the frame was
 		while (this.impactDebt >= 1 && budget-- > 0) {
 			this.impactDebt -= 1;
-			const angle =
-				Math.atan2(view.lookX, view.lookZ) + (this.random() - 0.5) * 2.4;
+			const angle = Math.atan2(view.lookX, view.lookZ) + (this.random() - 0.5) * 2.4;
 			// Biased toward the player, like the precipitation itself.
 			const distance = 2 + Math.pow(this.random(), 1.4) * (reach - 2);
 			const x = view.x + Math.sin(angle) * distance;

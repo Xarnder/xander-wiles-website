@@ -15,8 +15,10 @@ import {
 } from './treeMeshKit';
 import type {
 	BlobCanopyRules,
+	ColumnarCanopyRules,
 	Range,
 	SpindleCanopyRules,
+	StalksCanopyRules,
 	TieredCanopyRules,
 	TreeCardLayer,
 	TreeCardMeshData,
@@ -47,6 +49,10 @@ export interface TreeDesign {
 	branches: { from: number; to: Vec3 }[];
 	tiers: { baseY: number; apexY: number; radius: number; droop: number; rotation: number }[];
 	spindle: { profile: { y: number; radius: number }[]; apexY: number } | null;
+	/** Bamboo culms (stalks canopy). */
+	culms: { base: Vec3; top: Vec3; radius: number; joints: number }[];
+	/** Cactus columns: the main column first, then arms (columnar canopy). */
+	columns: { path: Vec3[]; radius: number }[];
 	palette: { dark: Rgb; base: Rgb; light: Rgb; trunkDark: Rgb; trunk: Rgb };
 	seed: number;
 	totalHeight: number;
@@ -102,6 +108,8 @@ export function designTree(
 		branches: [],
 		tiers: [],
 		spindle: null,
+		culms: [],
+		columns: [],
 		palette,
 		seed,
 		totalHeight: trunkHeight
@@ -113,7 +121,11 @@ export function designTree(
 			? designBlobs(design, canopy, random)
 			: canopy.kind === 'tiers'
 				? designTiers(design, canopy, random)
-				: designSpindle(design, canopy, random);
+				: canopy.kind === 'spindle'
+					? designSpindle(design, canopy, random)
+					: canopy.kind === 'stalks'
+						? designStalks(design, canopy, random)
+						: designColumnar(design, canopy, random);
 
 	// The trunk leans gently toward the canopy and continues partway into it.
 	const lean = bendAmount * trunkHeight;
@@ -221,6 +233,125 @@ function designTiers(design: TreeDesign, rules: TieredCanopyRules, random: () =>
 	design.canopyCenter = [0, base + height * 0.4, 0];
 	design.canopyRadii = [baseRadius, height / 2, baseRadius];
 	design.totalHeight = base + height;
+	return height;
+}
+
+/** Extent of the clusters (and any extra points): canopy centre, radii and total height. */
+function fitCanopy(design: TreeDesign, extra: readonly Vec3[] = []): void {
+	const min = [Infinity, Infinity, Infinity];
+	const max = [-Infinity, -Infinity, -Infinity];
+	for (const cluster of design.clusters) {
+		for (let k = 0; k < 3; k++) {
+			min[k] = Math.min(min[k], cluster.center[k] - cluster.radii[k]);
+			max[k] = Math.max(max[k], cluster.center[k] + cluster.radii[k]);
+		}
+	}
+	for (const p of extra) {
+		for (let k = 0; k < 3; k++) {
+			min[k] = Math.min(min[k], p[k]);
+			max[k] = Math.max(max[k], p[k]);
+		}
+	}
+	design.canopyCenter = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+	design.canopyRadii = [
+		Math.max(0.3, (max[0] - min[0]) / 2),
+		Math.max(0.3, (max[1] - min[1]) / 2),
+		Math.max(0.3, (max[2] - min[2]) / 2)
+	];
+	design.totalHeight = max[1];
+}
+
+/**
+ * Bamboo: culms rising from a small clump, each leaning a little outward, with leaf clumps along
+ * its top third. The leaf clumps are ordinary crown clusters, so blob shading, the far-LOD hull and
+ * surface foliage cards all work on them unchanged.
+ */
+function designStalks(design: TreeDesign, rules: StalksCanopyRules, random: () => number): number {
+	const count = pickInt(random, rules.culmCount);
+	const spread = pick(random, rules.spread);
+	let tallest = 0;
+	for (let i = 0; i < count; i++) {
+		const angle = random() * Math.PI * 2;
+		const distance = spread * Math.sqrt(random());
+		const base: Vec3 = [Math.cos(angle) * distance, -TRUNK_SINK, Math.sin(angle) * distance];
+		const height = pick(random, rules.height);
+		const leanAngle = angle + (random() - 0.5) * 1.2;
+		const lean = pick(random, rules.lean) * height;
+		const top: Vec3 = [
+			base[0] + Math.cos(leanAngle) * lean,
+			height,
+			base[2] + Math.sin(leanAngle) * lean
+		];
+		design.culms.push({
+			base,
+			top,
+			radius: pick(random, rules.radius),
+			joints: pickInt(random, rules.joints)
+		});
+		tallest = Math.max(tallest, height);
+	}
+	// Leaf clumps for the whole stand (not per culm, which would multiply crown triangles): each
+	// sits along the top third of one culm, cycling through them so every culm carries foliage.
+	const clumps = pickInt(random, rules.leafClumps);
+	for (let k = 0; k < clumps; k++) {
+		const culm = design.culms[k % design.culms.length];
+		const t = 0.68 + random() * 0.3;
+		const size = pick(random, rules.leafSize);
+		const side = random() * Math.PI * 2;
+		design.clusters.push({
+			center: [
+				culm.base[0] + (culm.top[0] - culm.base[0]) * t * t + Math.cos(side) * size * 0.4,
+				culm.base[1] + (culm.top[1] - culm.base[1]) * t,
+				culm.base[2] + (culm.top[2] - culm.base[2]) * t * t + Math.sin(side) * size * 0.4
+			],
+			radii: [size, size * 0.62, size],
+			seed: (design.seed + k * 7919) >>> 0
+		});
+	}
+	fitCanopy(
+		design,
+		design.culms.map((c) => c.top)
+	);
+	return tallest;
+}
+
+/**
+ * Cactus: a main column and a few arms that reach out and turn upward, each a ribbed tube with a
+ * rounded cap. No foliage: the "canopy" is the columns themselves, in foliage colours.
+ */
+function designColumnar(
+	design: TreeDesign,
+	rules: ColumnarCanopyRules,
+	random: () => number
+): number {
+	const height = pick(random, rules.height);
+	const radius = pick(random, rules.radius);
+	const main: Vec3[] = [];
+	for (let i = 0; i <= 4; i++) main.push([0, -TRUNK_SINK + (height + TRUNK_SINK) * (i / 4), 0]);
+	design.columns.push({ path: main, radius });
+	const arms = pickInt(random, rules.arms);
+	const start = random() * Math.PI * 2;
+	const extent: Vec3[] = [[0, height + radius * 0.6, 0]];
+	for (let a = 0; a < arms; a++) {
+		const angle = start + (a / Math.max(1, arms)) * Math.PI * 2 + (random() - 0.5) * 0.9;
+		const dx = Math.cos(angle);
+		const dz = Math.sin(angle);
+		const y = height * pick(random, rules.armStart);
+		const reach = pick(random, rules.armReach);
+		const rise = Math.min(height * 0.85 - y, pick(random, rules.armRise));
+		const armRadius = radius * (0.58 + random() * 0.12);
+		const path: Vec3[] = [
+			[dx * radius * 0.4, y, dz * radius * 0.4],
+			[dx * reach * 0.6, y + reach * 0.05, dz * reach * 0.6],
+			[dx * reach, y + reach * 0.35, dz * reach],
+			[dx * reach, y + reach * 0.35 + Math.max(0.3, rise) * 0.5, dz * reach],
+			[dx * reach, y + reach * 0.35 + Math.max(0.3, rise), dz * reach]
+		];
+		design.columns.push({ path, radius: armRadius });
+		extent.push([dx * (reach + armRadius), path[4][1] + armRadius * 0.6, dz * (reach + armRadius)]);
+	}
+	extent.push([radius, 0, radius], [-radius, 0, -radius]);
+	fitCanopy(design, extent);
 	return height;
 }
 
@@ -459,10 +590,20 @@ function buildWith(
 	const windResponse = species.windResponse;
 	const barkCode = TREE_SURFACE_CODES[species.surface.bark];
 
-	buildTrunk(builder, species, design, tess, total, barkCode);
-
 	const canopy = species.canopy;
 	const leafCode = TREE_SURFACE_CODES[species.surface.foliage];
+	if (canopy.kind === 'stalks') {
+		buildCulms(builder, design, tess, total, windResponse, barkCode);
+		buildBlobCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
+		return builder.build();
+	}
+	if (canopy.kind === 'columnar') {
+		buildColumns(builder, canopy, design, tess, total, barkCode, leafCode);
+		return builder.build();
+	}
+
+	buildTrunk(builder, species, design, tess, total, barkCode);
+
 	if (canopy.kind === 'blobs')
 		buildBlobCanopy(builder, canopy, design, tess, total, windResponse, leafCode);
 	else if (canopy.kind === 'tiers')
@@ -640,9 +781,102 @@ function clumpsFor(
 	return clumps;
 }
 
+/** Bamboo culms: slim tubes with darker joint bands; they sway like the crowns they carry. */
+function buildCulms(
+	builder: TreeMeshBuilder,
+	design: TreeDesign,
+	tess: LodTessellation,
+	total: number,
+	windResponse: number,
+	barkCode: number
+): void {
+	const sides = Math.max(3, tess.trunkSides - 4);
+	const segments = tess.hull ? 1 : Math.max(2, tess.trunkSegments);
+	const palette = design.palette;
+	// The silhouette LOD keeps three culms: at that distance the stand is its leaf mass.
+	const culms = tess.hull ? design.culms.slice(0, 3) : design.culms;
+	for (const culm of culms) {
+		const path: TubePoint[] = [];
+		for (let i = 0; i <= segments; i++) {
+			const t = i / segments;
+			// Culms arc gently: the lean grows with height.
+			const bendT = t * t;
+			path.push({
+				position: [
+					culm.base[0] + (culm.top[0] - culm.base[0]) * bendT,
+					culm.base[1] + (culm.top[1] - culm.base[1]) * t,
+					culm.base[2] + (culm.top[2] - culm.base[2]) * bendT
+				],
+				radius: culm.radius * (1 - 0.35 * t)
+			});
+		}
+		addTube(builder, path, sides, (t, _angle, position) => {
+			const band = (t * culm.joints) % 1;
+			const joint = band < 0.06 || band > 0.97 ? 0.62 : 1;
+			const shade = trunkShade(palette, t, position, total, windResponse * 1.6, barkCode);
+			return {
+				...shade,
+				color: [shade.color[0] * joint, shade.color[1] * joint, shade.color[2] * joint]
+			};
+		});
+	}
+}
+
+/** Cactus columns and arms: ribbed tubes in foliage colours, each with a rounded cap. */
+function buildColumns(
+	builder: TreeMeshBuilder,
+	rules: ColumnarCanopyRules,
+	design: TreeDesign,
+	tess: LodTessellation,
+	total: number,
+	skinCode: number,
+	capCode: number
+): void {
+	const palette = design.palette;
+	// Fewer sides with each LOD; ribs only where there are enough sides to show them.
+	const sides = tess.latheSides;
+	const ribs = sides >= 11 ? rules.ribs : 0;
+	const shade = (position: Vec3, rib: number, surface = skinCode): VertexShade => {
+		const h = Math.max(0, position[1]) / total;
+		let color = mixRgb(palette.dark, palette.base, smooth01(0, 0.35, h));
+		color = mixRgb(color, palette.light, smooth01(0.6, 1.05, h) * 0.5);
+		const k = 0.82 + 0.18 * rib;
+		return { color: [color[0] * k, color[1] * k, color[2] * k], wind: 0, surface };
+	};
+	for (const column of design.columns) {
+		// Far LODs keep the column's ends and bend only.
+		const points = tess.latheRings >= 12 ? column.path : column.path.filter((_, i) => i % 2 === 0);
+		const path: TubePoint[] = points.map((position, i) => ({
+			position,
+			radius: column.radius * (i === points.length - 1 ? 0.92 : 1)
+		}));
+		addTube(
+			builder,
+			path,
+			sides,
+			(_t, angle, position) => shade(position, ribs > 0 ? 0.5 + 0.5 * Math.cos(angle * ribs) : 1),
+			0,
+			ribs > 0 ? (_t, angle) => 1 + 0.07 * Math.cos(angle * ribs) : undefined
+		);
+		const top = column.path[column.path.length - 1];
+		addBlob(builder, {
+			center: top,
+			radii: [column.radius * 0.92, column.radius * 0.7, column.radius * 0.92],
+			detail: Math.max(0, tess.blobDetail - 1),
+			lumpiness: 0.02,
+			seed: design.seed,
+			canopyCenter: design.canopyCenter,
+			canopyRadii: design.canopyRadii,
+			normalBlend: 0,
+			// Caps have no grain axis, so they carry the foliage code rather than the bark's.
+			shade: (position) => shade(position, 1, capCode)
+		});
+	}
+}
+
 function buildBlobCanopy(
 	builder: TreeMeshBuilder,
-	rules: BlobCanopyRules,
+	rules: Pick<BlobCanopyRules, 'lumpiness'>,
 	design: TreeDesign,
 	tess: LodTessellation,
 	total: number,

@@ -71,7 +71,10 @@ export class WeatherExposureMap {
 		this.camera.updateMatrixWorld();
 		this.render();
 		area.set(this.centreX - EXTENT / 2, this.centreZ - EXTENT / 2, 1 / EXTENT, 1);
-		WEATHER_SURFACE_UNIFORMS.uWxExposureDepth.value.set(top - this.camera.near, DEPTH_RANGE - this.camera.near);
+		WEATHER_SURFACE_UNIFORMS.uWxExposureDepth.value.set(
+			top - this.camera.near,
+			DEPTH_RANGE - this.camera.near
+		);
 	}
 
 	/** Forces a re-render next time it is needed (world loaded). */

@@ -1,43 +1,63 @@
 <script lang="ts">
-	const groups = [
+	import { onMount } from 'svelte';
+	import { labelForAction, labelsForAction } from '#lib/game/input/KeyInput';
+	import { subscribeKeyBindings } from '#lib/game/input/KeyBindingsStore';
+	import type { KeyActionId } from '#lib/game/input/keyActions';
+
+	/** Bumped when the bindings change, so every key below is re-read. */
+	let revision = $state(0);
+	onMount(() => subscribeKeyBindings(() => revision++));
+
+	/** The key players press for this action right now ("Unbound" when none). */
+	const k = (id: KeyActionId) => labelForAction(id);
+	/** Every key bound to the action, joined: "Delete / Backspace". */
+	const keys = (id: KeyActionId) => labelsForAction(id).join(' / ') || 'Unbound';
+
+	const buildGroups = () => [
 		{
 			title: 'Movement & camera',
 			rows: [
-				['W / A / S / D', 'Walk forward, left, backward and right.'],
+				[
+					`${k('move.forward')} / ${k('move.left')} / ${k('move.back')} / ${k('move.right')}`,
+					'Walk forward, left, backward and right.'
+				],
 				['Mouse', 'Look around. Click into the world to capture the mouse.'],
 				[
-					'F5 / touch View',
+					`${k('camera.toggleView')} / touch View`,
 					'Switch first-person and above-head third-person camera. Aim and build using the centre crosshair; the camera moves closer near walls.'
 				],
-				['Shift', 'Hold to run while walking.'],
-				['Space', 'Jump.'],
-				['C (hold)', 'Zoom in. C is reserved for zoom across all build tools.'],
+				[k('move.run'), 'Hold to run while walking.'],
+				[k('move.jump'), 'Jump.'],
 				[
-					'F',
-					'Toggle flight where available. W/S fly where you look, A/D strafe, Space rises, Shift descends, and the mouse wheel changes speed. With Place Object selected, F edits the aimed object instead.'
+					`${k('camera.zoom')} (hold)`,
+					`Zoom in. ${k('camera.zoom')} is reserved for zoom across all build tools.`
 				],
 				[
-					'K',
+					k('flight.toggle'),
+					`Toggle flight where available. ${k('move.forward')}/${k('move.back')} fly where you look, ${k('move.left')}/${k('move.right')} strafe, ${k('flight.up')} rises, ${k('flight.down')} descends, and the mouse wheel changes speed. With Place Object selected, ${k('placeObject.edit')} edits the aimed object instead.`
+				],
+				[
+					k('interact.use'),
 					'Open or close the door under the crosshair. Outside Build Mode, sit or lie at an authored Mini Build location; press again to stand up.'
 				],
 				[
-					'K on a small creature',
-					'Pick up a small four-legged creature (the ones with a gold paw badge) and tuck it under your arm; press K again to put it down. A door or seat under the crosshair comes first. Pause → Waypoints can point you to the nearest one.'
+					`${k('interact.use')} on a small creature`,
+					`Pick up a small four-legged creature (the ones with a gold paw badge) and tuck it under your arm; press ${k('interact.use')} again to put it down. A door or seat under the crosshair comes first. Pause → Waypoints can point you to the nearest one.`
 				],
 				[
-					'K on a two-legged creature',
-					'Ride it (the ones with a teal saddle badge): astride its neck if it is small, on its right shoulder if it is large. W/A/S/D steer where you look, Shift sprints, and bigger creatures run faster. Space makes it jump (bigger creatures jump higher). K gets off onto the ground beside it. You can climb on while carrying a creature, and fire from the seat.'
+					`${k('interact.use')} on a two-legged creature`,
+					`Ride it (the ones with a teal saddle badge): astride its neck if it is small, on its right shoulder if it is large. ${k('move.forward')}/${k('move.left')}/${k('move.back')}/${k('move.right')} steer where you look, ${k('move.run')} sprints, and bigger creatures run faster. ${k('move.jump')} makes it jump (bigger creatures jump higher). ${k('interact.use')} gets off onto the ground beside it. You can climb on while carrying a creature, and fire from the seat.`
 				],
 				[
 					'Left click while carrying',
 					"Fire a seed pellet from the creature's mouth. Hold to keep firing: 5 shots, one comes back every 1.5 s. Not while building, flying or under water."
 				],
 				[
-					'WASD / Space while resting',
+					`${k('move.forward')}${k('move.left')}${k('move.back')}${k('move.right')} / ${k('move.jump')} while resting`,
 					'Leave the seat or bed at a nearby clear standing position.'
 				],
 				[
-					'V while resting',
+					`${k('camera.restingView')} while resting`,
 					'Switch between first-person and third-person views of the seated or lying pose.'
 				],
 				[
@@ -49,42 +69,50 @@
 		{
 			title: 'Building basics',
 			rows: [
-				['G', 'Toggle Build Mode and its hotbar. Your selected tool is remembered.'],
-				['1 / 2 / 3', 'Select Foundation / Walls / Openings.'],
-				['4 / 5 / 6 / 7 / 8', 'Select Slabs / Stairs / Floor Detailing / Shovel / Place Object.'],
+				[k('build.toggle'), 'Toggle Build Mode and its hotbar. Your selected tool is remembered.'],
 				[
-					'↑ / ↓',
+					`${k('build.slot1')} / ${k('build.slot2')} / ${k('build.slot3')}`,
+					'Select Foundation / Walls / Openings.'
+				],
+				[
+					(['build.slot4', 'build.slot5', 'build.slot6', 'build.slot7', 'build.slot8'] as const)
+						.map(k)
+						.join(' / '),
+					'Select Slabs / Stairs / Floor Detailing / Shovel / Place Object.'
+				],
+				[
+					`${k('build.slotPrevious')} / ${k('build.slotNext')}`,
 					'Cycle tools within the selected slot. While shaping a roof, these adjust its rise instead.'
 				],
 				['Left click', 'Add a point, place an item or confirm the current preview.'],
 				['Right click', 'Cancel placement or deselect the current tool.'],
 				[
-					'E',
+					k('build.customise'),
 					'Customise the next piece; for floors, ceilings and completed roof footprints, adjust placement height.'
 				],
 				[
-					'− (minus)',
+					k('build.undo'),
 					'Undo a recent placement or complete shovel stroke; up to five actions are kept.'
 				],
-				['+ / =', 'Redo an undone shovel stroke.'],
+				[k('build.redo'), 'Redo an undone shovel stroke.'],
 				[
 					'Shovel: left / right mouse',
 					'Raise / lower terrain. Hold to repeat; release to commit one stroke. Escape cancels unfinished digging.'
 				],
 				[
-					'Shovel: E',
+					`Shovel: ${k('build.customise')}`,
 					'Choose brush radius, height step or single-point mode. On touch screens, tap Raise or Lower.'
 				],
 				[
-					'] / [',
+					`${k('build.levelUp')} / ${k('build.levelDown')}`,
 					'Move up or down a building storey. Page Up / Page Down and the on-screen floor selector also work.'
 				],
 				[
-					'B',
+					k('tool.snap'),
 					'Cycle drawing snap modes on supported tools: Off, Axis, Axis + Inline and Wall Corners.'
 				],
 				[
-					'Backspace / Enter',
+					`${k('tool.undoPoint')} / ${k('tool.finish')}`,
 					'While drawing a path, remove its last point / finish an open continuous wall or fence. Click the first point again to close a loop.'
 				]
 			]
@@ -93,27 +121,48 @@
 			title: 'Roofs, objects & finishing touches',
 			rows: [
 				[
-					'Roof: V / R',
+					`Roof: ${k('roof.type')} / ${k('tool.rotate')}`,
 					'After drawing the footprint, cycle roof shape / rotate the ridge or high edge.'
 				],
-				['Roof: ↑ / ↓', 'Raise or lower the roof rise. Hold Shift for finer adjustments.'],
 				[
-					'Roof: E',
+					`Roof: ${k('roof.riseUp')} / ${k('roof.riseDown')}`,
+					'Raise or lower the roof rise. Hold Shift for finer adjustments.'
+				],
+				[
+					`Roof: ${k('roof.footprint')}`,
 					'While drawing, switch rectangle/polygon mode. After the footprint is complete, set eave height.'
 				],
-				['Stairs: ← / →', 'Change the stair direction; Enter or left click confirms.'],
 				[
-					'Openings: B',
-					'Doors, windows and beams start with 12 internal snap lines (13 equal segments). Press B once to turn snapping off, then press again to cycle other modes.'
+					`Stairs: ${k('stairs.turnLeft')} / ${k('stairs.turnRight')}`,
+					`Change the stair direction; ${k('tool.finish')} or left click confirms.`
 				],
-				['Beam: R', 'Switch the next beam between vertical and horizontal.'],
-				['Fence: Q / R', 'Copy the aimed fence’s style / apply your current settings to it.'],
-				['Skirting: O', 'Switch between automatic and manual offset from the wall.'],
-				['Floor detail: R', 'Change plank direction, cycle tile patterns or toggle path framing.'],
-				['Path: B', 'Cycle Axis, Free and Bezier drawing modes.'],
-				['8, then E', 'Open the Object Library to choose a design or create a Mini Build.'],
 				[
-					'Place Object: R / B / F',
+					`Openings: ${k('tool.snap')}`,
+					`Doors, windows and beams start with 12 internal snap lines (13 equal segments). Press ${k('tool.snap')} once to turn snapping off, then press again to cycle other modes.`
+				],
+				[
+					`Beam: ${k('opening.beamOrientation')}`,
+					'Switch the next beam between vertical and horizontal.'
+				],
+				[
+					`Fence: ${k('barrier.copyStyle')} / ${k('barrier.restyle')}`,
+					'Copy the aimed fence’s style / apply your current settings to it.'
+				],
+				[
+					`Skirting: ${k('skirting.offsetMode')}`,
+					'Switch between automatic and manual offset from the wall.'
+				],
+				[
+					`Floor detail: ${k('floorDetail.cycle')}`,
+					'Change plank direction, cycle tile patterns or toggle path framing.'
+				],
+				[`Path: ${k('floorDetail.pathMode')}`, 'Cycle Axis, Free and Bezier drawing modes.'],
+				[
+					`${k('build.slot8')}, then ${k('build.customise')}`,
+					'Open the Object Library to choose a design or create a Mini Build.'
+				],
+				[
+					`Place Object: ${k('tool.rotate')} / ${k('placeObject.copy')} / ${k('placeObject.edit')}`,
 					'Rotate 90° / copy the aimed object’s design / edit the aimed object.'
 				]
 			]
@@ -121,67 +170,91 @@
 		{
 			title: 'Move, paint & remove',
 			rows: [
-				['M', 'Toggle Move Mode. Click an object to pick it up and click again to place it.'],
 				[
-					'Move: R / E',
+					k('build.moveMode'),
+					'Toggle Move Mode. Click an object to pick it up and click again to place it.'
+				],
+				[
+					`Move: ${k('tool.rotate')} / ${k('build.customise')}`,
 					'Rotate the held object / edit its properties. Right click or Esc cancels the move.'
 				],
-				['P', 'Toggle Paint Mode. Left click paints the highlighted surface.'],
-				['Paint: B', 'Open the colour palette. P, right click or Esc exits Paint Mode.'],
+				[k('build.paintMode'), 'Toggle Paint Mode. Left click paints the highlighted surface.'],
 				[
-					'X',
+					`Paint: ${k('paint.palette')}`,
+					`Open the colour palette. ${k('build.paintMode')}, right click or Esc exits Paint Mode.`
+				],
+				[
+					k('build.removeMode'),
 					'Toggle Remove Mode. Left click removes the highlighted building piece or music plant.'
 				],
 				[
-					'Remove: Delete / Backspace',
+					`Remove: ${keys('remove.deleteFoundation')}`,
 					'Request deletion of the aimed foundation and its contents. A typed confirmation is required.'
 				],
-				['Remove: X / Right click / Esc', 'Exit Remove Mode and return to the previous tool.']
+				[
+					`Remove: ${k('build.removeMode')} / Right click / Esc`,
+					'Exit Remove Mode and return to the previous tool.'
+				]
 			]
 		},
 		{
 			title: 'Music garden',
 			rows: [
 				[
-					'N',
+					k('build.musicMode'),
 					'Enter or leave Compose Mode near a Music Tree. Rings show the timing positions in its loop.'
 				],
 				[
 					'Aim + Left click',
 					'Plant the preview on a snapped ring. Inner rings play earlier; outer rings play later.'
 				],
-				['1–5 / Q / E', 'Choose or cycle instruments: Flower, Mushroom, Fern, Reed and Crystal.'],
-				['↑ / ↓', 'Raise or lower the preview plant’s pitch before placing.'],
-				['← / →', 'Lower or raise its volume; the plant becomes paler or more vivid.'],
-				[', / .', 'Shorten or lengthen the note duration.'],
-				['J', 'Play or pause the active Music Tree’s loop.'],
+				[
+					`${k('music.instrument1')}–${k('music.instrument5')} / ${k('music.instrumentPrevious')} / ${k('music.instrumentNext')}`,
+					'Choose or cycle instruments: Flower, Mushroom, Fern, Reed and Crystal.'
+				],
+				[
+					`${k('music.pitchUp')} / ${k('music.pitchDown')}`,
+					'Raise or lower the preview plant’s pitch before placing.'
+				],
+				[
+					`${k('music.volumeDown')} / ${k('music.volumeUp')}`,
+					'Lower or raise its volume; the plant becomes paler or more vivid.'
+				],
+				[`${k('music.shorter')} / ${k('music.longer')}`, 'Shorten or lengthen the note duration.'],
+				[k('music.playLoop'), 'Play or pause the active Music Tree’s loop.'],
 				[
 					'Import MIDI',
 					'Use the music HUD button to preview a MIDI file, then click open ground to place its garden.'
 				],
 				[
 					'Right click / Esc',
-					'Cancel the music placement preview. Use X to remove an existing music plant.'
+					`Cancel the music placement preview. Use ${k('build.removeMode')} to remove an existing music plant.`
 				]
 			]
 		},
 		{
 			title: 'Menus, saving & display',
 			rows: [
-				['H', 'Open or close the in-game controls guide.'],
+				[k('ui.help'), 'Open or close the in-game controls guide.'],
 				['Pause → Settings', 'Adjust audio, graphics and the current world’s settings.'],
-				['Ctrl / Cmd + S', 'Save the world now. Worlds also autosave after building changes.'],
-				['L', 'Cycle Low, Medium, High and Ultra graphics quality. The preference is remembered.'],
-				['F3', 'Show or hide render statistics.'],
+				[k('world.save'), 'Save the world now. Worlds also autosave after building changes.'],
 				[
-					'F7',
+					k('ui.graphicsQuality'),
+					'Cycle Low, Medium, High and Ultra graphics quality. The preference is remembered.'
+				],
+				[k('ui.renderStats'), 'Show or hide render statistics.'],
+				[
+					k('tutorial.previous'),
 					'Replay the previous tutorial instruction. Press again after a short pause to go back further.'
 				],
-				['F6', 'Open speech options and narrator settings.'],
-				['F8', 'Automatically prepare and start the narrated tutorial.'],
-				['F9', 'Advance to the next tutorial instruction, stopping the current speech.'],
+				[k('tutorial.speechOptions'), 'Open speech options and narrator settings.'],
+				[k('tutorial.autoStart'), 'Automatically prepare and start the narrated tutorial.'],
 				[
-					'Backslash (\\)',
+					k('tutorial.next'),
+					'Advance to the next tutorial instruction, stopping the current speech.'
+				],
+				[
+					k('ui.screenshot'),
 					'Capture a best-quality PNG: temporarily use Ultra, wait for loading, save the image and restore your graphics preference.'
 				]
 			]
@@ -218,19 +291,26 @@
 			]
 		}
 	];
+	const groups = $derived.by(() => (revision >= 0 ? buildGroups() : []));
 </script>
 
 <div class="controls-guide">
 	<h4>Controls &amp; what they do</h4>
 	<p>
 		Choose a section below. Shortcuts act on your current tool or mode; the in-game hints show the
-		actions available right now.
+		actions available right now. These are your current keys.
 	</p>
+	<button
+		type="button"
+		class="change-keys"
+		data-testid="help-change-keys"
+		onclick={() => window.dispatchEvent(new Event('forest:open-key-bindings'))}>Change keys</button
+	>
 	{#each groups as group, index (group.title)}
 		<details open={index === 0}>
 			<summary>{group.title}</summary>
 			<dl>
-				{#each group.rows as [key, description] (key)}<div class="control-row">
+				{#each group.rows as [key, description] (description)}<div class="control-row">
 						<dt><kbd>{key}</kbd></dt>
 						<dd>{description}</dd>
 					</div>{/each}
@@ -251,6 +331,22 @@
 	p {
 		color: #dfccaa;
 		font-size: 14px;
+	}
+	.change-keys {
+		min-height: 44px;
+		padding: 0 16px;
+		border-radius: 10px;
+		border: 1px solid #ac8242;
+		background: #2a1f1288;
+		color: #f4d18c;
+		font:
+			bold 14px system-ui,
+			sans-serif;
+		cursor: pointer;
+	}
+	.change-keys:focus-visible {
+		outline: 2px solid #ffdb83;
+		outline-offset: 2px;
 	}
 	details {
 		border: 1px solid #ac824255;

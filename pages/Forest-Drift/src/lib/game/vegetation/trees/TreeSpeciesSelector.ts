@@ -5,6 +5,16 @@ import { createNamedRandom } from '../../terrain/seededRandom';
 import type { TreeSpeciesMixSettings } from '../VegetationTypes';
 import { TREE_SPECIES_IDS, type TreeSpeciesId } from './TreeSpeciesTypes';
 
+/**
+ * Biomes (biomes/BiomeTrees.ts): when enabled, a biome's own species weights replace the
+ * conifer/broadleaf/elevation rules below. Stand maps still group trees into groves.
+ */
+export interface TreeSpeciesBiomeSource {
+	enabled(): boolean;
+	/** Writes weights index-aligned with TREE_SPECIES_IDS. */
+	speciesWeights(worldX: number, worldZ: number, out: Float64Array): void;
+}
+
 /** The local conditions a candidate tree grows in. */
 export interface SpeciesSite {
 	worldX: number;
@@ -35,9 +45,14 @@ export class TreeSpeciesSelector {
 	private standNoise: Noise2D | null = null;
 	private seed = '';
 	private readonly weights = new Float64Array(TREE_SPECIES_IDS.length);
+	private biomes: TreeSpeciesBiomeSource | null = null;
 
 	constructor(settings: TreeSpeciesMixSettings) {
 		this.settings = settings;
+	}
+
+	setBiomeSource(source: TreeSpeciesBiomeSource | null): void {
+		this.biomes = source;
 	}
 
 	setSeed(seed: string): void {
@@ -78,7 +93,16 @@ export class TreeSpeciesSelector {
 
 	/** Relative weights per species (index-aligned with TREE_SPECIES_IDS). Reuses an internal buffer. */
 	weightsAt(site: SpeciesSite): Float64Array {
+		if (this.biomes?.enabled()) {
+			this.biomes.speciesWeights(site.worldX, site.worldZ, this.weights);
+			for (let i = 0; i < this.weights.length; i++) {
+				if (this.weights[i] > 0) this.weights[i] *= this.stand(i, site);
+			}
+			return this.weights;
+		}
 		const s = this.settings;
+		// Species added for biomes never grow in a world without them.
+		this.weights.fill(0);
 		const conifer = this.coniferness(site);
 		const open = 1 - Math.min(1, Math.max(0, site.density));
 		const gentle = 1 - smoothstep(10, 25, site.slopeDegrees);
@@ -122,6 +146,7 @@ export class TreeSpeciesSelector {
 			target -= Math.max(0, weights[i]);
 			if (target < 0) return TREE_SPECIES_IDS[i];
 		}
-		return TREE_SPECIES_IDS[TREE_SPECIES_IDS.length - 1];
+		for (let i = weights.length - 1; i >= 0; i--) if (weights[i] > 0) return TREE_SPECIES_IDS[i];
+		return 'oak';
 	}
 }

@@ -19,9 +19,11 @@
 		categories?: SettingsCategory[];
 		fullscreen?: boolean;
 		onClose: () => void;
+		/** Bump to rebuild the menu after settings changed outside it (e.g. a confirmed dialog). */
+		revision?: number;
 	}
 
-	let { host, onClose, categories, fullscreen = false }: Props = $props();
+	let { host, onClose, categories, fullscreen = false, revision = 0 }: Props = $props();
 	let panel: HTMLDivElement;
 	onMount(() => {
 		const previous = document.activeElement as HTMLElement | null;
@@ -36,7 +38,9 @@
 
 	const catalog = $derived.by(() => {
 		// Reading formRevision rebuilds the menu after a button writes a plain settings object.
-		return formRevision >= 0 ? (categories ?? (host ? buildSettingsCatalog(host) : [])) : [];
+		return formRevision >= 0 && revision >= 0
+			? (categories ?? (host ? buildSettingsCatalog(host) : []))
+			: [];
 	});
 	const normalizedQuery = $derived(query.trim().toLowerCase());
 	const active = $derived(catalog.find((category) => category.id === categoryId) ?? catalog[0]);

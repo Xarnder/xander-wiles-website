@@ -2675,6 +2675,33 @@ gallery work. Screenshots are attached to the Playwright report.
 - Remaining palettes (medieval village, English countryside, mountain lodge, old European town) are
   starting points, not tuned.
 
+## Biomes: climate-driven environments (`biomes/`)
+
+New worlds are divided into 26 biomes, from Snowy Taiga to Jungle, Desert and Swamp, each with its
+own ground, grass, trees, plants, weather and air. **Player guide, the full list, settings, the kill
+switch and how to add a biome: [`docs/biomes.md`](docs/biomes.md).** The design decisions and phase
+records are in `docs/2026/11-12/Biomes-and-Enviroments/`.
+
+Not to be confused with the terrain "biome mask" above, which only shapes the ground (plains, hills,
+highlands, mountains). The biomes here are climate regions laid over that terrain:
+
+- **`ClimateSampler.ts`** — temperature, moisture and rarity from large, equal-area-remapped simplex
+  fields, cooled with elevation and in mountain ranges. Spawn is kept temperate.
+- **`BiomeClassifier.ts` / `biomeDefinitions.ts`** — each biome is a set of climate boxes per
+  landform (lowland, upland, mountain); variants (Flower Forest, Cherry Grove, Bamboo Jungle…) and
+  Swamp are overlays. The result is a weight per biome that sums to 1, so borders blend.
+- **`BiomeField.ts`** — the one shared lookup: a world-aligned 16 m lattice in 64 m tiles, with an
+  LRU cache and a fast path inside a single biome. Terrain, grass, trees, plants and weather all read
+  it, so they agree at every border.
+- **Profiles** (`biomeSurfaceProfiles.ts`, `biomeTreeProfiles.ts`, `biomePlantProfiles.ts`,
+  `biomeAtmosphereProfiles.ts`) say what each biome looks like; `BiomeSurface`, `BiomeTrees`,
+  `BiomePlants` and `LocalClimate` turn them into ground colour and the shader's `GROUND` layer,
+  forest bands and species, plant plans, and local rain/snow, fog and water tint.
+
+Old worlds keep biomes off, and off runs exactly the pre-biome code (parity-tested). Biomes are
+deterministic and checked in all three engines, so online players see the same world; saved worlds
+are schema 10 and the network generator version is 4.
+
 ## Vegetation: independent forest regions
 
 `src/lib/game/vegetation/` adds large procedural forests **as a second map laid over the terrain**,

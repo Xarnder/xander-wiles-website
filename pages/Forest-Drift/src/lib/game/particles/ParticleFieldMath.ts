@@ -30,7 +30,11 @@ export const FIELD_LAYER_COUNTS: readonly number[] = [9, 6, 5];
 /** The layer instance `index` belongs to. */
 export function fieldLayerOf(index: number): number {
 	const slot = index % 20;
-	return slot < FIELD_LAYER_COUNTS[0] ? 0 : slot < FIELD_LAYER_COUNTS[0] + FIELD_LAYER_COUNTS[1] ? 1 : 2;
+	return slot < FIELD_LAYER_COUNTS[0]
+		? 0
+		: slot < FIELD_LAYER_COUNTS[0] + FIELD_LAYER_COUNTS[1]
+			? 1
+			: 2;
 }
 
 export interface ParticleFieldFrame {
@@ -136,7 +140,10 @@ export function createFieldWrapOffsets(): FieldWrapOffsets {
  * The wrap offsets the shader adds to each seed, per layer and axis, computed on the CPU in double
  * precision so the GPU only ever sees small numbers however far the player has walked.
  */
-export function fieldWrapOffsets(frame: ParticleFieldFrame, out: FieldWrapOffsets): FieldWrapOffsets {
+export function fieldWrapOffsets(
+	frame: ParticleFieldFrame,
+	out: FieldWrapOffsets
+): FieldWrapOffsets {
 	for (let layer = 0; layer < FIELD_LAYER_RADII.length; layer++) {
 		const radius = frame.radius * FIELD_LAYER_RADII[layer];
 		const size = radius * 2;

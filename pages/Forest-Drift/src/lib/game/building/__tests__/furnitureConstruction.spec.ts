@@ -8,7 +8,12 @@ import {
 } from '../furnitureConstruction';
 import { createFurnitureSlotGeometries, disposeSlotGeometries } from '../FurnitureGeometry';
 
-function input(kind: (typeof FURNITURE_KINDS)[number], width?: number, depth?: number, height?: number) {
+function input(
+	kind: (typeof FURNITURE_KINDS)[number],
+	width?: number,
+	depth?: number,
+	height?: number
+) {
 	const resolved = resolveFurnitureBuildInput({ kind });
 	return resolveFurnitureBuildInput({
 		kind,
@@ -24,11 +29,7 @@ describe('furniture construction', () => {
 	it('produces finite primitives for every catalogue kind at min, default, and max size', () => {
 		for (const kind of FURNITURE_KINDS) {
 			const entry = resolveFurnitureBuildInput({ kind });
-			const sizes = [
-				input(kind, 0.01, 0.01, 0.01),
-				entry,
-				input(kind, 99, 99, 99)
-			];
+			const sizes = [input(kind, 0.01, 0.01, 0.01), entry, input(kind, 99, 99, 99)];
 			for (const size of sizes) {
 				const construction = buildFurnitureConstruction(size);
 				expect(furnitureConstructionIsFinite(construction)).toBe(true);
@@ -119,8 +120,12 @@ describe('furniture construction', () => {
 	it('keeps a bed mattress inside a larger frame when width and length change', () => {
 		const small = buildFurnitureConstruction(input('bed', 0.9, 2, 0.55));
 		const large = buildFurnitureConstruction(input('bed', 1.8, 2.1, 0.6));
-		const smallMattress = furniturePrimitivesWithRole(small, 'mattress').find((p) => p.shape === 'box');
-		const largeMattress = furniturePrimitivesWithRole(large, 'mattress').find((p) => p.shape === 'box');
+		const smallMattress = furniturePrimitivesWithRole(small, 'mattress').find(
+			(p) => p.shape === 'box'
+		);
+		const largeMattress = furniturePrimitivesWithRole(large, 'mattress').find(
+			(p) => p.shape === 'box'
+		);
 		if (smallMattress?.shape === 'box' && largeMattress?.shape === 'box') {
 			expect(largeMattress.sx).toBeGreaterThan(smallMattress.sx);
 			expect(largeMattress.sz).toBeGreaterThan(smallMattress.sz * 0.95);

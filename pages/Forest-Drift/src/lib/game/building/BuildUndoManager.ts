@@ -1,4 +1,5 @@
 import type { BuildingManager } from './BuildingManager';
+import { matchesAction } from '../input/KeyInput';
 
 /** Deepest the undo stack goes — oldest action is dropped once a 6th is recorded. */
 const MAX_HISTORY = 5;
@@ -54,11 +55,11 @@ export class BuildUndoManager {
 			(['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName ?? '') || target.isContentEditable)
 		)
 			return;
-		if (event.code === 'Equal' || event.code === 'NumpadAdd') {
+		if (matchesAction(event, 'build.redo')) {
 			this.redo();
 			return;
 		}
-		if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
+		if (matchesAction(event, 'build.undo')) {
 			this.undo();
 		}
 	};

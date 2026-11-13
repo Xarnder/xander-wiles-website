@@ -71,7 +71,9 @@ describe('HDRI environment lifecycle', () => {
 		const h = setup();
 		await h.ready();
 		expect(loadEnvironmentTexture).toHaveBeenCalledTimes(1);
-		expect(vi.mocked(loadEnvironmentTexture).mock.calls[0][0]).toContain('Cloudscape%20Sunny%20Seamless.webp');
+		expect(vi.mocked(loadEnvironmentTexture).mock.calls[0][0]).toContain(
+			'Cloudscape%20Sunny%20Seamless.webp'
+		);
 		expect(sources[0].colorSpace).toBe(THREE.SRGBColorSpace);
 		expect(sources[0].mapping).toBe(THREE.EquirectangularReflectionMapping);
 		expect(sources[0].generateMipmaps).toBe(false);
@@ -85,7 +87,9 @@ describe('HDRI environment lifecycle', () => {
 		await h.ready();
 		h.settings.preset = 'cloudscape-moody';
 		await h.ready();
-		expect(vi.mocked(loadEnvironmentTexture).mock.calls[1][0]).toContain('Cloudscape%20Moody%20Seamless.webp');
+		expect(vi.mocked(loadEnvironmentTexture).mock.calls[1][0]).toContain(
+			'Cloudscape%20Moody%20Seamless.webp'
+		);
 		h.settings.preset = 'cloudscape-sunny';
 		await h.ready();
 		expect(h.scene.environment).toBe(targets[0].texture);
@@ -204,6 +208,8 @@ describe('HDRI environment lifecycle', () => {
 		const h = setup();
 		delete h.settings.preset;
 		await h.ready();
-		expect(vi.mocked(loadEnvironmentTexture).mock.calls[0][0]).toContain('Cloudscape%20Sunny%20Seamless.webp');
+		expect(vi.mocked(loadEnvironmentTexture).mock.calls[0][0]).toContain(
+			'Cloudscape%20Sunny%20Seamless.webp'
+		);
 	});
 });

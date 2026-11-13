@@ -1,4 +1,6 @@
 import { wallCornersForPlacement } from './wallCornerSnap';
+import { keyName } from '../input/keyNames';
+import { matchesAction } from '../input/KeyInput';
 import * as THREE from 'three';
 import {
 	createActiveLevelWatch,
@@ -134,7 +136,7 @@ export class SlabToolBase implements BuildTool {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (!this.active) return;
-		if (event.code === 'KeyB') {
+		if (matchesAction(event, 'tool.snap')) {
 			const foundationId = this.activeFoundationId ?? this.hoverTarget?.foundationId ?? null;
 			const wallCornersAvailable = foundationId
 				? this.wallCornersForPlacement(foundationId).length > 0
@@ -144,7 +146,7 @@ export class SlabToolBase implements BuildTool {
 			return;
 		}
 		if (this.state !== 'drawing') return;
-		if (event.code === 'Backspace') this.undoLastPoint();
+		if (matchesAction(event, 'tool.undoPoint')) this.undoLastPoint();
 	};
 
 	/** Corners of the wall storey directly beneath the placement plane. */
@@ -719,7 +721,7 @@ export class SlabToolBase implements BuildTool {
 				'',
 				'Look at the slab: click to start',
 				...this.snapHudLines(),
-				'B: Cycle snap',
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E set height'
 			]
 		};
@@ -748,7 +750,7 @@ export class SlabToolBase implements BuildTool {
 					...common,
 					'',
 					...this.snapHudLines(),
-					'B: Cycle snap',
+					`${keyName('tool.snap')}: Cycle snap`,
 					'E set height',
 					'Click to close slab'
 				]
@@ -768,8 +770,8 @@ export class SlabToolBase implements BuildTool {
 				...this.snapHudLines(),
 				'Click: Add point',
 				'Click first point: Close',
-				'Backspace: Undo point',
-				'B: Cycle snap',
+				`${keyName('tool.undoPoint')}: Undo point`,
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E set height',
 				'Right click: Cancel'
 			]
@@ -790,8 +792,8 @@ export class SlabToolBase implements BuildTool {
 				reason,
 				'',
 				...this.snapHudLines(),
-				'Backspace: Undo point',
-				'B: Cycle snap',
+				`${keyName('tool.undoPoint')}: Undo point`,
+				`${keyName('tool.snap')}: Cycle snap`,
 				'E set height',
 				'Right click: Cancel'
 			]

@@ -199,8 +199,11 @@ export class TerrainHeightSampler {
 		out.mountains = throughMountains;
 	}
 
-	/** Extremely-low-frequency regional elevation: plateaus/basins independent of region type. */
-	private sampleMacroElevation(worldX: number, worldZ: number): number {
+	/**
+	 * Extremely-low-frequency regional elevation: plateaus/basins independent of region type. Public
+	 * because biomes use it to find upland plateaus (contiguous, kilometres across).
+	 */
+	sampleMacroElevation(worldX: number, worldZ: number): number {
 		const m = this.settings.macroElevation;
 		if (m.amplitude === 0) return 0;
 		const freq = 1 / Math.max(1, m.scale);
@@ -310,8 +313,12 @@ export class TerrainHeightSampler {
 		return height * regionMask;
 	}
 
-	/** 0..1 mask gating where, within mountain-leaning biome territory, dramatic ridges actually appear. */
-	private sampleMountainRegionMask(worldX: number, worldZ: number): number {
+	/**
+	 * 0..1 mask gating where, within mountain-leaning biome territory, dramatic ridges actually appear.
+	 * Public so biomes can tell real mountain ranges from flat ground the landform mask merely calls
+	 * "mountains" (where this is 0, the mountain recipe contributes no height).
+	 */
+	sampleMountainRegionMask(worldX: number, worldZ: number): number {
 		const mt = this.settings.mountains;
 		const freq = 1 / Math.max(1, mt.regionScale);
 
@@ -392,6 +399,21 @@ export class TerrainHeightSampler {
 
 		const combined = this.applyTerracing(macro + regional);
 		return this.settings.baseHeight + combined * this.settings.heightMultiplier;
+	}
+
+	/**
+	 * `sampleBase` plus the landform weights it computed on the way, in one pass. Biomes read both
+	 * at every lattice point; this avoids evaluating the landform mask twice. Same result as calling
+	 * `sampleBase` and `sampleBiomeWeights` separately.
+	 */
+	sampleBaseWithWeights(worldX: number, worldZ: number, outWeights: BiomeWeights): number {
+		const height = this.sampleBase(worldX, worldZ);
+		const w = this.weightScratch;
+		outWeights.plains = w.plains;
+		outWeights.hills = w.hills;
+		outWeights.highlands = w.highlands;
+		outWeights.mountains = w.mountains;
+		return height;
 	}
 
 	/** Beach of the last `sample` / `shapeHeight`. Valid after `sampleWithNormal`, which samples the centre last. */

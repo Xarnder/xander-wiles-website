@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { migrateTreeGenerator } from './generatorMigration';
+import { baseHasBiomes, migrateGenerator } from './generatorMigration';
 import {
 	CAPABILITY_TTL_MS,
 	sha256Hex,
@@ -384,9 +384,30 @@ export class WorldRoom extends DurableObject<Env> {
 			.map((row) => JSON.parse(row.body) as CommitMessage);
 	}
 
+	/**
+	 * The stored manifest, with any safe generator relabel applied and saved (see
+	 * `generatorMigration.ts`). Every reader goes through here, so the very first snapshot after a
+	 * deploy already carries the new version.
+	 */
+	private loadManifest(): WorldManifest | null {
+		const saved = this.readJson<WorldManifest>('manifest');
+		if (!saved) return null;
+		const manifest = migrateGenerator(saved, () => baseHasBiomes(this.readBaseText()));
+		if (manifest !== saved) this.writeMeta('manifest', JSON.stringify(manifest));
+		return manifest;
+	}
+
+	private readBaseText(): string | null {
+		try {
+			return this.readChunks();
+		} catch {
+			return null;
+		}
+	}
+
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
-		const manifest = this.readJson<WorldManifest>('manifest');
+		const manifest = this.loadManifest();
 		if (!manifest) return new Response('World not found', { status: 404 });
 
 		if (url.pathname.endsWith('/snapshot')) {
@@ -639,10 +660,8 @@ export class WorldRoom extends DurableObject<Env> {
 	/** Creates the room on first use (or after hibernation), restoring connected players from their attachments. */
 	private startRoom(): RoomCore | null {
 		if (this.core) return this.core;
-		const savedManifest = this.readJson<WorldManifest>('manifest');
-		if (!savedManifest) return null;
-		const manifest = migrateTreeGenerator(savedManifest);
-		if (manifest !== savedManifest) this.writeMeta('manifest', JSON.stringify(manifest));
+		const manifest = this.loadManifest();
+		if (!manifest) return null;
 		this.core = new RoomCore({
 			world: {
 				worldId: manifest.worldId,

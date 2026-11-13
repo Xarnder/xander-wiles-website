@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import type { PlayerSettings } from '../terrain/TerrainSettings';
 import type { RideInput } from '../creatures/CreatureRideMotion';
 import { createWalkBobState, stepWalkBob, walkBobOffset } from './walkBob';
+import type { KeyActionId } from '../input/keyActions';
+import { firstMatchingAction, KeyInput, matchesAction } from '../input/KeyInput';
 
 /**
  * A seat on a moving creature that the eye follows while riding (docs/2026/11-07/
@@ -27,6 +29,21 @@ interface MountState {
 }
 
 const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/** While sitting or lying, any of these gets you up (the key still does its job afterwards). */
+const LEAVE_SEAT_ACTIONS = [
+	'move.forward',
+	'move.left',
+	'move.back',
+	'move.right',
+	'move.jump',
+	'flight.toggle',
+	'build.toggle',
+	'build.musicMode',
+	'build.removeMode',
+	'build.paintMode',
+	'build.moveMode'
+] as const satisfies readonly KeyActionId[];
 
 const GRAVITY = 18;
 const MOUSE_SENSITIVITY = 0.0022;
@@ -285,7 +302,8 @@ export class FirstPersonController {
 	 */
 	rideInput(): RideInput {
 		const input = this.rideSteering();
-		const jump = this.mount?.phase === 'riding' && (this.keys.has('Space') || this.touchJump);
+		const jump =
+			this.mount?.phase === 'riding' && (this.keys.isHeld('move.jump') || this.touchJump);
 		this.touchJump = false;
 		return jump ? { ...input, jump } : input;
 	}
@@ -295,9 +313,17 @@ export class FirstPersonController {
 			return { x: 0, z: 0, sprint: false };
 		const clamp = (v: number) => Math.max(-1, Math.min(1, v));
 		return {
-			x: clamp((this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0) + this.touchMoveX),
-			z: clamp((this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0) + this.touchMoveZ),
-			sprint: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning
+			x: clamp(
+				(this.keys.isHeld('move.right') ? 1 : 0) -
+					(this.keys.isHeld('move.left') ? 1 : 0) +
+					this.touchMoveX
+			),
+			z: clamp(
+				(this.keys.isHeld('move.forward') ? 1 : 0) -
+					(this.keys.isHeld('move.back') ? 1 : 0) +
+					this.touchMoveZ
+			),
+			sprint: this.keys.isHeld('move.run') || this.touchRunning
 		};
 	}
 
@@ -412,7 +438,8 @@ export class FirstPersonController {
 	}
 	private walkBob = createWalkBobState();
 
-	private readonly keys = new Set<string>();
+	/** Held keys, read through the player's bindings (`keys.isHeld('move.forward')`). */
+	private readonly keys = new KeyInput();
 	private pointerLocked = false;
 	private touchMoveX = 0;
 	private touchMoveZ = 0;
@@ -443,47 +470,26 @@ export class FirstPersonController {
 
 	private readonly handleKeyDown = (event: KeyboardEvent) => {
 		if (this.manualInputBlocked || this.exampleMovement) return;
-		if (
-			event.code === 'F5' &&
-			this.isPointerLocked() &&
-			!event.ctrlKey &&
-			!event.metaKey &&
-			!event.altKey
-		) {
+		if (matchesAction(event, 'camera.toggleView') && this.isPointerLocked()) {
 			event.preventDefault();
 			if (!event.repeat) this.toggleThirdPerson();
 			return;
 		}
 		if (this.interactionPose && this.isPointerLocked()) {
-			if (event.code === 'KeyV' && !event.repeat) {
+			if (matchesAction(event, 'camera.restingView') && !event.repeat) {
 				this.interactionThirdPerson = !this.interactionThirdPerson;
 				return;
 			}
-			if (
-				[
-					'KeyW',
-					'KeyA',
-					'KeyS',
-					'KeyD',
-					'Space',
-					'KeyF',
-					'KeyG',
-					'KeyN',
-					'KeyX',
-					'KeyP',
-					'KeyM'
-				].includes(event.code)
-			)
-				this.onInteractionExit?.();
+			if (firstMatchingAction(event, LEAVE_SEAT_ACTIONS)) this.onInteractionExit?.();
 		}
-		this.keys.add(event.code);
-		if (event.code === 'Escape' && this.pointerLocked) {
+		this.keys.handleKeyDown(event);
+		if (matchesAction(event, 'ui.back') && this.pointerLocked) {
 			document.exitPointerLock();
 		}
 	};
 
 	private readonly handleKeyUp = (event: KeyboardEvent) => {
-		this.keys.delete(event.code);
+		this.keys.handleKeyUp(event);
 	};
 
 	/** While flying (and in control of the mouse), the wheel sets fly speed — nothing else uses it in play. */
@@ -610,9 +616,9 @@ export class FirstPersonController {
 		this.lookScale = Math.max(0.05, Math.min(1, scale));
 	}
 
-	/** True while C is held with the game in control (pointer locked) — hold-to-zoom. */
+	/** True while the zoom key (C by default) is held with the game in control (pointer locked). */
 	isZoomHeld(): boolean {
-		return this.pointerLocked && this.keys.has('KeyC');
+		return this.pointerLocked && this.keys.isHeld('camera.zoom');
 	}
 
 	isFlying(): boolean {
@@ -726,14 +732,12 @@ export class FirstPersonController {
 			this.updateFlying(deltaSeconds);
 			return;
 		}
-		const forward = this.keys.has('KeyW') ? 1 : 0;
-		const backward = this.keys.has('KeyS') ? 1 : 0;
-		const left = this.keys.has('KeyA') ? 1 : 0;
-		const right = this.keys.has('KeyD') ? 1 : 0;
-		const running =
-			!this.exampleMovement &&
-			(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') || this.touchRunning);
-		let jumpPressed = this.keys.has('Space') || this.touchJump;
+		const forward = this.keys.isHeld('move.forward') ? 1 : 0;
+		const backward = this.keys.isHeld('move.back') ? 1 : 0;
+		const left = this.keys.isHeld('move.left') ? 1 : 0;
+		const right = this.keys.isHeld('move.right') ? 1 : 0;
+		const running = !this.exampleMovement && (this.keys.isHeld('move.run') || this.touchRunning);
+		let jumpPressed = this.keys.isHeld('move.jump') || this.touchJump;
 		this.touchJump = false;
 
 		let moveX = right - left + this.touchMoveX;
@@ -916,12 +920,16 @@ export class FirstPersonController {
 	 */
 	private updateFlying(deltaSeconds: number): void {
 		const forward =
-			(this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0) + this.touchMoveZ;
+			(this.keys.isHeld('move.forward') ? 1 : 0) -
+			(this.keys.isHeld('move.back') ? 1 : 0) +
+			this.touchMoveZ;
 		const strafe =
-			(this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0) + this.touchMoveX;
+			(this.keys.isHeld('move.right') ? 1 : 0) -
+			(this.keys.isHeld('move.left') ? 1 : 0) +
+			this.touchMoveX;
 		const rise =
-			(this.keys.has('Space') || this.touchJump ? 1 : 0) -
-			(this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 1 : 0);
+			(this.keys.isHeld('flight.up') || this.touchJump ? 1 : 0) -
+			(this.keys.isHeld('flight.down') ? 1 : 0);
 		this.touchJump = false;
 
 		const sinYaw = Math.sin(this.yaw);

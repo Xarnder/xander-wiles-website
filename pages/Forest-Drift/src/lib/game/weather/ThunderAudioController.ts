@@ -130,7 +130,11 @@ export class ThunderAudioController {
 			this.skipped++;
 		}
 		const handle = this.backend ? this.backend.play(voice) : null;
-		this.playing.push({ handle, end: handle ? handle.end : now + voice.duration, gain: voice.gain });
+		this.playing.push({
+			handle,
+			end: handle ? handle.end : now + voice.duration,
+			gain: voice.gain
+		});
 		this.played++;
 	}
 }

@@ -1,3 +1,4 @@
+import { createLegacyBiomeSettings } from '../biomes/BiomeTypes';
 import { migrateCreaturesV4 } from '../creatures/CreaturePersistence';
 import { createDefaultHydrologySettings } from '../hydrology/HydrologyTypes';
 import { migrateMusicV3 } from '../music/MusicMigration';
@@ -31,10 +32,20 @@ type MigrationStep = (world: Record<string, unknown>) => Record<string, unknown>
  * Version 7 adds `miniBuilds` (player-created designs + placed copies). Existing furniture is left
  * exactly as it was — legacy furniture keeps rendering through FurnitureManager.
  * Version 9 adds `barriers` (fences and railings). Older worlds simply have none.
+ * Version 10 adds biome settings (`environment.biomes`). Older worlds get them switched OFF, so they
+ * keep generating exactly as before (decision Q6); the owner may switch them on in a local world.
  * Version 8 adds hydrology settings. Worlds that predate rivers keep `enabled: false` so carving
  * cannot drop a lake under a building that was placed on the old terrain. New worlds opt in.
  */
 const MIGRATIONS: Record<number, MigrationStep> = {
+	9: (world) => {
+		const environment =
+			world.environment && typeof world.environment === 'object'
+				? { ...(world.environment as Record<string, unknown>) }
+				: {};
+		environment.biomes = createLegacyBiomeSettings();
+		return { ...world, schemaVersion: 10, environment };
+	},
 	8: (world) => ({
 		...world,
 		schemaVersion: 9,
