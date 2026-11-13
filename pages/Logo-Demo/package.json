@@ -15,15 +15,19 @@
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.13.3",
-    "happy-dom": "^20.11.1",
+    "happy-dom": "^21.0.4",
     "svelte": "^5.56.8",
     "svelte-check": "^4.7.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "deepmerge": "file:../../vendor/deepmerge"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1"
+  },
+  "overrides": {
+    "deepmerge": "$deepmerge"
   }
 }
