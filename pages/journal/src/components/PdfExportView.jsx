@@ -9,6 +9,7 @@ import ReactMarkdown from 'react-markdown';
 import html2pdf from 'html2pdf.js';
 import { useToast } from '../context/ToastContext';
 import { formatImageTakenLabel } from '../utils/imageTakenAt';
+import ImageCaption from './ImageCaption';
 
 export default function PdfExportView() {
     const { currentUser } = useAuth();
@@ -875,11 +876,7 @@ export default function PdfExportView() {
                                                                                     {takenLabel}
                                                                                 </div>
                                                                             )}
-                                                                            {img.caption && (
-                                                                                <div className="text-center text-gray-500 text-sm mt-1 italic font-serif">
-                                                                                    {img.caption}
-                                                                                </div>
-                                                                            )}
+                                                                            <ImageCaption image={img} className="mt-1 text-gray-700 font-serif" />
                                                                         </div>
                                                                         );
                                                                     })}

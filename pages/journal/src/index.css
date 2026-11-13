@@ -580,6 +580,25 @@
 
 
 /* --- Custom Scrollbar --- */
+.journal-search-input {
+  /* iOS zooms focused inputs below 16px, disrupting the full-page layout. */
+  font-size: 16px;
+}
+
+.journal-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.journal-search-highlight {
+  background: #fde68a;
+  color: #422006;
+  font-weight: 650;
+  border-radius: 0.2em;
+  padding: 0 0.08em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;

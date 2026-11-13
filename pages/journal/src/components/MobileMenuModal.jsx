@@ -15,7 +15,7 @@ export default function MobileMenuModal({
             onClose={onClose}
             labelledBy="mobile-navigation-title"
             zIndexClassName="z-[100]"
-            containerClassName="md:hidden items-stretch justify-center px-4 pt-20 pb-8"
+            containerClassName="lg:hidden items-stretch justify-center px-4 pt-20 pb-8"
             backdropClassName="bg-black/80"
             className="w-full glass-card flex flex-col overflow-hidden shadow-2xl bg-surface/95 border border-border"
         >

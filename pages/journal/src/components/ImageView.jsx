@@ -6,6 +6,10 @@ import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { format, isValid, parseISO } from 'date-fns';
 import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square, Columns2 } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
+import ImageCaption from './ImageCaption';
+import PhotoMasonry from './PhotoMasonry';
+import { hasImageCaption } from '../utils/imageCaption';
+import { imagesForSave } from '../utils/imageTakenAt';
 
 const GALLERY_LOAD_TIMEOUT_MS = 12000;
 const GALLERY_LOAD_TIMEOUT_CODE = 'journal/gallery-load-timeout';
@@ -27,9 +31,7 @@ function getGallerySnapshotWithTimeout(entriesRef) {
 
 function normalizeEntryImages(data) {
     if (Array.isArray(data.images)) {
-        return data.images
-            .map((image) => typeof image === 'string' ? { url: image } : image)
-            .filter((image) => image && typeof image.url === 'string' && image.url);
+        return imagesForSave(data.images.map((image) => typeof image === 'string' ? { url: image } : image));
     }
 
     if (typeof data.imageUrl === 'string' && data.imageUrl) {
@@ -76,6 +78,7 @@ function flattenGalleryImages(entryList) {
                 key: `${entry.id}-${index}`,
                 url: image.url,
                 caption: typeof image.caption === 'string' ? image.caption : '',
+                taggedCaptions: image.taggedCaptions,
                 entryId: entry.id,
                 date: entry.date,
                 title: entry.title,
@@ -257,7 +260,7 @@ export default function ImageView() {
 
     return (
         <div className="space-y-6">
-            <div className="glass-card p-6 flex items-center justify-between">
+            <div className="glass-card p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-white mb-1 flex items-center">
                         <ImageIcon className="w-5 h-5 mr-2 text-primary" />
@@ -266,7 +269,7 @@ export default function ImageView() {
                     <p className="text-text-muted text-sm">A visual journey through your memories</p>
                 </div>
                 <div className="text-right flex flex-col items-end">
-                    <div className="flex items-center space-x-4 mb-2">
+                    <div className="flex flex-wrap items-center gap-3">
                         <div className="flex items-center rounded-lg bg-white/5 p-0.5">
                             {GALLERY_MODES.map((mode) => {
                                 const Icon = mode.icon;
@@ -276,10 +279,10 @@ export default function ImageView() {
                                         key={mode.id}
                                         type="button"
                                         onClick={() => setGalleryMode(mode.id)}
-                                        className={`p-2 rounded-md transition-colors ${
+                                        className={`min-h-11 min-w-11 flex items-center justify-center p-2 rounded-md transition-colors ${
                                             isActive
-                                                ? 'bg-primary text-white'
-                                                : 'text-text-muted hover:bg-white/10 hover:text-white'
+                                                ? 'bg-primary text-[#fff]'
+                                                : 'text-text-muted hover:bg-white/10 hover:text-text'
                                         }`}
                                         title={mode.label}
                                         aria-label={mode.label}
@@ -292,7 +295,7 @@ export default function ImageView() {
                         </div>
                         <button
                             onClick={() => setShowInfo(!showInfo)}
-                            className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-white' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-white'}`}
+                            className={`min-h-11 min-w-11 flex items-center justify-center p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-[#fff]' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-text'}`}
                             title={showInfo ? "Hide Details" : "Show Details"}
                             aria-label={showInfo ? "Hide photo details" : "Show photo details"}
                             aria-pressed={showInfo}
@@ -301,7 +304,7 @@ export default function ImageView() {
                         </button>
                         <div>
                             <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary leading-none">
-                                {entries.length}
+                                {entries.reduce((total, entry) => total + entry.images.length, 0)}
                             </p>
                             <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos</p>
                         </div>
@@ -321,15 +324,15 @@ export default function ImageView() {
             ) : entries.length > 0 ? (
                 <>
                     {galleryMode === 'masonry' ? (
-                        <div className="columns-2 md:columns-3 lg:columns-4 gap-2 sm:gap-4">
-                            {masonryPhotos.map((photo) => (
+                        <PhotoMasonry photos={masonryPhotos}>
+                            {(photo) => (
                                 <button
                                     type="button"
                                     key={photo.key}
                                     id={photo.isFirstForEntry ? `gallery-item-${photo.entryId}` : undefined}
                                     onClick={() => navigate(`/entry/${format(photo.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: photo.entryId, from: '/images' } })}
                                     aria-label={`Open ${photo.title} from ${format(photo.date, 'MMMM d, yyyy')}`}
-                                    className={`group mb-2 sm:mb-4 w-full break-inside-avoid overflow-hidden rounded-xl border bg-white/5 text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${
+                                    className={`group block w-full overflow-hidden rounded-xl border bg-white/5 text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${
                                         photo.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'
                                     }`}
                                 >
@@ -349,24 +352,20 @@ export default function ImageView() {
 
                                         <div className={`absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3 transition-opacity duration-300 ${showInfo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                                             <div className={`transform transition-transform duration-300 ${showInfo ? 'translate-y-0' : 'translate-y-4 group-hover:translate-y-0'}`}>
-                                                <p className="mb-1 flex items-center text-xs font-extrabold text-white drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                <p className="mb-1 flex items-center text-xs font-extrabold text-[#fff] drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
                                                     <Calendar className="mr-1 h-3.5 w-3.5 drop-shadow-md" />
                                                     {format(photo.date, 'MMM d, yyyy')}
                                                 </p>
-                                                <p className="line-clamp-2 font-serif text-sm font-bold text-white drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                <p className="line-clamp-2 font-serif text-sm font-bold text-[#fff] drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
                                                     {photo.title}
                                                 </p>
-                                                {photo.caption && (
-                                                    <p className="mt-1 line-clamp-2 text-[11px] italic text-white/80">
-                                                        {photo.caption}
-                                                    </p>
-                                                )}
                                             </div>
                                         </div>
                                     </div>
+                                    <ImageCaption image={photo} className="p-3 text-text" />
                                 </button>
-                            ))}
-                        </div>
+                            )}
+                        </PhotoMasonry>
                     ) : (
                         <>
                     {Object.entries(groupedEntries).map(([monthYear, monthEntries]) => (
@@ -383,8 +382,9 @@ export default function ImageView() {
                                         id={`gallery-item-${entry.id}`}
                                         onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id, from: '/images' } })}
                                         aria-label={`Open ${entry.title} from ${format(entry.date, 'MMMM d, yyyy')}`}
-                                        className={`group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
+                                        className={`group self-start rounded-xl overflow-hidden cursor-pointer bg-white/5 border text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
                                     >
+                                        <div className="relative aspect-square">
                                         <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
                                             {entry.images.length === 1 ? (
                                                 <ImageWithSkeleton
@@ -406,7 +406,7 @@ export default function ImageView() {
                                             )}
 
                                             {entry.images.length > 1 && (
-                                                <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm z-10 flex items-center">
+                                                <div className="absolute top-2 right-2 bg-black/60 text-[#fff] text-xs px-2 py-1 rounded-full backdrop-blur-sm z-10 flex items-center">
                                                     <ImageIcon className="w-3 h-3 mr-1" />
                                                     {entry.images.length}
                                                 </div>
@@ -422,15 +422,22 @@ export default function ImageView() {
                                         {/* Overlay on hover or when showInfo is true */}
                                         <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-end p-4 z-20 ${showInfo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                                             <div className={`transform transition-transform duration-300 ${showInfo ? 'translate-y-0' : 'translate-y-4 group-hover:translate-y-0'}`}>
-                                                <p className="text-sm text-white font-extrabold mb-1 flex items-center drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                <p className="text-sm text-[#fff] font-extrabold mb-1 flex items-center drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
                                                     <Calendar className="w-4 h-4 mr-1 drop-shadow-md" />
                                                     {format(entry.date, 'MMM d, yyyy')}
                                                 </p>
-                                                <p className="text-white font-serif font-bold line-clamp-2 text-sm drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                <p className="text-[#fff] font-serif font-bold line-clamp-2 text-sm drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
                                                     {entry.title}
                                                 </p>
                                             </div>
                                         </div>
+                                        </div>
+                                        {hasImageCaption(entry.images[0]) && (
+                                            <div className="p-3 text-text">
+                                                {entry.images.length > 1 && <p className="mb-1 text-center text-xs text-text-muted">Photo 1</p>}
+                                                <ImageCaption image={entry.images[0]} />
+                                            </div>
+                                        )}
                                     </button>
                                 ))}
                             </div>

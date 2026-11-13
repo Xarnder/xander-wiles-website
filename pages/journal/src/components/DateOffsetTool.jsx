@@ -226,7 +226,7 @@ export default function DateOffsetTool({ onClose, autoFocus = true }) {
                     direction,
                     baseDateText: baseDateFormatted
                 },
-                from: location.pathname
+                from: `${location.pathname}${location.search}`
             }
         });
         if (onClose) onClose();

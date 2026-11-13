@@ -1,3 +1,5 @@
+import { imageCaptionText, readImageCaptions } from './imageCaption.js';
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PHOTO_WINDOW_DAYS = 24;
@@ -153,12 +155,14 @@ export function imageForSave(image) {
     const url = typeof image.url === 'string' ? image.url.trim() : '';
     if (!url) return null;
 
+    const { caption, taggedCaptions } = readImageCaptions(image);
     const record = {
         url,
         path: typeof image.path === 'string' && image.path ? image.path : null,
         size: Number.isFinite(Number(image.size)) ? Number(image.size) : 0,
-        caption: typeof image.caption === 'string' ? image.caption : ''
+        caption
     };
+    if (taggedCaptions.length) record.taggedCaptions = taggedCaptions;
     const takenAt = normalizeStoredTakenAt(image.takenAt);
     if (takenAt) record.takenAt = takenAt;
     return record;
@@ -169,10 +173,6 @@ export function imagesForSave(images) {
     return images.map(imageForSave).filter(Boolean);
 }
 
-function imageCaption(image) {
-    return typeof image?.caption === 'string' ? image.caption.trim() : '';
-}
-
 /**
  * Readable photo lines for text, markdown, and backup exports.
  * `text` joins with semicolons. `lines` and `markdown` use one photo per line.
@@ -181,7 +181,7 @@ export function formatImageList(images, entryDate, style = 'text') {
     if (!Array.isArray(images) || images.length === 0) return '';
 
     const lines = images.map((image, index) => {
-        const caption = imageCaption(image);
+        const caption = imageCaptionText(image);
         const when = formatImageTakenLabel(image?.takenAt, entryDate);
 
         if (style === 'markdown') {

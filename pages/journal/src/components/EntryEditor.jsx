@@ -19,7 +19,11 @@ import { useEntryUi } from '../context/EntryUiContext';
 import { AlertCircle, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, ChevronDown, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square, Layers, LayoutGrid } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
-import { extractImageTakenAt, formatImageTakenLabel, formatImageList, imagesForSave, imageForSave, normalizeStoredTakenAt } from '../utils/imageTakenAt';
+import { extractImageTakenAt, formatImageTakenLabel, formatImageList, imagesForSave, imageForSave } from '../utils/imageTakenAt';
+import ImageCaption from './ImageCaption';
+import ImageCaptionEditor from './ImageCaptionEditor';
+import PhotoMasonry from './PhotoMasonry';
+import { hasImageCaption } from '../utils/imageCaption';
 import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
@@ -179,15 +183,6 @@ function WritingProgress({
     );
 }
 
-function withStoredTakenAt(image) {
-    if (!image || typeof image !== 'object') return image;
-    const takenAt = normalizeStoredTakenAt(image.takenAt);
-    if (takenAt) return image.takenAt === takenAt ? image : { ...image, takenAt };
-    if (image.takenAt == null) return image;
-    const { takenAt: _removed, ...rest } = image;
-    return rest;
-}
-
 function normalizeImages(data) {
     let images = [];
     if (Array.isArray(data.images)) {
@@ -206,7 +201,7 @@ function normalizeImages(data) {
         }];
     }
 
-    return images.map(withStoredTakenAt);
+    return imagesForSave(images.map((image) => typeof image === 'string' ? { url: image } : image));
 }
 
 function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilterByFields) {
@@ -280,7 +275,7 @@ export default function EntryEditor() {
     const useNativeEditor = useMemo(shouldUseNativeEditor, []);
 
     // Image State
-    const [images, setImages] = useState([]); // Array of { url, path, size, caption, takenAt }
+    const [images, setImages] = useState([]); // Array of { url, path, size, caption, taggedCaptions?, takenAt? }
     const [imageToDelete, setImageToDelete] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [uploadQueueCount, setUploadQueueCount] = useState(0);
@@ -295,7 +290,6 @@ export default function EntryEditor() {
 
     // Caption State
     const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
-    const [tempCaption, setTempCaption] = useState('');
     const [lightboxImage, setLightboxImage] = useState(null);
     const [zoomLevel, setZoomLevel] = useState(1);
     const [entryImageColumns, setEntryImageColumns] = useState(2);
@@ -2155,14 +2149,15 @@ export default function EntryEditor() {
             <div className={`glass-card flex-1 flex flex-col relative ${isEditing ? 'overflow-visible p-3 sm:p-4 md:p-6 ring-2 ring-primary/30' : 'overflow-hidden p-4 sm:p-6 md:p-8'}`}>
 
                 {images.length > 0 && !isEditing && (
-                    <div className={`mb-6 ${images.length <= 2 || entryImageColumns === 1 ? 'columns-1' : 'columns-2'} gap-2 sm:gap-4`}>
-                        {images.map((img, idx) => {
+                    <div className="mb-6">
+                        <PhotoMasonry photos={images} columnCount={images.length <= 2 || entryImageColumns === 1 ? 1 : 2}>
+                        {(img, idx) => {
                             const takenLabel = formatImageTakenLabel(img.takenAt, date);
                             return (
                             <div
                                 key={idx}
                                 onClick={() => handleImageClick(img)}
-                                className="mb-2 sm:mb-4 break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in"
+                                className="rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in"
                             >
                                 <ImageWithSkeleton
                                     src={img.url}
@@ -2170,23 +2165,20 @@ export default function EntryEditor() {
                                     className="w-full"
                                     imgClassName="block h-auto w-full"
                                 />
-                                {(takenLabel || img.caption) && (
+                                {(takenLabel || hasImageCaption(img)) && (
                                     <div className="px-3 py-2 bg-white/5 backdrop-blur-sm border-t border-white/10">
                                         {takenLabel && (
                                             <p className="text-center text-xs font-medium tracking-wide text-text-muted">
                                                 {takenLabel}
                                             </p>
                                         )}
-                                        {img.caption && (
-                                            <p className={`text-center text-sm text-gray-300 italic font-medium leading-relaxed ${takenLabel ? 'mt-1' : ''}`}>
-                                                {img.caption}
-                                            </p>
-                                        )}
+                                        <ImageCaption image={img} className={`text-text ${takenLabel ? 'mt-1' : ''}`} />
                                     </div>
                                 )}
                             </div>
                             );
-                        })}
+                        }}
+                        </PhotoMasonry>
                     </div>
                 )}
 
@@ -2292,26 +2284,25 @@ export default function EntryEditor() {
                                             <button
                                                 onClick={() => {
                                                     setEditingCaptionIndex(idx);
-                                                    setTempCaption(img.caption || '');
                                                 }}
-                                                className="absolute top-2 left-2 p-1.5 bg-blue-500/80 text-white rounded-full hover:bg-blue-600 transition-colors"
+                                                type="button"
+                                                aria-label={`Edit caption for image ${idx + 1}`}
+                                                className="absolute top-2 left-2 min-h-11 min-w-11 flex items-center justify-center bg-blue-500/80 text-[#fff] rounded-full hover:bg-blue-600 transition-colors"
                                                 title="Edit Caption"
                                             >
                                                 <PenTool className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => handleRemoveImage(idx)}
-                                                className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+                                                type="button"
+                                                aria-label={`Remove image ${idx + 1}`}
+                                                className="absolute top-2 right-2 min-h-11 min-w-11 flex items-center justify-center bg-red-500/80 text-[#fff] rounded-full hover:bg-red-600 transition-colors"
                                                 title="Remove Image"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
-                                            {img.caption && (
-                                                <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-black/70 backdrop-blur-sm text-xs text-center text-white truncate border-t border-white/10">
-                                                    {img.caption}
-                                                </div>
-                                            )}
                                             </div>
+                                            <ImageCaption image={img} className="px-1 pt-2 text-text" />
                                             {takenLabel && (
                                                 <p className="px-1 pt-1 text-center text-[10px] sm:text-xs leading-tight text-text-muted">
                                                     {takenLabel}
@@ -3029,48 +3020,18 @@ export default function EntryEditor() {
                 </div>
             </Modal>
 
-            {/* Caption Edit Modal */}
-            <Modal
-                isOpen={editingCaptionIndex !== null}
-                onClose={() => setEditingCaptionIndex(null)}
-                labelledBy="image-caption-title"
-                className="glass-card w-full max-w-md p-6 bg-surface"
-                backdropClassName="bg-black/80"
-            >
-                        <h3 id="image-caption-title" className="text-xl font-bold text-text mb-4">Image Caption</h3>
-                        <textarea
-                            value={tempCaption}
-                            onChange={(e) => setTempCaption(e.target.value)}
-                            placeholder="Enter a caption for this image..."
-                            spellCheck={true}
-                            autoCorrect="on"
-                            autoCapitalize="sentences"
-                            autoComplete="on"
-                            className="w-full h-32 glass-input mb-6 resize-none"
-                            autoFocus
-                        />
-                        <div className="flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setEditingCaptionIndex(null)}
-                                className="glass-button px-4 py-2 text-text hover:bg-white/10"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const newImages = [...images];
-                                    newImages[editingCaptionIndex].caption = tempCaption.trim();
-                                    setImages(newImages);
-                                    setEditingCaptionIndex(null);
-                                }}
-                                className="px-6 py-2 rounded-lg bg-primary text-white font-bold hover:bg-primary-dark transition-colors"
-                            >
-                                Save Caption
-                            </button>
-                        </div>
-            </Modal>
+            {editingCaptionIndex !== null && images[editingCaptionIndex] && (
+                <ImageCaptionEditor
+                    key={editingCaptionIndex}
+                    image={images[editingCaptionIndex]}
+                    images={images}
+                    onClose={() => setEditingCaptionIndex(null)}
+                    onSave={(updatedImage) => {
+                        setImages((current) => current.map((image, index) => index === editingCaptionIndex ? updatedImage : image));
+                        setEditingCaptionIndex(null);
+                    }}
+                />
+            )}
 
             {/* Lightbox Modal - Portaled to body to avoid z-index stacking context issues */}
             {lightboxImage && (
@@ -3081,21 +3042,13 @@ export default function EntryEditor() {
                     zIndexClassName="z-[9999]"
                     containerClassName="items-stretch justify-stretch"
                     backdropClassName="bg-black/95"
-                    className="w-full h-full flex flex-col items-center justify-center overflow-auto p-4 sm:p-8"
+                    className="w-full h-full overflow-hidden"
                 >
                     <h2 id="image-lightbox-title" className="sr-only">Full screen journal image</h2>
+                    <div className="flex h-full flex-col items-center overflow-auto px-4 pt-4 pb-28 sm:px-8 sm:pt-8">
                     <div
-                        className="relative flex flex-col items-center shrink-0"
+                        className="relative my-auto flex max-w-full flex-col items-center shrink-0"
                     >
-                        {/* Caption */}
-                        {lightboxImage.caption && (
-                            <div className="mb-4 bg-black/60 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 max-w-prose">
-                                <p className="text-white text-sm sm:text-base font-medium text-center">
-                                    {lightboxImage.caption}
-                                </p>
-                            </div>
-                        )}
-
                         {/* Image Wrapper */}
                         <div className="relative inline-block" style={{
                             maxWidth: zoomLevel > 1 ? 'none' : '100%',
@@ -3108,37 +3061,43 @@ export default function EntryEditor() {
                                 alt="Full screen view"
                                 className={`block object-contain shadow-2xl rounded-lg transition-all duration-200 ease-out ${zoomLevel === 1 ? 'max-w-[90vw] md:max-w-[80vw]' : ''}`}
                                 style={{
-                                    height: `${80 * zoomLevel}vh`,
-                                    maxHeight: zoomLevel === 1 ? '85vh' : 'none',
+                                    height: zoomLevel === 1 ? 'auto' : `${80 * zoomLevel}vh`,
+                                    maxHeight: zoomLevel === 1 ? '70dvh' : 'none',
                                     width: 'auto',
                                     maxWidth: zoomLevel > 1 ? 'none' : undefined
                                 }}
                             />
                         </div>
+                        {hasImageCaption(lightboxImage) && (
+                            <div className="mt-4 w-full max-w-prose rounded-xl border border-white/10 bg-black/60 px-4 py-3 text-[#fff] backdrop-blur-md">
+                                <ImageCaption image={lightboxImage} />
+                            </div>
+                        )}
                         {lightboxTakenLabel && (
-                            <p className="mt-3 text-center text-sm font-medium text-white/80">
+                            <p className="mt-3 text-center text-sm font-medium text-[#ffffffcc]">
                                 {lightboxTakenLabel}
                             </p>
                         )}
                     </div>
+                    </div>
 
-                    {/* Zoom Controls & Close - Fixed at bottom center (floating) */}
+                    {/* Keep controls outside the scrolling photo and caption. */}
                     <div
-                        className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 z-[110]"
+                        className="absolute bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 z-[110]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
                             type="button"
                             onClick={handleZoomOut}
                             disabled={zoomLevel <= 1}
-                            className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-white/10 rounded-full text-[#fff] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom Out"
                             aria-label="Zoom out"
                         >
                             <ChevronLeft className="w-5 h-5 rotate-[-90deg]" />
                         </button>
 
-                        <span className="text-white font-mono text-sm w-12 text-center select-none">
+                        <span className="text-[#fff] font-mono text-sm w-12 text-center select-none">
                             {Math.round(zoomLevel * 100)}%
                         </span>
 
@@ -3146,7 +3105,7 @@ export default function EntryEditor() {
                             type="button"
                             onClick={handleZoomIn}
                             disabled={zoomLevel >= 3}
-                            className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-white/10 rounded-full text-[#fff] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom In"
                             aria-label="Zoom in"
                         >
@@ -3158,7 +3117,7 @@ export default function EntryEditor() {
                         <button
                             type="button"
                             onClick={closeLightbox}
-                            className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
+                            className="min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-white/10 rounded-full text-[#fff] transition-colors"
                             title="Close"
                             aria-label="Close image viewer"
                         >

@@ -15,7 +15,7 @@ exports.getFirestoreReadCount = onCall(async (request) => {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
 
-    const projectId = process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId;
+    const projectId = process.env.GCLOUD_PROJECT || admin.app().options.projectId;
 
     // Construct the request for Google Cloud Monitoring
     // Resource type for Firestore depends on the mode (Datastore or Native). usually "firestore_instance" or "datastore_database"

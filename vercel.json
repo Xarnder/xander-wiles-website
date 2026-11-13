@@ -14,7 +14,7 @@
         },
         {
             "source": "/pages/journal/:path*",
-            "destination": "/pages/journal/index.html"
+            "destination": "/pages/journal"
         },
         {
             "source": "/pages/Group-Availability/event",
