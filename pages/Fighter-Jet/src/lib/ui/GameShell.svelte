@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { Game } from '$lib/game/Game';
-	import { GAME_CONFIG } from '$lib/game/config/gameConfig';
-	import { DEFAULT_SETTINGS } from '$lib/game/game/SettingsManager';
+	import { Game } from '#lib/game/Game';
+	import { GAME_CONFIG } from '#lib/game/config/gameConfig';
+	import { DEFAULT_SETTINGS } from '#lib/game/game/SettingsManager';
 	import type {
 		GameSettings,
 		GameSnapshot,
 		QualityLevel,
 		TouchInput,
 		ViperTestHooks
-	} from '$lib/game/types';
+	} from '#lib/game/types';
 	import DebugPanel from './DebugPanel.svelte';
 	import Hud from './Hud.svelte';
 	import LoadingScreen from './LoadingScreen.svelte';

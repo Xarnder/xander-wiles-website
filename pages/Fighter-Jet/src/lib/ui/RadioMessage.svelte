@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { RadioSnapshot } from '$lib/game/types';
+	import type { RadioSnapshot } from '#lib/game/types';
 
 	interface Props {
 		message: RadioSnapshot | null;

@@ -5,8 +5,8 @@
 		QualityLevel,
 		SubtitleSize,
 		TouchControlMode
-	} from '$lib/game/types';
-	import { BALANCE } from '$lib/game/config/balance';
+	} from '#lib/game/types';
+	import { BALANCE } from '#lib/game/config/balance';
 
 	type VolumeKey =
 		'masterVolume' | 'effectsVolume' | 'engineVolume' | 'musicVolume' | 'radioVolume';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import type { GameSettings, TouchControlMode, TouchInput } from '$lib/game/types';
+	import type { GameSettings, TouchControlMode, TouchInput } from '#lib/game/types';
 
 	type MotionPermission = 'prompt' | 'granted' | 'denied' | 'unavailable' | 'insecure';
 	type PermissionResult = 'granted' | 'denied';

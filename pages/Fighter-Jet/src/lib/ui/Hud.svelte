@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { GameSnapshot, NotificationSnapshot, TargetMarkerSnapshot } from '$lib/game/types';
+	import type { GameSnapshot, NotificationSnapshot, TargetMarkerSnapshot } from '#lib/game/types';
 
 	interface Props {
 		snapshot: Readonly<GameSnapshot>;

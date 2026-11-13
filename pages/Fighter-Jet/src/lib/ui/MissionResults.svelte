@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { MissionResults, SquadronMemberSnapshot } from '$lib/game/types';
+	import type { MissionResults, SquadronMemberSnapshot } from '#lib/game/types';
 
 	interface Props {
 		success: boolean;

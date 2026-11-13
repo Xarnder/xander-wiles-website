@@ -1,5 +1,5 @@
 <script lang="ts">
-	import GameShell from '$lib/ui/GameShell.svelte';
+	import GameShell from '#lib/ui/GameShell.svelte';
 </script>
 
 <svelte:head>

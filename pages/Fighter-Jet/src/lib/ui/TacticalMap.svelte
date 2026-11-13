@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { TacticalEntitySnapshot } from '$lib/game/types';
+	import type { TacticalEntitySnapshot } from '#lib/game/types';
 
 	interface Props {
 		entities: readonly TacticalEntitySnapshot[];

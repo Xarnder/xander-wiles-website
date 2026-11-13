@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { GameSettings, QualityLevel } from '$lib/game/types';
+	import type { GameSettings, QualityLevel } from '#lib/game/types';
 
 	interface Props {
 		settings: Readonly<GameSettings>;

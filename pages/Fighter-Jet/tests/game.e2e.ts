@@ -22,7 +22,9 @@ test('loads the cinematic main menu', async ({ page }) => {
 	await expect(page).toHaveTitle(/Viper Strike/);
 	await expect(page.getByRole('heading', { name: 'Viper Strike' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Start Mission' })).toBeEnabled();
-	await expect(page.getByText('Mouse / Arrows')).toBeVisible();
+	await expect(
+		page.getByRole('complementary', { name: 'Mission quick settings' }).locator('strong')
+	).toHaveText('Mouse / W S');
 });
 
 test('starts a mission and renders the flight HUD', async ({ page }) => {
