@@ -1,18 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { pickAndLoadLocalAssets } from '$lib/fsLoader';
+  import { pickAndLoadLocalAssets } from '#lib/fsLoader';
   import {
     createDownloadController,
     downloadModelPack,
     DOWNLOAD_CANCELLED_ERROR,
     getAutoDownloadFileList,
     type DownloadProgress
-  } from '$lib/remoteDownloader';
+  } from '#lib/remoteDownloader';
   import {
     createSessionsFromBuffers,
     generateImage,
     verifyWebGpuSupport
-  } from '$lib/zImagePipeline';
+  } from '#lib/zImagePipeline';
   import {
     clearRuntimeCache,
     getRuntimeAssets,
@@ -20,7 +20,7 @@
     releaseRuntimeSessions,
     setRuntimeAssets,
     setRuntimeSessions
-  } from '$lib/runtimeCache';
+  } from '#lib/runtimeCache';
 
   type LoadMethod = 'local' | 'download';
   type FileProgressPhase = DownloadProgress['phase'] | 'pending';

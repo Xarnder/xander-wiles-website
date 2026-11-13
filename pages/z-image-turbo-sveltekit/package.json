@@ -11,15 +11,23 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.6",
-    "@sveltejs/kit": "^2.5.18",
-    "@sveltejs/vite-plugin-svelte": "^3.1.1",
-    "svelte": "^4.2.18",
-    "svelte-check": "^3.8.4",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2"
+    "@sveltejs/adapter-static": "^4.0.1",
+    "@sveltejs/kit": "^3.1.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "deepmerge": "file:../../vendor/deepmerge",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.0"
   },
   "dependencies": {
-    "onnxruntime-web": "^1.22.0"
+    "onnxruntime-web": "1.27.0"
+  },
+  "overrides": {
+    "deepmerge": "$deepmerge"
+  },
+  "imports": {
+    "#lib": "./src/lib/index.js",
+    "#lib/*": "./src/lib/*"
   }
 }
