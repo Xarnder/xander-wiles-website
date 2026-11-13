@@ -22,6 +22,9 @@ import {
 import { generateCreaturePalette } from './surface/CreaturePaletteGenerator';
 import { creatureSurfaceTable, type SurfaceDebugMode } from './surface/CreatureSurfaceTable';
 import { createMulberry32 } from '../terrain/seededRandom';
+import { coatRegionSpecies } from './biome/CreatureBiomeCoat';
+import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
+import { regionSpecies } from './CreaturePopulationSystem';
 import { CreatureGroundingController, groundingStats } from './CreatureGrounding';
 import {
 	DEFAULT_GROUNDING_DEBUG,
@@ -111,6 +114,8 @@ export class CreatureLab {
 	tuning: CreatureLabTuning = { ...DEFAULT_LAB_TUNING };
 	surfaceOverride: CreatureLabSurface = {};
 	surfaceDebug: CreatureSurfaceDebugView = 'none';
+	/** Biome coat preview (biome-specific creatures): `classic` = the generator's own colours. */
+	biome: CreatureBiomeProfileId | 'classic' = 'classic';
 	private legacy?: LegacyCompile;
 	private helpers = new THREE.Group();
 	private boneHelpers: THREE.Object3D[] = [];
@@ -190,7 +195,19 @@ export class CreatureLab {
 	}
 	/** Applies Lab tuning to a copy of the generated form, so placed creatures keep what you saw. */
 	private tuned(species: SpeciesGenome): SpeciesGenome {
-		return this.surfaced(this.formTuned(species));
+		return this.prepared([species])[0];
+	}
+	/**
+	 * Form tuning, then the biome coat (coloured together as one group, like a region's species, so
+	 * their lightness steps and patterns stay apart), then SURFACE overrides on top.
+	 */
+	private prepared(list: SpeciesGenome[], regionKey = 'lab'): SpeciesGenome[] {
+		const formed = list.map((species) => this.formTuned(species));
+		const coated =
+			this.biome === 'classic'
+				? formed
+				: coatRegionSpecies(formed, this.biome, 'creature-lab', `${regionKey}:${list[0]?.seed}`);
+		return coated.map((species) => this.surfaced(species));
 	}
 	/** Applies SURFACE panel overrides to a copy of the species' surface recipe and palette. */
 	private surfaced(species: SpeciesGenome): SpeciesGenome {
@@ -605,15 +622,52 @@ export class CreatureLab {
 	 * many seeds at once. The single Lab creature is hidden until `clearGallery`.
 	 */
 	showGallery(plan: BodyPlanId, firstSeed = 1, count = 12, columns = 4, lod: CreatureLod = 0) {
+		const generated = Array.from({ length: count }, (_, i) => generateSpecies(firstSeed + i, plan));
+		const prepared: SpeciesGenome[] = [];
+		for (let i = 0; i < count; i += 6)
+			prepared.push(...this.prepared(generated.slice(i, i + 6), `gallery:${i}`));
+		this.layoutGallery(
+			prepared.map((species, i) => ({
+				species,
+				individual: generateIndividual(species, firstSeed + i + 700)
+			})),
+			columns,
+			lod,
+			firstSeed
+		);
+	}
+	/**
+	 * One world region's six species (smallest to giant), coloured as the world colours them: the
+	 * regional showcase colours for `classic`, or the chosen biome's coat. Sizes are normalised.
+	 */
+	showRegion(regionX: number, regionZ: number, worldSeed = 'creature-lab', lod: CreatureLod = 0) {
+		const region = regionSpecies(worldSeed, regionX, regionZ);
+		const coated =
+			this.biome === 'classic'
+				? region
+				: coatRegionSpecies(region, this.biome, worldSeed, `${regionX}:${regionZ}`);
+		this.layoutGallery(
+			coated.map((species, i) => ({
+				species,
+				individual: generateIndividual(species, regionX * 977 + regionZ * 131 + i)
+			})),
+			3,
+			lod,
+			0
+		);
+	}
+	private layoutGallery(
+		definitions: CreatureDefinition[],
+		columns: number,
+		lod: CreatureLod,
+		firstSeed: number
+	) {
 		this.clearGallery();
 		if (this.creature) this.creature.object.visible = false;
 		this.helpers.visible = false;
+		const count = definitions.length;
 		for (let i = 0; i < count; i++) {
-			const species = this.tuned(generateSpecies(firstSeed + i, plan));
-			const c = this.compile(
-				{ species, individual: generateIndividual(species, firstSeed + i + 700) },
-				lod
-			);
+			const c = this.compile(definitions[i], lod);
 			const b = c.compilation.bounds;
 			const size = Math.max(b.height, (b.max.z - b.min.z) * 0.6, 1e-3);
 			c.object.scale.setScalar(1 / size);

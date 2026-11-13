@@ -35,7 +35,8 @@ function visible(reports: DeterminismReport[]) {
 		},
 		trees: section(report.trees),
 		biomes: section(report.biomes),
-		biomeTrees: section(report.biomeTrees)
+		biomeTrees: section(report.biomeTrees),
+		biomeCreatures: section(report.biomeCreatures)
 	}));
 }
 
@@ -48,7 +49,7 @@ test('generated world matches the golden fingerprints in this browser engine', a
 	const reports = JSON.parse((await report.textContent()) ?? '[]') as DeterminismReport[];
 
 	const exactDifferences = reports.flatMap((browserReport, i) =>
-		(['terrain', 'hydrology', 'trees', 'biomes', 'biomeTrees'] as const)
+		(['terrain', 'hydrology', 'trees', 'biomes', 'biomeTrees', 'biomeCreatures'] as const)
 			.filter((key) => browserReport[key].exact !== golden.reports[i]?.[key].exact)
 			.map((key) => `${browserReport.seed} ${key}`)
 	);

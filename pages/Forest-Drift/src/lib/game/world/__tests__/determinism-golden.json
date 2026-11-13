@@ -29,6 +29,11 @@
 				"exact": "32b793f1",
 				"coarse": "43446e3f",
 				"count": 864
+			},
+			"biomeCreatures": {
+				"exact": "8422c1bc",
+				"coarse": "39f91d96",
+				"count": 1024
 			}
 		},
 		{
@@ -59,6 +64,11 @@
 				"exact": "3881da44",
 				"coarse": "03990200",
 				"count": 913
+			},
+			"biomeCreatures": {
+				"exact": "ec230f6d",
+				"coarse": "03878f59",
+				"count": 1024
 			}
 		},
 		{
@@ -89,6 +99,11 @@
 				"exact": "53630c09",
 				"coarse": "2d26cd32",
 				"count": 812
+			},
+			"biomeCreatures": {
+				"exact": "9ccbe052",
+				"coarse": "7fd3e4b3",
+				"count": 1024
 			}
 		}
 	]

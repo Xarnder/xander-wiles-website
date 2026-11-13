@@ -384,10 +384,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 			onShot: (message) => {
 				const age = this.net.serverNow() - message.at;
 				const mouth = this.avatars?.muzzleOf(message.slot, this.mouthScratch) ?? null;
+				// Biome coats are worked out on each client (the room has no biomes): colour the pellet
+				// from the creature that slot carries, as this client sees it; the room's is a fallback.
+				const carried = this.carries.get(message.slot);
+				const local = carried ? this.context?.resolveCreature?.(carried) : null;
 				this.context?.remoteShot?.(
 					message.origin,
 					message.dir,
-					message.colour,
+					local?.species.appearance.palette.accent ?? message.colour,
 					Number.isFinite(age) ? Math.max(0, age) : 0,
 					message.slot,
 					mouth ? [mouth.x, mouth.y, mouth.z] : null

@@ -9,7 +9,8 @@
 import { hashStringToUint32 } from '../terrain/seededRandom';
 import {
 	CREATURE_CELL_SLOTS,
-	cellSpeciesOrder,
+	cellGroupCentres,
+	coatedRegionSpecies,
 	creatureGroupId,
 	creatureGroupSize,
 	regionSpecies
@@ -56,14 +57,26 @@ export function parseAmbientCreatureId(id: unknown): AmbientCreatureRef | null {
  * The ambient creature's recipe, rebuilt from its id and the world seed. Null when the id is
  * malformed, belongs to another world, or names a member its group doesn't have.
  */
-export function resolveAmbientCreature(worldSeed: string, id: unknown): CreatureDefinition | null {
+export function resolveAmbientCreature(
+	worldSeed: string,
+	id: unknown,
+	profileAt?: (x: number, z: number) => string | undefined
+): CreatureDefinition | null {
 	const ref = parseAmbientCreatureId(id);
 	if (!ref || ref.seed !== String(worldSeed)) return null;
-	const { tiers } = cellSpeciesOrder(worldSeed, ref.cellX, ref.cellZ);
-	const index = tiers[ref.slot];
-	const species = regionSpecies(worldSeed, Math.floor(ref.cellX / 8), Math.floor(ref.cellZ / 8))[
-		index
-	];
+	// `profileAt` (clients only) gives the herd its biome coat, exactly as the population does; the
+	// room passes none and gets the coat-free recipe, which has the same identity and abilities.
+	const centre = cellGroupCentres(worldSeed, ref.cellX, ref.cellZ)[ref.slot];
+	const index = centre.tier;
+	const regionX = Math.floor(ref.cellX / 8),
+		regionZ = Math.floor(ref.cellZ / 8);
+	const species = coatedRegionSpecies(
+		worldSeed,
+		regionX,
+		regionZ,
+		regionSpecies(worldSeed, regionX, regionZ),
+		profileAt?.(centre.cx, centre.cz)
+	)[index];
 	if (!species || ref.member >= creatureGroupSize(species, index)) return null;
 	const groupId = creatureGroupId(worldSeed, ref.cellX, ref.cellZ, ref.slot);
 	return {

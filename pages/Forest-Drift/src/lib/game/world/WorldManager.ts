@@ -2,9 +2,12 @@ import { migrateWorld } from './WorldMigrationManager';
 import { generateWorldSeed, normalizeWorldName } from './seedGenerator';
 import {
 	DEFAULT_WORLD_ID,
+	DEFAULT_WORLD_REVISION,
 	getDefaultWorldBaseMetadata,
 	getDefaultWorldDefinition,
-	getDefaultWorldThumbnailBlob
+	getDefaultWorldThumbnailBlob,
+	markDefaultWorldRevision,
+	storedDefaultWorldRevision
 } from './DefaultWorld';
 import type { WorldRepository } from './WorldRepository';
 import {
@@ -79,6 +82,7 @@ export class WorldManager {
 		try {
 			const pristine = getDefaultWorldDefinition();
 			await this.repository.saveWorld(pristine);
+			markDefaultWorldRevision();
 			try {
 				await this.repository.putThumbnail(DEFAULT_WORLD_ID, getDefaultWorldThumbnailBlob());
 			} catch {
@@ -133,6 +137,13 @@ export class WorldManager {
 		} catch (error) {
 			return { ok: false, error: describeError(error, 'Unable to read world.') };
 		}
+		// An older revision of the Main World is replaced by the bundled one (DefaultWorld.ts).
+		if (
+			stored &&
+			worldId === DEFAULT_WORLD_ID &&
+			storedDefaultWorldRevision() < DEFAULT_WORLD_REVISION
+		)
+			stored = undefined;
 		if (!stored && worldId === DEFAULT_WORLD_ID) {
 			try {
 				const defaultWorld = getDefaultWorldDefinition();
@@ -143,6 +154,7 @@ export class WorldManager {
 					// Non-fatal
 				}
 				stored = defaultWorld;
+				markDefaultWorldRevision();
 			} catch (error) {
 				return { ok: false, error: describeError(error, 'Unable to initialize default world.') };
 			}

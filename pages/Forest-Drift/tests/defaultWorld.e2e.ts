@@ -4,6 +4,9 @@ import { openPauseMenu, openWorldsScreen } from './worldHelpers';
 test('shows the default world in its own dedicated section and starts playing with one click', async ({
 	page
 }) => {
+	// The Main World has biomes on (biome-specific creatures Q6): its dense biome forests load and
+	// quit more slowly under headless software rendering, like the other biome-world e2e tests.
+	test.setTimeout(150_000);
 	const pageErrors: string[] = [];
 	page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -39,7 +42,7 @@ test('shows the default world in its own dedicated section and starts playing wi
 	await page.getByTestId('pause-quit').click();
 
 	// Returning to worlds screen
-	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByTestId('worlds-screen')).toBeVisible({ timeout: 60_000 });
 	await expect(page.getByTestId('default-world-card')).toBeVisible();
 
 	expect(pageErrors).toEqual([]);

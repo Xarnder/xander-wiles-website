@@ -116,9 +116,28 @@ export interface CreatureSurfaceGenome {
 	/** 0 matte → 1 wet-looking. */
 	gloss: number;
 }
+/**
+ * A biome coat (biome-specific creatures): which creature biome profile coloured this species and
+ * the coat it chose. Runtime only for ambient creatures; its presence switches palette resolution to
+ * the natural clamps (pale snow coats, near-grey bodies and white or black accents are allowed).
+ */
+export interface CreatureCoatInfo {
+	/** A `CreatureBiomeProfileId` (a biome id or `neutral`). */
+	profile: string;
+	/** The pattern the profile chose (may be one Phase 3 adds; the surface holds what renders). */
+	pattern: string;
+	/** 0 = darkest … steps − 1 = palest of the region's species. */
+	lightnessStep: number;
+	thickness: number;
+	length: number;
+	gloss: number;
+	/** A furred body plan wearing bare hide, scales or skin instead. */
+	bare: boolean;
+}
 export interface SpeciesAppearance {
 	palette: CreaturePalette;
 	surface?: CreatureSurfaceGenome;
+	coat?: CreatureCoatInfo;
 }
 export interface GaitDefinition {
 	walkFrequency: number;
@@ -537,4 +556,9 @@ export interface CreatureWorldAccess {
 	blocked: (x: number, z: number, radius: number, height: number) => boolean;
 	/** Cheap per-foot check (e.g. not deep water). Absent means every finite surface is standable. */
 	standable?: (x: number, z: number) => boolean;
+	/**
+	 * The creature biome profile at a herd's group centre (a biome id, or `neutral` when biomes are
+	 * off). Absent: no biome coats, so herds keep the regional showcase colours.
+	 */
+	profileAt?: (x: number, z: number) => string | undefined;
 }

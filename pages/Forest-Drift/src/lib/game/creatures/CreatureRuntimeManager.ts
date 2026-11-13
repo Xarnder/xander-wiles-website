@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { recipeForSave } from './biome/CreatureBiomeCoat';
 import { CreatureSpatialIndex } from './CreatureSpatialIndex';
 import { CreatureEventBus } from './CreatureEventBus';
 import { compileCreature, type CompiledCreature } from './CreatureCompiler';
@@ -278,6 +279,21 @@ export class CreatureRuntimeManager {
 	settingsChanged() {
 		this.revision++;
 		this.reset();
+	}
+	/**
+	 * Biome coats changed (biome settings, biomes switched): ambient herds respawn in their new
+	 * colours. Carried, ridden and placed creatures keep theirs until they are put back.
+	 */
+	regenerateAmbient() {
+		for (const [id, r] of [...this.logical]) {
+			if (r.spawn.persistent || this.carried.has(id) || id === this.ride?.id) continue;
+			if (this.live.has(id)) this.unload(id);
+			this.grounding.delete(id);
+			this.calmed.delete(id);
+			this.logical.delete(id);
+		}
+		this.cells.clear();
+		this.scanAt = -1;
 	}
 	private reset() {
 		for (const id of [...this.live.keys()]) this.unload(id);
@@ -1233,10 +1249,12 @@ export class CreatureRuntimeManager {
 		do {
 			id = `placed_${definition.individual.id}_${++this.placedIndex}`;
 		} while (this.state.individuals.some((p) => p.id === id));
-		const individual = { ...definition.individual, id };
+		// Placed creatures save today's recipe shape: a biome coat's colours are baked in (Q18).
+		const species = structuredClone(recipeForSave(definition.species));
+		const individual = { ...definition.individual, id, speciesId: species.id };
 		const recipe = {
 			id,
-			species: structuredClone(definition.species),
+			species,
 			individual,
 			position: { x: position.x, y: this.access.surface(position.x, position.z), z: position.z },
 			heading: 0,

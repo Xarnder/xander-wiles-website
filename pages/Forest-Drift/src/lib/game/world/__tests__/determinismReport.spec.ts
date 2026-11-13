@@ -15,7 +15,14 @@ describe('world generation determinism', () => {
 		expect(expected).toBeDefined();
 		const actual = computeDeterminismReport(seed);
 		expect(actual.seed).toBe(seed);
-		for (const key of ['terrain', 'hydrology', 'trees', 'biomes', 'biomeTrees'] as const) {
+		for (const key of [
+			'terrain',
+			'hydrology',
+			'trees',
+			'biomes',
+			'biomeTrees',
+			'biomeCreatures'
+		] as const) {
 			expect(actual[key], `${seed} ${key}`).toMatchObject({
 				...expected![key],
 				exact: expect.stringMatching(/^[0-9a-f]{8}$/)

@@ -76,20 +76,28 @@ export function resolveCreaturePalette(
 	const p = species.appearance.palette,
 		v = individual.paletteVariation;
 	const vary = (c: HSL): HSL => ({ h: c.h + v.hue, s: c.s, l: c.l + v.lightness });
+	// Biome coats are natural colours: near-grey and snow-pale bodies and white or black accents
+	// are allowed; classic palettes keep the original no-neon, no-mud clamps.
+	const natural = species.appearance.coat !== undefined;
 	// Primary: no neon, no mud.
 	const primary = vary(toHsl(p.primary));
-	primary.s = clamp(primary.s, 0.18, 0.82);
-	primary.l = clamp(primary.l, 0.2, 0.74);
+	primary.s = clamp(primary.s, natural ? 0.02 : 0.18, 0.82);
+	primary.l = clamp(primary.l, natural ? 0.1 : 0.2, natural ? 0.88 : 0.74);
 	// Underbelly: species palettes keep the pale underside in `secondary`.
 	const underbelly = vary(toHsl(p.secondary));
-	underbelly.s = clamp(underbelly.s, 0.08, 0.6);
-	underbelly.l = clamp(Math.max(underbelly.l, primary.l + 0.12) + underbellyBrightness, 0, 0.93);
+	underbelly.s = clamp(underbelly.s, natural ? 0 : 0.08, 0.6);
+	underbelly.l = clamp(
+		Math.max(underbelly.l, primary.l + (natural ? 0.07 : 0.12)) + underbellyBrightness,
+		0,
+		natural ? 0.96 : 0.93
+	);
 	// Accent: must read distinctly from the body.
 	const accent = vary(toHsl(p.accent));
-	accent.s = clamp(accent.s, 0.25, 0.85);
-	accent.l = clamp(accent.l, 0.18, 0.82);
-	if (hueGap(accent.h, primary.h) < 0.07 && Math.abs(accent.l - primary.l) < 0.15)
-		accent.l = clamp(primary.l + (primary.l > 0.45 ? -0.24 : 0.24), 0.15, 0.85);
+	accent.s = clamp(accent.s, natural ? 0 : 0.25, 0.85);
+	accent.l = clamp(accent.l, natural ? 0.1 : 0.18, natural ? 0.96 : 0.82);
+	const greyish = natural && Math.min(accent.s, primary.s) < 0.15;
+	if ((hueGap(accent.h, primary.h) < 0.07 || greyish) && Math.abs(accent.l - primary.l) < 0.15)
+		accent.l = clamp(primary.l + (primary.l > 0.45 ? -0.24 : 0.24), 0.1, natural ? 0.96 : 0.85);
 	const eye = toHsl(p.eye);
 	eye.l = Math.min(eye.l, 0.14);
 	return {

@@ -38,6 +38,11 @@ import { WaypointBeacons } from './waypoints/WaypointBeacons';
 import { LocatorBar } from './hud/LocatorBar';
 import type { Vec3Like } from './player/creatureProjectile';
 import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
+import { clearCoatCache } from './creatures/biome/CreatureBiomeCoat';
+import {
+	creatureCoatsAvailable,
+	readCreatureCoatSwitches
+} from './creatures/biome/creatureCoatSwitches';
 import type { CarryPlacement } from './net/protocol';
 import type { CreatureDefinition, PersistentCreatureDefinition } from './creatures/CreatureTypes';
 import type { SceneMultiplayerHooks } from './net/MultiplayerSession';
@@ -923,6 +928,7 @@ export class ThreeScene implements WorldRuntime {
 		);
 		heightSampler.attachHydrology(this.hydrology);
 		readBiomeKillSwitch(location.search);
+		readCreatureCoatSwitches(location.search);
 		// Biomes read only the pre-water, pre-edit terrain, so neither rivers nor shovel edits move them.
 		this.biomeSettings = createDefaultBiomeSettings();
 		this.biomeField = new BiomeField(heightSampler, this.biomeSettings);
@@ -1772,7 +1778,9 @@ export class ThreeScene implements WorldRuntime {
 				surface: (x, z) => this.worldSurfaceSampler.getSupportingSurfaceY(x, z, -Infinity),
 				blocked: naturalGroundBlocked,
 				// Terrestrial feet never plant on a lake floor under deep water.
-				standable: (x, z) => this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH
+				standable: (x, z) => this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH,
+				// Biome-specific creatures: each herd wears the biome at its group centre.
+				profileAt: this.creatureProfileAt
 			},
 			options.world?.creatures,
 			(m) => this.graphicsPipeline.registerMaterial(m)
@@ -2517,9 +2525,24 @@ export class ThreeScene implements WorldRuntime {
 		return this.biomeSettings.enabled;
 	}
 
+	/**
+	 * The creature biome profile at a point: the dominant biome, or `neutral` with biomes off.
+	 * Undefined when biome coats are switched off (`?creatureCoats=off`): classic colours.
+	 */
+	private readonly creatureProfileAt = (x: number, z: number): string | undefined =>
+		!creatureCoatsAvailable()
+			? undefined
+			: this.biomeField.isEnabled()
+				? BIOME_IDS[this.biomeField.dominantAt(x, z)]
+				: 'neutral';
+
 	/** After any biome setting changes: reclassify, then rebuild terrain colour and grass. */
 	private regenerateBiomes(): void {
 		this.environmentRevision++;
+		// Herds respawn in their new biome coats; carried and ridden creatures keep theirs.
+		clearCoatCache();
+		this.creatureRecipes.clear();
+		this.creatures.regenerateAmbient();
 		this.biomeField.invalidate();
 		this.biomeTracker.reset();
 		this.localClimate.reset();
@@ -4231,7 +4254,10 @@ export class ThreeScene implements WorldRuntime {
 		}
 		if (!this.creatureRecipes.has(id)) {
 			if (this.creatureRecipes.size > 256) this.creatureRecipes.clear();
-			this.creatureRecipes.set(id, resolveAmbientCreature(this.settings.seed, id));
+			this.creatureRecipes.set(
+				id,
+				resolveAmbientCreature(this.settings.seed, id, this.creatureProfileAt)
+			);
 		}
 		return this.creatureRecipes.get(id) ?? null;
 	}

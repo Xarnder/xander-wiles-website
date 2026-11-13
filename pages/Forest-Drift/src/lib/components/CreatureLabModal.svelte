@@ -13,6 +13,11 @@
 		ACCENT_REGIONS,
 		PATTERN_TYPES
 	} from '../game/creatures/surface/CreaturePatternGenerator';
+	import {
+		CREATURE_BIOME_PROFILE_IDS,
+		type CreatureBiomeProfileId
+	} from '../game/creatures/biome/creatureBiomeProfiles';
+	import { getBiomeDefinition } from '../game/biomes/biomeDefinitions';
 	import type {
 		BodyPlanId,
 		CreatureDefinition,
@@ -82,6 +87,16 @@
 	// SURFACE panel: unset values keep the generated recipe; a slider only overrides once moved.
 	const surface = $state<CreatureLabSurface>({});
 	let surfaceDebug = $state<CreatureSurfaceDebugView>('none');
+	// Biome coat preview (developer): recolours the specimen and galleries as a biome would.
+	let biome = $state<CreatureBiomeProfileId | 'classic'>('classic');
+	let colourBlind = $state<'none' | 'deuteranopia' | 'protanopia'>('none');
+	let swatches = $state<{ label: string; hex: string }[]>([]);
+	const biomeLabel = (id: CreatureBiomeProfileId) =>
+		id === 'neutral' ? 'Neutral (biomes off)' : getBiomeDefinition(id).name;
+	const regionOf = (seed: number): [number, number] => [
+		(seed % 7) - 3,
+		(Math.floor(seed / 7) % 7) - 3
+	];
 	const surfaceSliders: {
 		key:
 			| 'spotDensity'
@@ -139,7 +154,14 @@
 			lab.tuning = { ...tuning };
 			lab.surfaceOverride = $state.snapshot(surface) as CreatureLabSurface;
 			lab.surfaceDebug = surfaceDebug;
+			lab.biome = biome;
 			const d = lab.generate(speciesSeed, individualSeed, plan, scale, lod);
+			const palette = d.species.appearance.palette;
+			swatches = [
+				{ label: 'Body', hex: palette.primary },
+				{ label: 'Underside', hex: palette.secondary },
+				{ label: 'Accent', hex: palette.accent }
+			];
 			name = `${d.species.name} · ${d.species.anatomy.signatureTraits.slice(1, -1).join(' · ')}`;
 			error = '';
 		} catch (e) {
@@ -367,6 +389,47 @@
 							}}>Gallery: 12 species</button
 						>
 					</fieldset>
+					<fieldset data-testid="creature-biome-coat">
+						<legend>Biome coat (developer)</legend>
+						<label
+							>Biome<select data-testid="creature-biome" bind:value={biome} onchange={generate}
+								><option value="classic">Classic (generator colours)</option
+								>{#each CREATURE_BIOME_PROFILE_IDS as id (id)}<option value={id}
+										>{biomeLabel(id)}</option
+									>{/each}</select
+							></label
+						>
+						<div class="swatches" aria-label="Specimen palette">
+							{#each swatches as swatch (swatch.label)}<span
+									><i style:background-color={swatch.hex}></i>{swatch.label}
+									<code>{swatch.hex}</code></span
+								>{/each}
+						</div>
+						<label
+							>Colour-blind preview<select
+								data-testid="creature-colour-blind"
+								bind:value={colourBlind}
+								><option value="none">Off</option><option value="deuteranopia">Deuteranopia</option
+								><option value="protanopia">Protanopia</option></select
+							></label
+						>
+						<div class="pair">
+							<button
+								data-testid="creature-gallery-region"
+								onclick={() => {
+									lab.gait = gait;
+									lab.biome = biome;
+									lab.showRegion(...regionOf(speciesSeed), 'creature-lab', lod);
+								}}>Gallery: regional six</button
+							><button
+								onclick={() => {
+									lab.gait = gait;
+									lab.biome = biome;
+									lab.showGallery(plan, speciesSeed, 12, 4, lod);
+								}}>Gallery: 12 species</button
+							>
+						</div>
+					</fieldset>
 					<fieldset data-testid="creature-surface">
 						<legend>Surface (developer)</legend>
 						<label
@@ -472,7 +535,27 @@
 							}}>{view}</button
 						>{/each}<span>Drag to orbit · Scroll to zoom</span>
 				</div>
-				<div class="viewport" bind:this={viewport} data-testid="creature-viewport"></div>
+				<div
+					class="viewport"
+					bind:this={viewport}
+					data-testid="creature-viewport"
+					style:filter={colourBlind === 'none' ? undefined : `url(#creature-lab-${colourBlind})`}
+				></div>
+				<!-- Colour-blind simulation (Viénot/Brettel-style matrices), for the biome coat review. -->
+				<svg width="0" height="0" aria-hidden="true" style="position: absolute">
+					<filter id="creature-lab-deuteranopia"
+						><feColorMatrix
+							type="matrix"
+							values="0.367 0.861 -0.228 0 0  0.280 0.673 0.047 0 0  -0.012 0.043 0.969 0 0  0 0 0 1 0"
+						/></filter
+					>
+					<filter id="creature-lab-protanopia"
+						><feColorMatrix
+							type="matrix"
+							values="0.152 1.053 -0.205 0 0  0.115 0.786 0.099 0 0  -0.004 -0.048 1.052 0 0  0 0 0 1 0"
+						/></filter
+					>
+				</svg>
 				<p class="stats" data-testid="creature-stats">{stats}</p>
 				{#if error}<p role="alert">{error}</p>{/if}{#if report}<pre
 						data-testid="creature-sample-report">{report}</pre>{/if}
@@ -564,6 +647,23 @@
 	.primary {
 		background: #315d44;
 		color: white;
+	}
+	.swatches {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 0.8rem;
+		font-size: 0.8rem;
+	}
+	.swatches span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.swatches i {
+		width: 1rem;
+		height: 1rem;
+		border-radius: 0.25rem;
+		border: 1px solid rgb(0 0 0 / 0.3);
 	}
 	.pair {
 		display: flex;

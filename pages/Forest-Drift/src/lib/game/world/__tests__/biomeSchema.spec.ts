@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultBiomeSettings, createLegacyBiomeSettings } from '../../biomes/BiomeTypes';
-import { getDefaultWorldDefinition } from '../DefaultWorld';
+import { DEFAULT_WORLD_SEED, getDefaultWorldDefinition } from '../DefaultWorld';
 import { migrateWorld } from '../WorldMigrationManager';
 import { CURRENT_WORLD_SCHEMA_VERSION, ONLINE_COMPATIBLE_SCHEMA_VERSIONS } from '../WorldTypes';
 import { validateWorldDefinition } from '../WorldValidation';
@@ -43,8 +43,12 @@ describe('biome settings in the world schema (v10)', () => {
 		}
 	});
 
-	it('keeps the bundled Main World unchanged: biomes off (Q8)', () => {
-		expect(getDefaultWorldDefinition().environment.biomes.enabled).toBe(false);
+	it('ships the Main World with biomes on (revision 2, biome-specific creatures Q6)', () => {
+		// Was "biomes off" (biomes Q8) until the creature cycle replaced the Main World.
+		const world = getDefaultWorldDefinition();
+		expect(world.environment.biomes).toEqual(createDefaultBiomeSettings());
+		expect(world.seed).toBe(DEFAULT_WORLD_SEED);
+		expect(validateWorldDefinition(world).ok).toBe(true);
 	});
 
 	it('gives new worlds biomes on', () => {

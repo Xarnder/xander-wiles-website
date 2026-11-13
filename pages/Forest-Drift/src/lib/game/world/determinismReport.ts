@@ -1,8 +1,15 @@
 import { BiomeField } from '../biomes/BiomeField';
+import {
+	cellGroupCentres,
+	coatedRegionSpecies,
+	regionSpecies
+} from '../creatures/CreaturePopulationSystem';
+import type { SpeciesGenome } from '../creatures/CreatureTypes';
 import { BiomeTrees } from '../biomes/BiomeTrees';
 import { TreeSpeciesSelector } from '../vegetation/trees/TreeSpeciesSelector';
 import {
 	BIOME_COUNT,
+	BIOME_IDS,
 	createBiomeWeightVector,
 	createClimateSample,
 	createDefaultBiomeSettings
@@ -47,6 +54,8 @@ export interface DeterminismReport {
 	biomes: DeterminismSection;
 	/** The same tree cells as `trees`, in a world with biomes on (biome forests and species). */
 	biomeTrees: DeterminismSection;
+	/** Creature herds in a world with biomes on: each group's biome and its coat colours. */
+	biomeCreatures: DeterminismSection;
 }
 
 /** Terrain heights on a 100 × 100 grid covering about 3.7 km × 3.7 km. */
@@ -60,6 +69,9 @@ const TREE_CELLS = 40;
 /** Biomes on a 64 × 64 grid covering about 12 km × 12 km (several climate cycles). */
 const BIOME_GRID = 64;
 const BIOME_SPACING = 189.7;
+/** Creature cells: 16 × 16, one per 512 m region (8 cells apart), about 8 km × 8 km. */
+const CREATURE_GRID = 16;
+const CREATURE_STRIDE = 8;
 
 export function computeDeterminismReport(seed: string): DeterminismReport {
 	const terrainSettings = createDefaultTerrainSettings();
@@ -170,6 +182,34 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 		}
 	}
 
+	// Biome coats: every group's centre, its biome and the colours its species wears there.
+	const creatureHash = new DualHash();
+	let creatureGroups = 0;
+	const creatureRegions = new Map<string, SpeciesGenome[]>();
+	for (let i = 0; i < CREATURE_GRID; i++)
+		for (let j = 0; j < CREATURE_GRID; j++) {
+			const cellX = (i - CREATURE_GRID / 2) * CREATURE_STRIDE + 3;
+			const cellZ = (j - CREATURE_GRID / 2) * CREATURE_STRIDE + 5;
+			const rx = Math.floor(cellX / 8),
+				rz = Math.floor(cellZ / 8);
+			const key = `${rx}:${rz}`;
+			let list = creatureRegions.get(key);
+			if (!list) creatureRegions.set(key, (list = regionSpecies(seed, rx, rz)));
+			for (const centre of cellGroupCentres(seed, cellX, cellZ)) {
+				const profile = BIOME_IDS[biomeField.dominantAt(centre.cx, centre.cz)];
+				const species = coatedRegionSpecies(seed, rx, rz, list, profile)[centre.tier];
+				const palette = species.appearance.palette;
+				creatureHash.exact(centre.cx);
+				creatureHash.exact(centre.cz);
+				creatureHash.coarseText(profile);
+				creatureHash.coarseText(species.id);
+				creatureHash.coarseText(palette.primary + palette.secondary + palette.accent);
+				creatureHash.coarseText(species.appearance.coat?.pattern ?? '');
+				creatureHash.coarse(species.appearance.coat?.lightnessStep ?? -1);
+				creatureGroups++;
+			}
+		}
+
 	return {
 		seed,
 		terrain: terrainHash.result(TERRAIN_GRID * TERRAIN_GRID),
@@ -180,7 +220,8 @@ export function computeDeterminismReport(seed: string): DeterminismReport {
 		},
 		trees: treeHash.result(treeCount),
 		biomes: biomeHash.result(BIOME_GRID * BIOME_GRID),
-		biomeTrees: biomeTreeHash.result(biomeTreeCount)
+		biomeTrees: biomeTreeHash.result(biomeTreeCount),
+		biomeCreatures: creatureHash.result(creatureGroups)
 	};
 }
 

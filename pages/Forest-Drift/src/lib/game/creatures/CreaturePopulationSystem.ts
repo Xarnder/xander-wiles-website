@@ -2,6 +2,8 @@ import { createNamedRandom, hashStringToUint32 } from '../terrain/seededRandom';
 import { generateSpecies } from './SpeciesGenerator';
 import { generateIndividual } from './IndividualGenerator';
 import { creatureDimensions } from './creatureDimensions';
+import { cachedCoatRegionSpecies } from './biome/CreatureBiomeCoat';
+import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
 import type {
 	BodyPlanId,
 	CreatureSpawnDefinition,
@@ -259,6 +261,44 @@ export function creatureGroupSize(species: SpeciesGenome, index: number): number
 	return index >= 4 ? 1 : species.behaviour.preferredGroupSize;
 }
 
+/**
+ * Where each of a cell's four groups would stand, and its presence roll. Pure (seed only): the
+ * population and the id resolver both read the same centres, so a herd's biome — taken at its
+ * centre — is the same for everyone. Centres are drawn whatever the density, so the density
+ * setting never changes a herd's coat.
+ */
+export function cellGroupCentres(worldSeed: string | number, cellX: number, cellZ: number) {
+	const { rng, tiers } = cellSpeciesOrder(worldSeed, cellX, cellZ);
+	const slots = Array.from({ length: POPULATION_SLOTS }, (_, slot) => {
+		const presence = rng(),
+			cx = (cellX + 0.12 + rng() * 0.76) * 64,
+			cz = (cellZ + 0.12 + rng() * 0.76) * 64;
+		return { slot, tier: tiers[slot], presence, cx, cz };
+	});
+	return slots;
+}
+
+/** Chance (0..1) a slot is occupied at `density`. */
+export const slotPresenceLimit = (density: number) => Math.min(0.92, density * POPULATION_PRESENCE);
+
+/** The region's species in the coat of the profile at `centre`, or as they are without one. */
+export function coatedRegionSpecies(
+	worldSeed: string | number,
+	regionX: number,
+	regionZ: number,
+	speciesList: SpeciesGenome[],
+	profile: string | undefined
+): SpeciesGenome[] {
+	return profile === undefined
+		? speciesList
+		: cachedCoatRegionSpecies(
+				speciesList,
+				profile as CreatureBiomeProfileId,
+				worldSeed,
+				`${regionX}:${regionZ}`
+			);
+}
+
 export function generatePopulationCell(
 	worldSeed: string | number,
 	cellX: number,
@@ -273,17 +313,21 @@ export function generatePopulationCell(
 		density <= 0
 	)
 		return [];
-	const { rng, tiers } = cellSpeciesOrder(worldSeed, cellX, cellZ);
-	const speciesList = regionSpecies(worldSeed, Math.floor(cellX / 8), Math.floor(cellZ / 8));
+	const regionX = Math.floor(cellX / 8),
+		regionZ = Math.floor(cellZ / 8);
+	const speciesList = regionSpecies(worldSeed, regionX, regionZ);
 	const result: CreatureSpawnDefinition[] = [];
-	const presenceLimit = Math.min(0.92, density * POPULATION_PRESENCE);
-	for (let slot = 0; slot < POPULATION_SLOTS; slot++) {
-		const presence = rng(),
-			cx = (cellX + 0.12 + rng() * 0.76) * 64,
-			cz = (cellZ + 0.12 + rng() * 0.76) * 64;
+	const presenceLimit = slotPresenceLimit(density);
+	for (const { slot, tier: index, presence, cx, cz } of cellGroupCentres(worldSeed, cellX, cellZ)) {
 		if (presence >= presenceLimit) continue;
-		const index = tiers[slot];
-		const species = speciesList[index];
+		// Biome coats (biome-specific creatures Q4): the herd wears the biome at its group centre.
+		const species = coatedRegionSpecies(
+			worldSeed,
+			regionX,
+			regionZ,
+			speciesList,
+			access.profileAt?.(cx, cz)
+		)[index];
 		const dimensions = creatureDimensions(species, 1.1);
 		const y = creatureSurface(
 			access,
