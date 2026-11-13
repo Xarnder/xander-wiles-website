@@ -12,8 +12,8 @@ import {
 	distributePercents
 } from './run-session';
 import { deriveSummary } from './summary';
-import type { Routine, RoutineTask } from '$lib/types/routine';
-import type { RunSession } from '$lib/types/run';
+import type { Routine, RoutineTask } from '#lib/types/routine';
+import type { RunSession } from '#lib/types/run';
 
 function makeRoutine(tasks: RoutineTask[]): Routine {
 	return {

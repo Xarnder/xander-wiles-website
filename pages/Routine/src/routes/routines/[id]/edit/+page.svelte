@@ -2,21 +2,21 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import PromptDialog from '$lib/components/PromptDialog.svelte';
-	import RoutineEditor from '$lib/components/RoutineEditor.svelte';
-	import SetupRequired from '$lib/components/SetupRequired.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import { getAuthStatus } from '$lib/stores/auth.svelte';
+	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
+	import PromptDialog from '#lib/components/PromptDialog.svelte';
+	import RoutineEditor from '#lib/components/RoutineEditor.svelte';
+	import SetupRequired from '#lib/components/SetupRequired.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import { getAuthStatus } from '#lib/stores/auth.svelte';
 	import {
 		deleteRoutine,
 		getRoutineById,
 		getRoutines,
 		saveRoutine
-	} from '$lib/stores/routines.svelte';
-	import type { Routine } from '$lib/types/routine';
-	import { createId } from '$lib/utils/id';
-	import { normalizeOrders } from '$lib/utils/order';
+	} from '#lib/stores/routines.svelte';
+	import type { Routine } from '#lib/types/routine';
+	import { createId } from '#lib/utils/id';
+	import { normalizeOrders } from '#lib/utils/order';
 
 	const status = $derived(getAuthStatus());
 	const id = $derived(page.params.id ?? '');

@@ -7,7 +7,7 @@ import {
 	getOmittedTaskIds,
 	saveLastCycle
 } from './last-cycle';
-import type { Routine } from '$lib/types/routine';
+import type { Routine } from '#lib/types/routine';
 
 const store = new Map<string, string>();
 

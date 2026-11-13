@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import RoutineStats from '$lib/components/RoutineStats.svelte';
-	import SetupRequired from '$lib/components/SetupRequired.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import { getAuthStatus } from '$lib/stores/auth.svelte';
-	import { getRoutineById } from '$lib/stores/routines.svelte';
-	import type { Routine } from '$lib/types/routine';
+	import RoutineStats from '#lib/components/RoutineStats.svelte';
+	import SetupRequired from '#lib/components/SetupRequired.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import { getAuthStatus } from '#lib/stores/auth.svelte';
+	import { getRoutineById } from '#lib/stores/routines.svelte';
+	import type { Routine } from '#lib/types/routine';
 
 	const status = $derived(getAuthStatus());
 	const id = $derived(page.params.id ?? '');

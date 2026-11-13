@@ -2,10 +2,10 @@
 	import { onMount, tick } from 'svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import TaskEditorRow from './TaskEditorRow.svelte';
-	import { isTaskDisabled, enabledTasks, type Routine, type RoutineTask } from '$lib/types/routine';
-	import { createId } from '$lib/utils/id';
-	import { moveItem, normalizeOrders } from '$lib/utils/order';
-	import { parseTaskListText } from '$lib/utils/parse-task-list';
+	import { isTaskDisabled, enabledTasks, type Routine, type RoutineTask } from '#lib/types/routine';
+	import { createId } from '#lib/utils/id';
+	import { moveItem, normalizeOrders } from '#lib/utils/order';
+	import { parseTaskListText } from '#lib/utils/parse-task-list';
 
 	let {
 		routine = $bindable(),

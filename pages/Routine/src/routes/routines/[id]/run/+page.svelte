@@ -2,16 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import ProgressBar from '$lib/components/ProgressBar.svelte';
-	import RoutineControls from '$lib/components/RoutineControls.svelte';
-	import RoutineSummary from '$lib/components/RoutineSummary.svelte';
-	import RoutineTaskSlide from '$lib/components/RoutineTaskSlide.svelte';
-	import SetupRequired from '$lib/components/SetupRequired.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { getAuthStatus } from '$lib/stores/auth.svelte';
-	import { getRoutineById } from '$lib/stores/routines.svelte';
+	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
+	import ProgressBar from '#lib/components/ProgressBar.svelte';
+	import RoutineControls from '#lib/components/RoutineControls.svelte';
+	import RoutineSummary from '#lib/components/RoutineSummary.svelte';
+	import RoutineTaskSlide from '#lib/components/RoutineTaskSlide.svelte';
+	import SetupRequired from '#lib/components/SetupRequired.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import { getAuthStatus } from '#lib/stores/auth.svelte';
+	import { getRoutineById } from '#lib/stores/routines.svelte';
 	import {
 		backOne,
 		clearRun,
@@ -27,13 +27,13 @@
 		runCanGoBack,
 		runHasProgress,
 		startRun
-	} from '$lib/stores/run.svelte';
-	import { getProgressSegments } from '$lib/run/run-session';
-	import { enabledTasks, type Routine } from '$lib/types/routine';
-	import { hapticCelebrate } from '$lib/utils/haptics';
-	import { lockLandscape, unlockOrientation } from '$lib/utils/orientation';
-	import { releaseWakeLock, requestWakeLock } from '$lib/utils/wake-lock';
-	import { isForceLandscape } from '$lib/stores/preferences.svelte';
+	} from '#lib/stores/run.svelte';
+	import { getProgressSegments } from '#lib/run/run-session';
+	import { enabledTasks, type Routine } from '#lib/types/routine';
+	import { hapticCelebrate } from '#lib/utils/haptics';
+	import { lockLandscape, unlockOrientation } from '#lib/utils/orientation';
+	import { releaseWakeLock, requestWakeLock } from '#lib/utils/wake-lock';
+	import { isForceLandscape } from '#lib/stores/preferences.svelte';
 
 	const status = $derived(getAuthStatus());
 	const id = $derived(page.params.id ?? '');

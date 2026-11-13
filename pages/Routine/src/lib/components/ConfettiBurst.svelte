@@ -7,7 +7,7 @@
 		drawConfetti,
 		stepConfetti,
 		type ConfettiPiece
-	} from '$lib/utils/confetti';
+	} from '#lib/utils/confetti';
 
 	const playConfetti: Attachment = (node) => {
 		if (!(node instanceof HTMLCanvasElement)) return;

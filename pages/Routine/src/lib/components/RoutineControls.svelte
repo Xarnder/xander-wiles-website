@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import { hapticComplete, hapticLater, hapticNotToday } from '$lib/utils/haptics';
+	import { hapticComplete, hapticLater, hapticNotToday } from '#lib/utils/haptics';
 
 	let {
 		canBack = false,

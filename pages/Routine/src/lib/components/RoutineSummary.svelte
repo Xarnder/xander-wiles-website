@@ -2,8 +2,8 @@
 	import { scale } from 'svelte/transition';
 	import ConfettiBurst from './ConfettiBurst.svelte';
 	import ThemeToggle from './ThemeToggle.svelte';
-	import { statusCaption } from '$lib/run/summary';
-	import type { RoutineSummaryStats } from '$lib/types/run';
+	import { statusCaption } from '#lib/run/summary';
+	import type { RoutineSummaryStats } from '#lib/types/run';
 
 	let {
 		routineName,

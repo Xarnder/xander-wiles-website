@@ -1,5 +1,5 @@
-import type { Routine, RoutineTask } from '$lib/types/routine';
-import { sortBySortOrder } from '$lib/utils/order';
+import type { Routine, RoutineTask } from '#lib/types/routine';
+import { sortBySortOrder } from '#lib/utils/order';
 import type { RoutinesRepository } from './routines-repo';
 
 function cloneRoutine(routine: Routine): Routine {

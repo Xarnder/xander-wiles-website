@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import ProgressBar from '$lib/components/ProgressBar.svelte';
-	import { enabledTasks, type Routine } from '$lib/types/routine';
-	import type { ProgressSegments } from '$lib/types/run';
+	import ProgressBar from '#lib/components/ProgressBar.svelte';
+	import { enabledTasks, type Routine } from '#lib/types/routine';
+	import type { ProgressSegments } from '#lib/types/run';
 
 	let {
 		routine,

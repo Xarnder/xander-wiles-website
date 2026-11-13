@@ -1,5 +1,5 @@
-import { enabledTasks, type Routine } from '$lib/types/routine';
-import type { ProgressSegments, TaskStatus } from '$lib/types/run';
+import { enabledTasks, type Routine } from '#lib/types/routine';
+import type { ProgressSegments, TaskStatus } from '#lib/types/run';
 import { buildProgressSegments } from './run-session';
 
 const STORAGE_KEY = 'routine-last-cycles';

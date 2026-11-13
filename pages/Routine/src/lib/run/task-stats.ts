@@ -1,4 +1,4 @@
-import type { ProgressSegments, TaskStatus } from '$lib/types/run';
+import type { ProgressSegments, TaskStatus } from '#lib/types/run';
 import { buildProgressSegments, distributePercents } from './run-session';
 
 const STORAGE_KEY = 'routine-task-stats';

@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import EmptyState from '$lib/components/EmptyState.svelte';
-	import ResumeRunBanner from '$lib/components/ResumeRunBanner.svelte';
-	import RoutineCard from '$lib/components/RoutineCard.svelte';
-	import SetupRequired from '$lib/components/SetupRequired.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import { signOutUser } from '$lib/firebase/auth';
-	import { getAuthStatus } from '$lib/stores/auth.svelte';
-	import { getRoutines, getRoutinesLoading, reorderRoutines } from '$lib/stores/routines.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
+	import ResumeRunBanner from '#lib/components/ResumeRunBanner.svelte';
+	import RoutineCard from '#lib/components/RoutineCard.svelte';
+	import SetupRequired from '#lib/components/SetupRequired.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import { signOutUser } from '#lib/firebase/auth';
+	import { getAuthStatus } from '#lib/stores/auth.svelte';
+	import { getRoutines, getRoutinesLoading, reorderRoutines } from '#lib/stores/routines.svelte';
 	import {
 		discardStoredRun,
 		peekStoredRun,
@@ -16,10 +16,10 @@
 		routineLastCyclePercent,
 		routineLastCycleSegments,
 		startRun
-	} from '$lib/stores/run.svelte';
-	import type { StartMode } from '$lib/run/run-session';
-	import { enabledTasks } from '$lib/types/routine';
-	import { moveItem } from '$lib/utils/order';
+	} from '#lib/stores/run.svelte';
+	import type { StartMode } from '#lib/run/run-session';
+	import { enabledTasks } from '#lib/types/routine';
+	import { moveItem } from '#lib/utils/order';
 
 	let dragIndex = $state<number | null>(null);
 	let error = $state<string | null>(null);

@@ -9,18 +9,18 @@ import {
 	laterCurrent,
 	notTodayCurrent,
 	type StartMode
-} from '$lib/run/run-session';
-import { deriveSummary } from '$lib/run/summary';
+} from '#lib/run/run-session';
+import { deriveSummary } from '#lib/run/summary';
 import {
 	canContinueFromLastCycle,
 	getLastCyclePercent,
 	getLastCycleSegments,
 	getOmittedTaskIds,
 	saveLastCycle
-} from '$lib/run/last-cycle';
-import { enabledTasks, type Routine } from '$lib/types/routine';
-import type { ProgressSegments, RunSession, RoutineSummaryStats } from '$lib/types/run';
-import { recordFreshCycleStats } from '$lib/run/task-stats';
+} from '#lib/run/last-cycle';
+import { enabledTasks, type Routine } from '#lib/types/routine';
+import type { ProgressSegments, RunSession, RoutineSummaryStats } from '#lib/types/run';
+import { recordFreshCycleStats } from '#lib/run/task-stats';
 
 const STORAGE_KEY = 'routine-active-run';
 

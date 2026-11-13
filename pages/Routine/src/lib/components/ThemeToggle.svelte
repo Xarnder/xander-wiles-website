@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getNextTheme, getTheme, toggleTheme, type Theme } from '$lib/stores/theme.svelte';
+	import { getNextTheme, getTheme, toggleTheme, type Theme } from '#lib/stores/theme.svelte';
 
 	const theme = $derived(getTheme());
 	const next = $derived(getNextTheme(theme));

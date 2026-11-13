@@ -1,4 +1,4 @@
-import type { RunSession, RoutineSummaryStats, RunTaskResult, TaskStatus } from '$lib/types/run';
+import type { RunSession, RoutineSummaryStats, RunTaskResult, TaskStatus } from '#lib/types/run';
 
 export function statusCaption(status: TaskStatus): 'Complete' | 'Later' | 'Not Today' {
 	if (status === 'completed') return 'Complete';

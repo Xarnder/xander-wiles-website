@@ -1,5 +1,5 @@
-import { subscribeAuth, type AuthUser } from '$lib/firebase/auth';
-import { isE2EMode, isFirebaseConfigured } from '$lib/firebase/config';
+import { subscribeAuth, type AuthUser } from '#lib/firebase/auth';
+import { isE2EMode, isFirebaseConfigured } from '#lib/firebase/config';
 
 export type AuthStatus = 'loading' | 'signed_out' | 'signed_in' | 'setup_required';
 

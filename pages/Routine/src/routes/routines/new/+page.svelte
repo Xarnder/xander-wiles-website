@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import RoutineEditor from '$lib/components/RoutineEditor.svelte';
-	import SetupRequired from '$lib/components/SetupRequired.svelte';
-	import SignInGate from '$lib/components/SignInGate.svelte';
-	import { getAuthStatus } from '$lib/stores/auth.svelte';
-	import { getRoutines, saveRoutine } from '$lib/stores/routines.svelte';
-	import type { Routine } from '$lib/types/routine';
-	import { createId } from '$lib/utils/id';
-	import { normalizeOrders } from '$lib/utils/order';
+	import RoutineEditor from '#lib/components/RoutineEditor.svelte';
+	import SetupRequired from '#lib/components/SetupRequired.svelte';
+	import SignInGate from '#lib/components/SignInGate.svelte';
+	import { getAuthStatus } from '#lib/stores/auth.svelte';
+	import { getRoutines, saveRoutine } from '#lib/stores/routines.svelte';
+	import type { Routine } from '#lib/types/routine';
+	import { createId } from '#lib/utils/id';
+	import { normalizeOrders } from '#lib/utils/order';
 
 	const status = $derived(getAuthStatus());
 

@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { base } from '$app/paths';
-	import { isForceLandscape, toggleForceLandscape } from '$lib/stores/preferences.svelte';
+	import { asset } from '$app/paths';
+	import { isForceLandscape, toggleForceLandscape } from '#lib/stores/preferences.svelte';
 
 	const on = $derived(isForceLandscape());
 
-	const horizontalIcon = `${base}/icons/rotate-horizontal.svg`;
-	const verticalIcon = `${base}/icons/rotate-vertical.svg`;
+	const horizontalIcon = asset('/icons/rotate-horizontal.svg');
+	const verticalIcon = asset('/icons/rotate-vertical.svg');
 </script>
 
 <button

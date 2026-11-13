@@ -1,4 +1,4 @@
-import type { Routine } from '$lib/types/routine';
+import type { Routine } from '#lib/types/routine';
 
 export interface RoutinesRepository {
 	subscribeAll(uid: string, cb: (routines: Routine[]) => void): () => void;

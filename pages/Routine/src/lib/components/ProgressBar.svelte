@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ProgressSegments } from '$lib/types/run';
+	import type { ProgressSegments } from '#lib/types/run';
 
 	let {
 		segments,

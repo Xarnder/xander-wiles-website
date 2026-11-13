@@ -1,4 +1,4 @@
-import { isE2EMode, isFirebaseConfigured } from '$lib/firebase/config';
+import { isE2EMode, isFirebaseConfigured } from '#lib/firebase/config';
 import { FirestoreRoutinesRepository } from './firestore-routines-repo';
 import { MemoryRoutinesRepository } from './memory-routines-repo';
 import type { RoutinesRepository } from './routines-repo';

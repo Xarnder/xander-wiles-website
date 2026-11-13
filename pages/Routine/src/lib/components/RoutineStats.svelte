@@ -1,13 +1,13 @@
 <script lang="ts">
-	import ProgressBar from '$lib/components/ProgressBar.svelte';
-	import { isTaskDisabled, type Routine } from '$lib/types/routine';
+	import ProgressBar from '#lib/components/ProgressBar.svelte';
+	import { isTaskDisabled, type Routine } from '#lib/types/routine';
 	import {
 		getRoutineTaskStats,
 		observationTotal,
 		outcomePercents,
 		outcomeSegments,
 		sumOutcomeCounts
-	} from '$lib/run/task-stats';
+	} from '#lib/run/task-stats';
 
 	let { routine }: { routine: Routine } = $props();
 

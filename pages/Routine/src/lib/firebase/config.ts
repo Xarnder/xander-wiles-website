@@ -1,4 +1,4 @@
-import { env } from '$env/dynamic/public';
+import * as env from '$app/env/public';
 
 export function isE2EMode(): boolean {
 	return env.PUBLIC_ROUTINE_E2E === 'true';

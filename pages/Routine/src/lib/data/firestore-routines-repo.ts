@@ -8,9 +8,9 @@ import {
 	writeBatch,
 	type DocumentData
 } from 'firebase/firestore';
-import type { Routine, RoutineTask } from '$lib/types/routine';
-import { sortBySortOrder } from '$lib/utils/order';
-import { getDb } from '$lib/firebase/firestore';
+import type { Routine, RoutineTask } from '#lib/types/routine';
+import { sortBySortOrder } from '#lib/utils/order';
+import { getDb } from '#lib/firebase/firestore';
 import type { RoutinesRepository } from './routines-repo';
 
 function routinesPath(uid: string) {

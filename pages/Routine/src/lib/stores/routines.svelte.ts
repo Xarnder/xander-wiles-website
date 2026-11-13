@@ -1,6 +1,6 @@
-import { getRoutinesRepository } from '$lib/data';
-import { clearRoutineTaskStats } from '$lib/run/task-stats';
-import type { Routine } from '$lib/types/routine';
+import { getRoutinesRepository } from '#lib/data';
+import { clearRoutineTaskStats } from '#lib/run/task-stats';
+import type { Routine } from '#lib/types/routine';
 import { getAuthUser } from './auth.svelte';
 
 let routines: Routine[] = $state([]);

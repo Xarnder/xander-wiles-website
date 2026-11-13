@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { isTaskDisabled, type RoutineTask } from '$lib/types/routine';
+	import { isTaskDisabled, type RoutineTask } from '#lib/types/routine';
 
 	let {
 		task,

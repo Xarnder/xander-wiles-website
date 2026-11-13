@@ -1,11 +1,11 @@
-import { isTaskDisabled, type Routine, type RoutineTask } from '$lib/types/routine';
-import type { ProgressSegments, RunSession, StartMode, TaskStatus } from '$lib/types/run';
+import { isTaskDisabled, type Routine, type RoutineTask } from '#lib/types/routine';
+import type { ProgressSegments, RunSession, StartMode, TaskStatus } from '#lib/types/run';
 
 function sortedTasks(tasks: RoutineTask[]): RoutineTask[] {
 	return [...tasks].sort((a, b) => a.order - b.order);
 }
 
-export type { StartMode } from '$lib/types/run';
+export type { StartMode } from '#lib/types/run';
 
 /**
  * @param omitIds — task ids left out of this run (completed / not today last cycle).

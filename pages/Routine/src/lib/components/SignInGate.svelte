@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { signInWithGoogle } from '$lib/firebase/auth';
+	import { signInWithGoogle } from '#lib/firebase/auth';
 
 	let busy = $state(false);
 	let error = $state<string | null>(null);

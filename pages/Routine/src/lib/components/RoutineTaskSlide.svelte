@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { RoutineTask } from '$lib/types/routine';
-	import type { TaskStatus } from '$lib/types/run';
+	import type { RoutineTask } from '#lib/types/routine';
+	import type { TaskStatus } from '#lib/types/run';
 	import type { Attachment } from 'svelte/attachments';
 
 	let {

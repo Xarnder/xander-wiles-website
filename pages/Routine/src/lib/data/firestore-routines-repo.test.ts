@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromDoc, toDoc } from './firestore-routines-repo';
-import type { Routine } from '$lib/types/routine';
+import type { Routine } from '#lib/types/routine';
 
 describe('Firestore serialization (cloud persistence)', () => {
 	it('preserves important flag through toDoc and fromDoc round-trip', () => {
