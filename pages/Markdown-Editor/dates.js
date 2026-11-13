@@ -273,9 +273,11 @@ export function resolveDateTagInput(raw) {
 /**
  * Focus a list-item text input. Empty / date-only bodies keep the caret at
  * the start; otherwise select all for quick rewrite of the visible body.
+ * Mini editors can opt out to leave the caret at the end for continued typing.
  * @param {HTMLInputElement | HTMLTextAreaElement | null | undefined} input
+ * @param {{ selectAll?: boolean }} [options]
  */
-export function focusItemTextInput(input) {
+export function focusItemTextInput(input, { selectAll = true } = {}) {
     if (!input) return;
     try {
         input.focus({ preventScroll: true });
@@ -292,7 +294,8 @@ export function focusItemTextInput(input) {
         return;
     }
     try {
-        input.select();
+        if (selectAll) input.select();
+        else input.setSelectionRange(value.length, value.length);
     } catch {
         // ignore
     }

@@ -5693,6 +5693,16 @@ html.is-mdlist-sorting body {
     gap: 0.45em;
 }
 
+/* Stop iOS selection before the edit gesture begins. Only preview labels are
+   affected; text in the mini editor and Pure reader remains selectable. */
+@media (any-pointer: coarse) {
+    .mdplain-view-item--long-pressable > .mdplain-view-item-main,
+    .mdplain-view-item--long-pressable > .mdplain-view-item-main * {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+}
+
 .mdplain-view-num {
     flex: 0 0 auto;
     min-width: 1.35em;

@@ -1785,16 +1785,20 @@ const PLAIN_LIST_LONG_PRESS_MOVE_PX = 10;
 
 /**
  * Long-press on an element; cancels if the pointer moves too far (scroll/drag).
+ * Touch opens on release so the held gesture cannot select the new editor text.
  * Ignores events that belong to a nested `.mdplain-view-item` (tree layout).
  * @param {HTMLElement} el
  * @param {(event: PointerEvent) => void} onLongPress
  */
 function attachLongPress(el, onLongPress) {
+    el.classList.add('mdplain-view-item--long-pressable');
     let timer = null;
     let startX = 0;
     let startY = 0;
     let pressed = false;
     let fired = false;
+    let touchReady = false;
+    let activePointerId = null;
 
     const clearTimer = () => {
         if (timer != null) {
@@ -1806,6 +1810,8 @@ function attachLongPress(el, onLongPress) {
     const endPress = () => {
         clearTimer();
         pressed = false;
+        touchReady = false;
+        activePointerId = null;
         el.classList.remove('is-long-pressing');
     };
 
@@ -1818,13 +1824,16 @@ function attachLongPress(el, onLongPress) {
     };
 
     el.addEventListener('pointerdown', (event) => {
+        if (!event.isPrimary) return;
         if (event.pointerType === 'mouse' && event.button !== 0) return;
-        if (el.classList.contains('mdplain-view-item--mini-editing')) return;
         if (!isOwnerItem(event)) return;
+        fired = false;
+        if (el.classList.contains('mdplain-view-item--mini-editing')) return;
         // Keep ancestor items from starting their own long-press on the same gesture.
         event.stopPropagation();
         pressed = true;
-        fired = false;
+        touchReady = false;
+        activePointerId = event.pointerId;
         startX = event.clientX;
         startY = event.clientY;
         el.classList.add('is-long-pressing');
@@ -1832,6 +1841,10 @@ function attachLongPress(el, onLongPress) {
         timer = window.setTimeout(() => {
             timer = null;
             if (!pressed) return;
+            if (event.pointerType === 'touch') {
+                touchReady = true;
+                return;
+            }
             fired = true;
             el.classList.remove('is-long-pressing');
             onLongPress(event);
@@ -1839,7 +1852,7 @@ function attachLongPress(el, onLongPress) {
     });
 
     el.addEventListener('pointermove', (event) => {
-        if (!pressed || timer == null) return;
+        if (!pressed || event.pointerId !== activePointerId) return;
         const dx = event.clientX - startX;
         const dy = event.clientY - startY;
         if (dx * dx + dy * dy > PLAIN_LIST_LONG_PRESS_MOVE_PX * PLAIN_LIST_LONG_PRESS_MOVE_PX) {
@@ -1847,8 +1860,26 @@ function attachLongPress(el, onLongPress) {
         }
     });
 
-    el.addEventListener('pointerup', endPress);
-    el.addEventListener('pointercancel', endPress);
+    el.addEventListener('pointerup', (event) => {
+        if (event.pointerId !== activePointerId) return;
+        const openOnRelease = touchReady;
+        endPress();
+        if (!openOnRelease) return;
+        fired = true;
+        event.preventDefault();
+        event.stopPropagation();
+        onLongPress(event);
+    });
+    el.addEventListener('pointercancel', (event) => {
+        if (event.pointerId === activePointerId) endPress();
+    });
+    el.addEventListener('lostpointercapture', endPress);
+
+    // The compatibility mousedown after touch release would blur the textarea
+    // before the swallowed click, even though we already focused it to type.
+    el.addEventListener('mousedown', (event) => {
+        if (fired) event.preventDefault();
+    }, true);
 
     el.addEventListener(
         'click',
@@ -2333,7 +2364,6 @@ function openPlainItemMiniEditor({
 
     const itemIndex = (block.items || []).findIndex((it) => it.id === item.id);
     const currentDepth = plainListDepthFromIndent(item.indent);
-    const canAddNested = currentDepth < PLAIN_LIST_MAX_DEPTH;
     const canIndent = currentDepth < PLAIN_LIST_MAX_DEPTH;
     const canOutdent = currentDepth > 0;
     const canMoveUp = plainListSiblingMoveTarget(block.items || [], itemIndex, -1) >= 0;
@@ -2427,9 +2457,8 @@ function openPlainItemMiniEditor({
         });
     };
 
-    const addNestedItem = () => {
-        if (closed || !canAddNested) return;
-        const childDepth = Math.min(currentDepth + 1, PLAIN_LIST_MAX_DEPTH);
+    const addSiblingItem = () => {
+        if (closed) return;
         const newId = createId('pli');
 
         closed = true;
@@ -2448,7 +2477,7 @@ function openPlainItemMiniEditor({
                 const target = listBlock.items[idx];
                 commitCurrentFields(target, listBlock);
                 const insertAt = plainListInsertIndexAfterSubtree(listBlock.items, idx);
-                const child = {
+                const newItem = {
                     id: newId,
                     text: stampNewItemText(''),
                     checked:
@@ -2456,10 +2485,10 @@ function openPlainItemMiniEditor({
                             ? false
                             : null,
                     marker: target.marker && /^[-*+]$/.test(target.marker) ? target.marker : '-',
-                    indent: plainListIndentForDepth(childDepth),
+                    indent: plainListIndentForDepth(currentDepth),
                 };
-                ensurePlainItemDateTag(child);
-                listBlock.items.splice(insertAt, 0, child);
+                ensurePlainItemDateTag(newItem);
+                listBlock.items.splice(insertAt, 0, newItem);
             },
             opts: { stayInView: true, openMiniPlainItemId: newId },
         });
@@ -2483,16 +2512,13 @@ function openPlainItemMiniEditor({
     toBottomBtn.addEventListener('mousedown', (event) => event.preventDefault());
     toBottomBtn.addEventListener('click', () => moveToEdge('bottom'));
 
-    const addNestedBtn = createMiniIconButton({
+    const addSiblingBtn = createMiniIconButton({
         icon: 'add',
-        label: 'Add a nested list item under this one',
-        title: currentDepth >= PLAIN_LIST_MAX_DEPTH
-            ? 'Already at max nest depth'
-            : 'Add nested item',
+        label: 'Add a list item below at the same indent level',
+        title: 'Add item at the same indent level',
     });
-    addNestedBtn.disabled = !canAddNested;
-    addNestedBtn.addEventListener('mousedown', (event) => event.preventDefault());
-    addNestedBtn.addEventListener('click', () => addNestedItem());
+    addSiblingBtn.addEventListener('mousedown', (event) => event.preventDefault());
+    addSiblingBtn.addEventListener('click', () => addSiblingItem());
 
     const indentBtn = createMiniIconButton({
         icon: 'indent',
@@ -2558,7 +2584,7 @@ function openPlainItemMiniEditor({
     topRow.append(copyBtn, doneBtn);
 
     const toolBtns = [
-        addNestedBtn,
+        addSiblingBtn,
         outdentBtn,
         indentBtn,
         toTopBtn,
@@ -2583,6 +2609,11 @@ function openPlainItemMiniEditor({
     editor.appendChild(actions);
     li.appendChild(editor);
     if (preservedNest) li.appendChild(preservedNest);
+
+    syncHeight();
+    // Focus during the release event so iOS can open the keyboard, without
+    // selecting the existing note or carrying a held touch into the textarea.
+    focusItemTextInput(textInput, { selectAll: false });
 
     function onOutsidePointerDown(event) {
         const target = event.target;
@@ -2617,8 +2648,6 @@ function openPlainItemMiniEditor({
         if (closed) return;
         document.addEventListener('pointerdown', onOutsidePointerDown, true);
         document.addEventListener('keydown', onDocKeyDown, true);
-        syncHeight();
-        focusItemTextInput(textInput);
         // Second frame: layout has the expanded mini editor height.
         requestAnimationFrame(() => {
             if (closed) return;
