@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
 import { format, isValid, parseISO } from 'date-fns';
-import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square, Columns2 } from 'lucide-react';
+import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square, Columns2, Search, X } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import ImageCaption from './ImageCaption';
 import PhotoMasonry from './PhotoMasonry';
@@ -217,10 +217,17 @@ export default function ImageView() {
 
     const ITEMS_PER_PAGE = 50;
 
-    const filterKey = JSON.stringify([...new Set(searchParams.getAll('captionTag').map(captionTagKey).filter(Boolean))].sort());
-    const selectedTags = useMemo(() => JSON.parse(filterKey), [filterKey]);
+    const searchInput = useRef(null);
+    const queryText = searchParams.get('q') || '';
+    const tagKey = JSON.stringify([...new Set(searchParams.getAll('captionTag').map(captionTagKey).filter(Boolean))].sort());
+    const selectedTags = useMemo(() => JSON.parse(tagKey), [tagKey]);
+    const filterKey = JSON.stringify({ tags: selectedTags, query: queryText });
+    const deferredFilterKey = useDeferredValue(filterKey);
+    const criteria = useMemo(() => JSON.parse(deferredFilterKey), [deferredFilterKey]);
+    const updatingResults = filterKey !== deferredFilterKey;
+    const hasFilters = Boolean(selectedTags.length || queryText.trim());
     const captionTags = useMemo(() => getGalleryCaptionTags(entries), [entries]);
-    const filteredEntries = useMemo(() => filterGalleryByCaptionTags(entries, selectedTags), [entries, selectedTags]);
+    const filteredEntries = useMemo(() => filterGalleryByCaptionTags(entries, criteria.tags, criteria.query), [entries, criteria]);
     const photoCount = filteredEntries.reduce((total, entry) => total + entry.images.length, 0);
     const totalPhotoCount = entries.reduce((total, entry) => total + entry.images.length, 0);
     const [pagination, setPagination] = useState({ filterKey: '', page: 1 });
@@ -233,21 +240,36 @@ export default function ImageView() {
     const scrollToId = location.state?.scrollToId;
     const galleryQuery = searchParams.toString();
     const returnToGallery = `/images${galleryQuery ? `?${galleryQuery}` : ''}`;
+    const updateFilters = (next) => {
+        // Search and tag changes start on page one without an old scroll target.
+        restoredScrollId.current = scrollToId;
+        scrolledToId.current = scrollToId;
+        setPagination({ filterKey: '', page: 1 });
+        updateSearchParams(next);
+    };
     const updateTags = (tags) => {
         const next = new URLSearchParams(searchParams);
         next.delete('captionTag');
         tags.forEach((tag) => next.append('captionTag', tag));
-        // A filter change starts on page one, rather than jumping to an old entry.
-        restoredScrollId.current = scrollToId;
-        scrolledToId.current = scrollToId;
-        setPagination({ filterKey: JSON.stringify([...tags].sort()), page: 1 });
-        updateSearchParams(next);
+        updateFilters(next);
+    };
+    const updateQuery = (value) => {
+        const next = new URLSearchParams(searchParams);
+        if (value) next.set('q', value);
+        else next.delete('q');
+        updateFilters(next);
+    };
+    const clearFilters = () => {
+        const next = new URLSearchParams(searchParams);
+        next.delete('captionTag');
+        next.delete('q');
+        updateFilters(next);
     };
 
     // Jump to the photo the user just came back from, once. Later page
     // changes must not rerun this, or Next/Previous snap back to that photo.
     useEffect(() => {
-        if (loading || filteredEntries.length === 0 || !scrollToId) return;
+        if (loading || updatingResults || filteredEntries.length === 0 || !scrollToId) return;
         if (restoredScrollId.current === scrollToId) return;
 
         const entryIndex = filteredEntries.findIndex((entry) => entry.id === scrollToId);
@@ -256,10 +278,10 @@ export default function ImageView() {
         restoredScrollId.current = scrollToId;
         const targetPage = Math.floor(entryIndex / ITEMS_PER_PAGE) + 1;
         setPagination({ filterKey, page: targetPage });
-    }, [loading, filteredEntries, scrollToId, filterKey]);
+    }, [loading, updatingResults, filteredEntries, scrollToId, filterKey]);
 
     useEffect(() => {
-        if (loading || filteredEntries.length === 0 || !scrollToId) return;
+        if (loading || updatingResults || filteredEntries.length === 0 || !scrollToId) return;
         if (scrolledToId.current === scrollToId || restoredScrollId.current !== scrollToId) return;
 
         const element = document.getElementById(`gallery-item-${scrollToId}`);
@@ -267,7 +289,7 @@ export default function ImageView() {
 
         scrolledToId.current = scrollToId;
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, [loading, filteredEntries, currentPage, scrollToId, galleryMode]);
+    }, [loading, updatingResults, filteredEntries, currentPage, scrollToId, galleryMode]);
 
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const paginatedEntries = useMemo(() => filteredEntries.slice(startIndex, startIndex + ITEMS_PER_PAGE), [filteredEntries, startIndex]);
@@ -343,17 +365,34 @@ export default function ImageView() {
                             <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary leading-none">
                                 {photoCount.toLocaleString()}
                             </p>
-                            <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos{selectedTags.length > 0 ? ` of ${totalPhotoCount.toLocaleString()}` : ''}</p>
+                            <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos{hasFilters ? ` of ${totalPhotoCount.toLocaleString()}` : ''}</p>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <form role="search" aria-label="Search photo captions" className="glass-card min-w-0 space-y-3 p-4 sm:p-5"
+                onSubmit={(event) => { event.preventDefault(); searchInput.current?.blur(); }}>
+                <label htmlFor="gallery-caption-search" className="block text-sm font-semibold text-text">Search captions</label>
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                    <input id="gallery-caption-search" ref={searchInput} type="search" enterKeyHint="search" autoComplete="off"
+                        value={queryText} onChange={(event) => updateQuery(event.target.value)}
+                        placeholder="Meal name or caption words…" aria-describedby="gallery-caption-search-help" aria-controls="gallery-photo-results"
+                        className="journal-search-input glass-input min-h-12 w-full pl-10 pr-12" />
+                    {queryText && <button type="button" aria-label="Clear caption search" onClick={() => { updateQuery(''); searchInput.current?.focus(); }}
+                        className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-primary">
+                        <X className="h-5 w-5" aria-hidden="true" />
+                    </button>}
+                </div>
+                <p id="gallery-caption-search-help" className="text-xs text-text-muted">Matches all entered words in a photo’s normal or tagged captions, in any order. Use caption tags below to narrow the results.</p>
+            </form>
             <GalleryCaptionFilters options={captionTags} selected={selectedTags} onChange={updateTags} loading={loading} />
-            {selectedTags.length > 0 && !loading && <p role="status" className="text-sm text-text-muted">
-                {photoCount.toLocaleString()} matching {photoCount === 1 ? 'photo' : 'photos'} across {filteredEntries.length.toLocaleString()} {filteredEntries.length === 1 ? 'day' : 'days'}
+            {hasFilters && !loading && <p role="status" aria-live="polite" className="text-sm text-text-muted">
+                {updatingResults ? 'Updating photos…' : `${photoCount.toLocaleString()} matching ${photoCount === 1 ? 'photo' : 'photos'} across ${filteredEntries.length.toLocaleString()} ${filteredEntries.length === 1 ? 'day' : 'days'}`}
             </p>}
 
+            <div id="gallery-photo-results" aria-busy={loading || updatingResults} inert={updatingResults || undefined} className={updatingResults ? 'opacity-60' : undefined}>
             {loading ? (
                 <GallerySkeleton galleryMode={galleryMode} />
             ) : loadError ? (
@@ -364,7 +403,7 @@ export default function ImageView() {
                     </button>
                 </div>
             ) : filteredEntries.length > 0 ? (
-                <>
+                <div className="space-y-6">
                     {galleryMode === 'masonry' ? (
                         <PhotoMasonry photos={masonryPhotos}>
                             {(photo) => (
@@ -476,7 +515,7 @@ export default function ImageView() {
                                         </div>
                                         {hasImageCaption(entry.images[0]) && (
                                             <div className="p-3 text-text">
-                                                {entry.images.length > 1 && <p className="mb-1 text-center text-xs text-text-muted">{selectedTags.length > 0 ? 'First matching photo' : 'Photo 1'}</p>}
+                                                {entry.images.length > 1 && <p className="mb-1 text-center text-xs text-text-muted">{hasFilters ? 'First matching photo' : 'Photo 1'}</p>}
                                                 <ImageCaption image={entry.images[0]} />
                                             </div>
                                         )}
@@ -512,14 +551,15 @@ export default function ImageView() {
                             </button>
                         </div>
                     )}
-                </>
+                </div>
             ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-text-muted border-2 border-dashed border-white/10 rounded-xl">
                     <ImageIcon className="w-12 h-12 mb-4 opacity-20" />
-                    <p>{selectedTags.length > 0 ? 'No photos match these caption tags.' : 'No photos found in your journal.'}</p>
-                    {selectedTags.length > 0 && <button type="button" onClick={() => updateTags([])} className="glass-button mt-4 min-h-11 px-4 text-sm text-text">Show all photos</button>}
+                    <p>{hasFilters ? 'No photos match your search and filters.' : 'No photos found in your journal.'}</p>
+                    {hasFilters && <button type="button" onClick={clearFilters} className="glass-button mt-4 min-h-11 px-4 text-sm text-text">Show all photos</button>}
                 </div>
             )}
+            </div>
         </div>
     );
 }

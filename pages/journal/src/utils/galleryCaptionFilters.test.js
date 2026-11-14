@@ -70,3 +70,44 @@ test('filtering includes older matching days beyond the first page in a large ga
     assert.ok(filtered.every((entry) => entry.images.length === 1));
     assert.equal(getGalleryCaptionTags(data).find(({ key }) => key === 'meal').count, 1251);
 });
+
+test('caption search matches all words on the same photo and combines with tag filters', () => {
+    const data = [{ id: '2026-11-14', title: 'Pasta', images: [
+        { url: 'one', caption: 'Dinner with friends', taggedCaptions: [{ tag: 'Meal', caption: 'Chicken curry' }] },
+        { url: 'two', caption: 'Chicken soup' },
+        { url: 'three', taggedCaptions: [{ tag: 'Place', caption: 'The Curry House' }] },
+        { url: 'four', caption: 'Pasta', captionTag: 'Meal' }
+    ] }];
+    const urls = (query, tags = []) => filterGalleryByCaptionTags(data, tags, query).flatMap((entry) => entry.images.map(({ url }) => url));
+    assert.deepEqual(urls('  CURRY\n chicken  '), ['one']);
+    assert.deepEqual(urls('friends curry', ['Meal']), ['one']);
+    assert.deepEqual(urls('curry'), ['one', 'three']);
+    assert.deepEqual(urls('curry', ['Place']), ['three']);
+    assert.deepEqual(urls('pasta', ['Meal']), ['four']);
+    assert.deepEqual(urls('chicken soup', ['Meal']), []);
+    assert.deepEqual(urls('pasta friends'), []);
+    assert.deepEqual(urls('Meal'), []);
+    assert.equal(filterGalleryByCaptionTags(data, [], ' \n\t '), data);
+});
+
+test('caption search handles literal punctuation, Unicode and malformed caption values', () => {
+    const data = [{ id: '2026-11-14', images: [
+        { url: 'one', caption: 'CAFÉ C++ [special]' },
+        { url: 'two', caption: {}, taggedCaptions: [{ tag: 'Meal', caption: null }] },
+        null
+    ] }];
+    for (const query of ['cafe\u0301', 'C++', '[special]']) assert.equal(filterGalleryByCaptionTags(data, [], query)[0].images.length, 1);
+    assert.deepEqual(filterGalleryByCaptionTags(data, [], '.*'), []);
+    assert.equal(filterGalleryByCaptionTags(data, [], null), data);
+});
+
+test('caption search finds an older meal in a gallery with 5001 entries', () => {
+    const data = Array.from({ length: 5001 }, (_, index) => ({ id: String(index), images: [
+        { url: `${index}-normal`, caption: 'Normal caption' },
+        { url: `${index}-meal`, taggedCaptions: [{ tag: 'Meal', caption: index === 5000 ? 'Pistachio cheesecake' : 'Chicken curry' }] }
+    ] }));
+    const result = filterGalleryByCaptionTags(data, ['Meal'], 'cheesecake pistachio');
+    assert.equal(result.length, 1);
+    assert.equal(result[0].id, '5000');
+    assert.equal(result[0].images.length, 1);
+});

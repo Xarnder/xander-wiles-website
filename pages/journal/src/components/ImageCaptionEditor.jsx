@@ -1,23 +1,30 @@
 import { useRef, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import Modal from './Modal';
 import ImageCaption from './ImageCaption';
 import { MAX_CAPTION_TAG_LENGTH, normalizeCaptionTag, readImageCaptions, updateImageCaptions } from '../utils/imageCaption';
+import { captionOptionKey, captionTagsFromImages, mergeCaptionTagOptions } from '../utils/captionTagOptions';
+import { useCaptionTagOptions } from '../lib/useCaptionTagOptions';
 
 // Mounted for one photo at a time so cancelled drafts cannot leak to another photo.
-export default function ImageCaptionEditor({ image, images, onSave, onClose }) {
+export default function ImageCaptionEditor({ image, images = [], onSave, onClose }) {
     const initial = readImageCaptions(image);
     const [caption, setCaption] = useState(initial.caption);
     const [taggedCaptions, setTaggedCaptions] = useState(() => initial.taggedCaptions.map((item, id) => ({ ...item, id })));
     const nextId = useRef(initial.taggedCaptions.length);
-    const suggestions = [...new Set(['Meal', ...images.flatMap((photo) => readImageCaptions(photo).taggedCaptions.map((item) => item.tag))])];
+    const savedTags = useCaptionTagOptions(taggedCaptions.length > 0);
+    const suggestions = mergeCaptionTagOptions(['Meal'], savedTags.tags, captionTagsFromImages(images),
+        captionTagsFromImages([image, { taggedCaptions }]));
     const incomplete = taggedCaptions.some((item) => !normalizeCaptionTag(item.tag) || !item.caption.trim());
     const hasDraft = Boolean(caption.trim() || taggedCaptions.length);
 
     const submit = (event) => {
         event.preventDefault();
         if (incomplete) return;
-        onSave(updateImageCaptions(image, caption, taggedCaptions));
+        const normalizedTags = taggedCaptions.map((item) => ({ ...item,
+            tag: suggestions.find((tag) => captionOptionKey(tag) === captionOptionKey(item.tag)) || normalizeCaptionTag(item.tag) }));
+        onSave(updateImageCaptions(image, caption, normalizedTags));
+        savedTags.remember(normalizedTags.map(({ tag }) => tag));
     };
     const updateTaggedCaption = (id, changes) => {
         setTaggedCaptions((current) => current.map((item) => item.id === id ? { ...item, ...changes } : item));
@@ -55,7 +62,11 @@ export default function ImageCaptionEditor({ image, images, onSave, onClose }) {
                         spellCheck autoCorrect="on" autoCapitalize="sentences"
                         className="glass-input w-full min-h-24 resize-y text-base" />
                 </div>
-                <datalist id="image-caption-tags">{suggestions.map((label) => <option key={label} value={label} />)}</datalist>
+                {taggedCaptions.length > 0 && savedTags.status === 'loading' && <p role="status" className="text-xs text-text-muted">Loading saved caption tags… You can still choose a tag or create one.</p>}
+                {taggedCaptions.length > 0 && savedTags.status === 'error' && <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    <p role="status" className="min-w-0 flex-1">Some saved tags could not be loaded. You can still create a tag.</p>
+                    <button type="button" onClick={savedTags.retry} className="glass-button min-h-11 px-3">Retry tags</button>
+                </div>}
                 {taggedCaptions.map((item, index) => {
                     const isMeal = normalizeCaptionTag(item.tag).toLowerCase() === 'meal';
                     return (
@@ -70,11 +81,29 @@ export default function ImageCaptionEditor({ image, images, onSave, onClose }) {
                                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                                     </button>
                                 </div>
-                                <input id={`image-caption-tag-${item.id}`} value={item.tag} onChange={(event) => updateTaggedCaption(item.id, { tag: event.target.value })}
-                                    list="image-caption-tags" maxLength={MAX_CAPTION_TAG_LENGTH} required
-                                    placeholder="Meal, Place, Book…" autoComplete="off" autoCapitalize="words" autoFocus={item.isNew}
-                                    aria-describedby={`image-caption-tag-help-${item.id}`} className="glass-input w-full min-h-11 text-base" />
-                                <p id={`image-caption-tag-help-${item.id}`} className="mt-1.5 text-xs text-text-muted">Use Meal or type your own tag.</p>
+                                <div className="relative">
+                                <select id={`image-caption-tag-${item.id}`}
+                                    value={item.creating ? 'create' : item.tag ? `tag:${captionOptionKey(item.tag)}` : ''}
+                                    onChange={(event) => updateTaggedCaption(item.id, event.target.value === 'create'
+                                        ? { tag: '', creating: true }
+                                        : { tag: suggestions.find((tag) => `tag:${captionOptionKey(tag)}` === event.target.value) || '', creating: false })}
+                                    required autoFocus={item.isNew} aria-describedby={`image-caption-tag-help-${item.id}`}
+                                    className="glass-input h-12 w-full min-w-0 appearance-none pr-10 text-base">
+                                    <option value="" disabled>Choose a caption tag</option>
+                                    {suggestions.map((label) => <option key={captionOptionKey(label)} value={`tag:${captionOptionKey(label)}`}>{label}</option>)}
+                                    <option value="create">Create new tag…</option>
+                                </select>
+                                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                                </div>
+                                {item.creating && <div className="mt-3">
+                                    <label htmlFor={`image-caption-new-tag-${item.id}`} className="mb-1.5 block text-sm font-medium text-text">New caption tag</label>
+                                    <input id={`image-caption-new-tag-${item.id}`} value={item.tag}
+                                        onChange={(event) => updateTaggedCaption(item.id, { tag: event.target.value })}
+                                        maxLength={MAX_CAPTION_TAG_LENGTH} required placeholder="e.g. Place, Book, Dessert"
+                                        autoComplete="off" autoCapitalize="words" autoFocus
+                                        className="glass-input w-full min-h-11 text-base" />
+                                </div>}
+                                <p id={`image-caption-tag-help-${item.id}`} className="mt-1.5 text-xs text-text-muted">Choose a saved tag, or create your own.</p>
                             </div>
                             <div>
                                 <label htmlFor={`image-caption-value-${item.id}`} className="mb-1.5 block text-sm font-medium text-text">{isMeal ? 'Meal name' : 'Caption text'}</label>
