@@ -268,7 +268,7 @@ export default function Layout() {
 
     function handleEntryBack() {
         if (isFromGallery) {
-            navigate('/images', { state: { scrollToId: location.state?.scrollToId } });
+            navigate(fromPath?.split('?')[0] === '/images' ? fromPath : '/images', { state: { scrollToId: location.state?.scrollToId } });
             return;
         }
 

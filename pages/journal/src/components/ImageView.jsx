@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
@@ -8,8 +8,10 @@ import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square, Columns2 } from
 import ImageWithSkeleton from './ImageWithSkeleton';
 import ImageCaption from './ImageCaption';
 import PhotoMasonry from './PhotoMasonry';
+import GalleryCaptionFilters from './GalleryCaptionFilters';
 import { hasImageCaption } from '../utils/imageCaption';
 import { imagesForSave } from '../utils/imageTakenAt';
+import { captionTagKey, getGalleryCaptionTags, filterGalleryByCaptionTags } from '../utils/galleryCaptionFilters';
 
 const GALLERY_LOAD_TIMEOUT_MS = 12000;
 const GALLERY_LOAD_TIMEOUT_CODE = 'journal/gallery-load-timeout';
@@ -136,10 +138,26 @@ export default function ImageView() {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const [urlParams, setSearchParams] = useSearchParams();
+    const urlSearch = urlParams.toString();
+    // Reflect checkbox taps immediately while the router defers URL updates.
+    const [draft, setDraft] = useState({ source: urlSearch, params: urlParams });
+    if (draft.source !== urlSearch) setDraft({ source: urlSearch, params: urlParams });
+    const searchParams = draft.params;
+    const updateSearchParams = (next) => {
+        setDraft({ source: urlSearch, params: next });
+        setSearchParams(next, { replace: true, state: location.state });
+    };
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showInfo, setShowInfo] = useState(true);
-    const [galleryMode, setGalleryMode] = useState('grid');
+    const galleryMode = GALLERY_MODES.some(({ id }) => id === searchParams.get('view')) ? searchParams.get('view') : 'grid';
+    const setGalleryMode = (mode) => {
+        const next = new URLSearchParams(searchParams);
+        if (mode === 'grid') next.delete('view');
+        else next.set('view', mode);
+        updateSearchParams(next);
+    };
     const [loadError, setLoadError] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
 
@@ -199,30 +217,49 @@ export default function ImageView() {
 
     const ITEMS_PER_PAGE = 50;
 
-    const [currentPage, setCurrentPage] = useState(1);
+    const filterKey = JSON.stringify([...new Set(searchParams.getAll('captionTag').map(captionTagKey).filter(Boolean))].sort());
+    const selectedTags = useMemo(() => JSON.parse(filterKey), [filterKey]);
+    const captionTags = useMemo(() => getGalleryCaptionTags(entries), [entries]);
+    const filteredEntries = useMemo(() => filterGalleryByCaptionTags(entries, selectedTags), [entries, selectedTags]);
+    const photoCount = filteredEntries.reduce((total, entry) => total + entry.images.length, 0);
+    const totalPhotoCount = entries.reduce((total, entry) => total + entry.images.length, 0);
+    const [pagination, setPagination] = useState({ filterKey: '', page: 1 });
     const restoredScrollId = useRef(null);
     const scrolledToId = useRef(null);
 
     // Calculate pagination
-    const totalPages = Math.ceil(entries.length / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(filteredEntries.length / ITEMS_PER_PAGE);
+    const currentPage = Math.min(Math.max(1, totalPages), pagination.filterKey === filterKey ? pagination.page : 1);
     const scrollToId = location.state?.scrollToId;
+    const galleryQuery = searchParams.toString();
+    const returnToGallery = `/images${galleryQuery ? `?${galleryQuery}` : ''}`;
+    const updateTags = (tags) => {
+        const next = new URLSearchParams(searchParams);
+        next.delete('captionTag');
+        tags.forEach((tag) => next.append('captionTag', tag));
+        // A filter change starts on page one, rather than jumping to an old entry.
+        restoredScrollId.current = scrollToId;
+        scrolledToId.current = scrollToId;
+        setPagination({ filterKey: JSON.stringify([...tags].sort()), page: 1 });
+        updateSearchParams(next);
+    };
 
     // Jump to the photo the user just came back from, once. Later page
     // changes must not rerun this, or Next/Previous snap back to that photo.
     useEffect(() => {
-        if (loading || entries.length === 0 || !scrollToId) return;
+        if (loading || filteredEntries.length === 0 || !scrollToId) return;
         if (restoredScrollId.current === scrollToId) return;
 
-        const entryIndex = entries.findIndex((entry) => entry.id === scrollToId);
+        const entryIndex = filteredEntries.findIndex((entry) => entry.id === scrollToId);
         if (entryIndex === -1) return;
 
         restoredScrollId.current = scrollToId;
         const targetPage = Math.floor(entryIndex / ITEMS_PER_PAGE) + 1;
-        setCurrentPage(targetPage);
-    }, [loading, entries, scrollToId]);
+        setPagination({ filterKey, page: targetPage });
+    }, [loading, filteredEntries, scrollToId, filterKey]);
 
     useEffect(() => {
-        if (loading || entries.length === 0 || !scrollToId) return;
+        if (loading || filteredEntries.length === 0 || !scrollToId) return;
         if (scrolledToId.current === scrollToId || restoredScrollId.current !== scrollToId) return;
 
         const element = document.getElementById(`gallery-item-${scrollToId}`);
@@ -230,10 +267,10 @@ export default function ImageView() {
 
         scrolledToId.current = scrollToId;
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, [loading, entries, currentPage, scrollToId, galleryMode]);
+    }, [loading, filteredEntries, currentPage, scrollToId, galleryMode]);
 
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const paginatedEntries = entries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    const paginatedEntries = useMemo(() => filteredEntries.slice(startIndex, startIndex + ITEMS_PER_PAGE), [filteredEntries, startIndex]);
     const masonryPhotos = useMemo(() => flattenGalleryImages(paginatedEntries), [paginatedEntries]);
 
     // Group by month
@@ -254,7 +291,7 @@ export default function ImageView() {
             scrolledToId.current = scrollToId;
         }
 
-        setCurrentPage(newPage);
+        setPagination({ filterKey, page: newPage });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -304,13 +341,18 @@ export default function ImageView() {
                         </button>
                         <div>
                             <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary leading-none">
-                                {entries.reduce((total, entry) => total + entry.images.length, 0)}
+                                {photoCount.toLocaleString()}
                             </p>
-                            <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos</p>
+                            <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos{selectedTags.length > 0 ? ` of ${totalPhotoCount.toLocaleString()}` : ''}</p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <GalleryCaptionFilters options={captionTags} selected={selectedTags} onChange={updateTags} loading={loading} />
+            {selectedTags.length > 0 && !loading && <p role="status" className="text-sm text-text-muted">
+                {photoCount.toLocaleString()} matching {photoCount === 1 ? 'photo' : 'photos'} across {filteredEntries.length.toLocaleString()} {filteredEntries.length === 1 ? 'day' : 'days'}
+            </p>}
 
             {loading ? (
                 <GallerySkeleton galleryMode={galleryMode} />
@@ -321,7 +363,7 @@ export default function ImageView() {
                         Try again
                     </button>
                 </div>
-            ) : entries.length > 0 ? (
+            ) : filteredEntries.length > 0 ? (
                 <>
                     {galleryMode === 'masonry' ? (
                         <PhotoMasonry photos={masonryPhotos}>
@@ -330,7 +372,7 @@ export default function ImageView() {
                                     type="button"
                                     key={photo.key}
                                     id={photo.isFirstForEntry ? `gallery-item-${photo.entryId}` : undefined}
-                                    onClick={() => navigate(`/entry/${format(photo.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: photo.entryId, from: '/images' } })}
+                                    onClick={() => navigate(`/entry/${format(photo.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: photo.entryId, from: returnToGallery } })}
                                     aria-label={`Open ${photo.title} from ${format(photo.date, 'MMMM d, yyyy')}`}
                                     className={`group block w-full overflow-hidden rounded-xl border bg-white/5 text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${
                                         photo.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'
@@ -380,7 +422,7 @@ export default function ImageView() {
                                         type="button"
                                         key={entry.id}
                                         id={`gallery-item-${entry.id}`}
-                                        onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id, from: '/images' } })}
+                                        onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id, from: returnToGallery } })}
                                         aria-label={`Open ${entry.title} from ${format(entry.date, 'MMMM d, yyyy')}`}
                                         className={`group self-start rounded-xl overflow-hidden cursor-pointer bg-white/5 border text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
                                     >
@@ -434,7 +476,7 @@ export default function ImageView() {
                                         </div>
                                         {hasImageCaption(entry.images[0]) && (
                                             <div className="p-3 text-text">
-                                                {entry.images.length > 1 && <p className="mb-1 text-center text-xs text-text-muted">Photo 1</p>}
+                                                {entry.images.length > 1 && <p className="mb-1 text-center text-xs text-text-muted">{selectedTags.length > 0 ? 'First matching photo' : 'Photo 1'}</p>}
                                                 <ImageCaption image={entry.images[0]} />
                                             </div>
                                         )}
@@ -474,7 +516,8 @@ export default function ImageView() {
             ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-text-muted border-2 border-dashed border-white/10 rounded-xl">
                     <ImageIcon className="w-12 h-12 mb-4 opacity-20" />
-                    <p>No photos found in your journal.</p>
+                    <p>{selectedTags.length > 0 ? 'No photos match these caption tags.' : 'No photos found in your journal.'}</p>
+                    {selectedTags.length > 0 && <button type="button" onClick={() => updateTags([])} className="glass-button mt-4 min-h-11 px-4 text-sm text-text">Show all photos</button>}
                 </div>
             )}
         </div>
