@@ -67,4 +67,21 @@ describe('BiomeTracker', () => {
 		tracker.reset();
 		expect(run(tracker, 3, BIOME_HOLD_SECONDS + 0.1)).toEqual([{ current: 3, announce: true }]);
 	});
+
+	it('after a trip, the biome there counts at once and is announced despite the cooldown', () => {
+		const tracker = new BiomeTracker();
+		run(tracker, 3, BIOME_HOLD_SECONDS + 0.1);
+		tracker.arrive();
+		expect(tracker.update(7, 1 / 60)).toEqual({ current: 7, announce: true });
+		// Back to normal afterwards: the next biome needs the hold again.
+		expect(tracker.update(9, 1 / 60)).toBeNull();
+	});
+
+	it('a trip within the same biome says nothing', () => {
+		const tracker = new BiomeTracker();
+		run(tracker, 3, BIOME_HOLD_SECONDS + 0.1);
+		tracker.arrive();
+		expect(tracker.update(3, 1 / 60)).toBeNull();
+		expect(run(tracker, 5, 1)).toEqual([]);
+	});
 });

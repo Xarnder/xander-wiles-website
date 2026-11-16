@@ -1029,6 +1029,37 @@ export class CreatureRuntimeManager {
 		return { definition, profile };
 	}
 
+	/**
+	 * Fast travel while riding (Q4): moves the mount, standing still, to the ground at (x, z). It
+	 * stays the ride (never unloaded, keeps its coat); its grounding and jump start afresh so it
+	 * doesn't ease across from where it was. Returns where it now stands, or null when not riding.
+	 */
+	relocateRide(x: number, z: number): Vec3 | null {
+		const ride = this.ride;
+		const r = ride && this.logical.get(ride.id);
+		if (!ride || !r || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+		const ground = this.access.surface(x, z);
+		const at = { x, y: Number.isFinite(ground) ? ground : r.position.y, z };
+		r.position = { ...at };
+		r.target = { ...at };
+		r.intent = { ...r.intent, velocity: { x: 0, y: 0, z: 0 }, angularVelocity: 0, gait: 'idle' };
+		if (!r.spawn.persistent)
+			r.spawn = {
+				...r.spawn,
+				cellX: Math.floor(x / CREATURE_CELL_SIZE),
+				cellZ: Math.floor(z / CREATURE_CELL_SIZE)
+			};
+		ride.jump = restingRideJump();
+		this.grounding.delete(ride.id);
+		const live = this.live.get(ride.id);
+		if (live) {
+			live.compiled.object.position.set(at.x, at.y, at.z);
+			live.compiled.object.updateMatrixWorld(true);
+		}
+		this.scanAt = -1;
+		return at;
+	}
+
 	/** The rider picked up or put down a creature: lay the seat out again (it eases across). */
 	setRideCarryClearance(clearance: number): void {
 		const ride = this.ride;

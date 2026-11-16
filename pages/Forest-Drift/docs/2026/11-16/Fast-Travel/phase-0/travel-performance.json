@@ -1,0 +1,74 @@
+{
+	"trips": [
+		{
+			"distance": 1000,
+			"prepared": false,
+			"ms": 51.2,
+			"hitch": 67,
+			"settledMs": 1705
+		},
+		{
+			"distance": 3000,
+			"prepared": false,
+			"ms": 52.5,
+			"hitch": 50,
+			"settledMs": 1393
+		},
+		{
+			"distance": 5000,
+			"prepared": false,
+			"ms": 46.8,
+			"hitch": 67,
+			"settledMs": 1344
+		},
+		{
+			"distance": 4950,
+			"prepared": false,
+			"ms": 55.6,
+			"hitch": 67,
+			"settledMs": 1552
+		},
+		{
+			"distance": 5000,
+			"prepared": false,
+			"ms": 36.4,
+			"hitch": 67,
+			"settledMs": 1555
+		},
+		{
+			"distance": 1000,
+			"prepared": true,
+			"ms": 13.6,
+			"hitch": 67,
+			"settledMs": 1491
+		},
+		{
+			"distance": 3000,
+			"prepared": true,
+			"ms": 14.3,
+			"hitch": 33,
+			"settledMs": 1338
+		},
+		{
+			"distance": 4000,
+			"prepared": true,
+			"ms": 33.2,
+			"hitch": 33,
+			"settledMs": 1342
+		},
+		{
+			"distance": 4950,
+			"prepared": true,
+			"ms": 44.3,
+			"hitch": 83,
+			"settledMs": 1719
+		},
+		{
+			"distance": 5000,
+			"prepared": true,
+			"ms": 25.7,
+			"hitch": 50,
+			"settledMs": 1593
+		}
+	]
+}

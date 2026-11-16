@@ -37,12 +37,33 @@ export class BiomeTracker {
 		this.held = 0;
 		this.sinceCard = Number.POSITIVE_INFINITY;
 		this.pending = false;
+		this.arrived = false;
 	}
+
+	/**
+	 * The player jumped (fast travel): there was no border to flicker across, so the biome under them
+	 * next counts at once, without the hold, and a new one is announced whatever the card cooldown.
+	 */
+	arrive(): void {
+		this.arrived = true;
+	}
+	private arrived = false;
 
 	/** Returns a change when the current biome changes or a pending card becomes due; else null. */
 	update(dominant: number | null, dt: number): BiomeTrackerChange | null {
 		const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 1) : 0;
 		this.sinceCard += step;
+
+		if (this.arrived && dominant !== null) {
+			this.arrived = false;
+			this.candidate = null;
+			this.held = 0;
+			if (dominant === this.current) return null;
+			this.current = dominant;
+			this.pending = false;
+			this.sinceCard = 0;
+			return { current: dominant, announce: true };
+		}
 
 		if (dominant === null) {
 			const changed = this.current !== null;

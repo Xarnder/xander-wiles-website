@@ -299,6 +299,16 @@ import type { WorldRevisionCounters, WorldRuntime } from './world/WorldSerialize
 import { sanitizePlayerState } from './world/WorldSerializer';
 import { createDefaultKeyEvent, matchesAction } from './input/KeyInput';
 import {
+	TravelMemory,
+	findLanding,
+	travelPermission,
+	type Landing,
+	type LandingWater,
+	type TravelOrigin,
+	type TravelOutcome,
+	type TravelPermission
+} from './travel/FastTravel';
+import {
 	createEmptyProceduralOverrides,
 	resolveWorldRules,
 	type ProceduralWorldOverrides,
@@ -606,6 +616,14 @@ export interface ThreeSceneOptions {
  */
 /** Knocked out: the third-person camera looks down at the player lying on the floor. */
 const KNOCKED_OUT_CAMERA_PITCH = -0.8;
+
+/** Fast travel while flying (Q10): arrive this far above the surface, metres. */
+const FAST_TRAVEL_FLYING_HEIGHT = 2;
+/** Fast travel builds the terrain chunks within this many metres of the landing at once. */
+const FAST_TRAVEL_PRIME_MARGIN = 24;
+/** After a trip, terrain may use this much of each frame (ms) for up to FAST_TRAVEL_BOOST_MS. */
+const FAST_TRAVEL_TERRAIN_BUDGET_MS = 7;
+const FAST_TRAVEL_BOOST_MS = 5000;
 
 /** Riding: the first-person eye stays this far above a small mount's head, metres. */
 const RIDE_HEAD_CLEARANCE = 0.2;
@@ -2426,6 +2444,8 @@ export class ThreeScene implements WorldRuntime {
 	 * they rebuild meshes, collision and picking data themselves.
 	 */
 	private loadWorld(world: WorldDefinition): void {
+		// Go back only ever means this world (Q6).
+		this.travelMemory.clear();
 		this.applyEnvironment(world.environment, world.seed);
 		this.terrainEdits.spacing = vertexSpacingFor(
 			this.settings.chunkSize,
@@ -3212,18 +3232,153 @@ export class ThreeScene implements WorldRuntime {
 
 	/** First spawn only: walk a few rings outward until the feet are out of deep water. */
 	private dryGroundNear(x: number, z: number): { x: number; z: number } {
-		if (!this.hydrology.settings.enabled) return { x, z };
-		if (this.hydrology.waterColumnDepth(x, z) <= DEEP_WATER_DEPTH) return { x, z };
-		for (let ring = 1; ring <= 14; ring++) {
-			const radius = ring * 14;
-			for (let i = 0; i < 12; i++) {
-				const angle = (i / 12) * Math.PI * 2 + ring * 0.4;
-				const sx = x + Math.cos(angle) * radius;
-				const sz = z + Math.sin(angle) * radius;
-				if (this.hydrology.waterColumnDepth(sx, sz) <= SHALLOW_WATER_DEPTH) return { x: sx, z: sz };
+		const { x: lx, z: lz } = findLanding(x, z, this.landingWater());
+		return { x: lx, z: lz };
+	}
+
+	// ------------------------------------------------------------------ fast travel (2026-11-16 plan)
+
+	private readonly travelMemory = new TravelMemory();
+	private travelling = false;
+
+	/**
+	 * Deep and dry checks for landings. A pin can be kilometres from anything built so far, so the
+	 * water there is built first (`ensureSync`: the same regions terrain priming needs anyway).
+	 */
+	private landingWater(): LandingWater {
+		const hydrology = this.hydrology;
+		const depth = (x: number, z: number) => {
+			if (!hydrology.settings.enabled) return 0;
+			if (!hydrology.isReady(x, z)) hydrology.ensureSync(x, z);
+			return hydrology.waterColumnDepth(x, z);
+		};
+		return {
+			deep: (x, z) => depth(x, z) > DEEP_WATER_DEPTH,
+			dry: (x, z) => depth(x, z) <= SHALLOW_WATER_DEPTH
+		};
+	}
+
+	/** Whether a trip can start now, and if not, why (the Travel button's label). */
+	canFastTravel(): TravelPermission {
+		return travelPermission({
+			knockedOut: this.knockedOutAt !== null || this.health.snapshot().dead,
+			travelling: this.travelling,
+			mounting: this.controller.mountActive && !this.controller.seatedOnMount
+		});
+	}
+
+	/** Where a trip to (x, z) would land: the pin, or the nearest dry ground (the map's readout). */
+	fastTravelLanding(x: number, z: number): Landing {
+		return findLanding(x, z, this.landingWater());
+	}
+
+	/** Where Go back returns to (feet), or null before the first trip in this world. */
+	fastTravelOrigin(): { x: number; z: number } | null {
+		const last = this.travelMemory.last;
+		return last ? { x: last.x, z: last.z } : null;
+	}
+
+	/**
+	 * Fast travel (Q1, Q5): jumps straight to (x, z) on dry ground, keeping the view, flight and
+	 * whatever is carried or ridden. Remembers where it started for Go back. Async because online
+	 * the room is asked first (Phase 2).
+	 */
+	async fastTravel(x: number, z: number): Promise<TravelOutcome> {
+		if (!Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, reason: 'refused' };
+		const permission = this.canFastTravel();
+		if (!permission.ok) return permission;
+		const start = performance.now();
+		const origin = this.travelOriginHere();
+		const outcome = this.travelJump(findLanding(x, z, this.landingWater()), null, start);
+		if (outcome.ok) this.travelMemory.remember(origin);
+		return outcome;
+	}
+
+	/** Go back (Q6): returns to exactly where the last trip started; that trip becomes the new last. */
+	async goBackFromTravel(): Promise<TravelOutcome> {
+		const back = this.travelMemory.last;
+		if (!back) return { ok: false, reason: 'refused' };
+		const permission = this.canFastTravel();
+		if (!permission.ok) return permission;
+		const start = performance.now();
+		const origin = this.travelOriginHere();
+		const outcome = this.travelJump({ x: back.x, z: back.z, moved: false }, back, start);
+		if (outcome.ok) this.travelMemory.remember(origin);
+		return outcome;
+	}
+
+	private travelOriginHere(): TravelOrigin {
+		const { x, y, z } = this.controller.worldPosition;
+		return {
+			x,
+			y,
+			z,
+			yaw: this.controller.getYaw(),
+			pitch: this.controller.getPitch(),
+			flying: this.controller.isFlying()
+		};
+	}
+
+	/**
+	 * The jump itself. Builds the ground at the landing at once (as respawning does), so feet are on
+	 * it the very next frame; trees and far terrain stream in after. `exact` (Go back) restores a
+	 * remembered eye position, view and flight instead of landing on the surface.
+	 */
+	private travelJump(landing: Landing, exact: TravelOrigin | null, start: number): TravelOutcome {
+		this.travelling = true;
+		try {
+			const eyeHeight = this.settings.player.eyeHeight;
+			// Q11: sitting on furniture ends as if you stood up.
+			if (this.miniBuildInteraction.controller.state.type !== 'none')
+				this.miniBuildInteraction.controller.exit();
+			this.terrainManager.primeNear(landing.x, landing.z, FAST_TRAVEL_PRIME_MARGIN);
+			this.terrainManager.boostGeneration(FAST_TRAVEL_TERRAIN_BUDGET_MS, FAST_TRAVEL_BOOST_MS);
+			const riding = this.ride.riding && this.controller.seatedOnMount;
+			if (riding) {
+				// Q4: the mount comes too, standing on the ground there; the eye follows its seat.
+				const at = this.creatures.relocateRide(landing.x, landing.z);
+				if (at) {
+					const seat = this.creatures.rideFrame();
+					const eyeY = seat ? seat.anchor.y + SEATED_EYE_ABOVE_SUPPORT : at.y + eyeHeight;
+					this.controller.moveWithMount({ x: at.x, y: eyeY, z: at.z });
+					// Getting off falls back to here, not to where the ride began.
+					this.rideStart.set(at.x, at.y + eyeHeight, at.z);
+				}
+			} else if (exact) {
+				this.controller.restoreState(exact, exact.yaw, exact.pitch);
+				this.controller.setFlying(exact.flying);
+			} else if (this.controller.isFlying()) {
+				// Q10: still flying, a little above whatever is there.
+				const surface = this.worldSurfaceSampler.getSupportingSurfaceY(
+					landing.x,
+					landing.z,
+					Infinity
+				);
+				this.controller.restoreState(
+					{ x: landing.x, y: surface + eyeHeight + FAST_TRAVEL_FLYING_HEIGHT, z: landing.z },
+					this.controller.getYaw(),
+					this.controller.getPitch()
+				);
+			} else {
+				this.controller.spawn(landing.x, landing.z);
 			}
+			// The biome there counts at once (no 3 s hold): the name and card are right on arrival.
+			this.biomeTracker.arrive();
+			// Trees, grass and the rest of the terrain stream in from the next frame (Q5: an instant cut).
+			const position = this.controller.worldPosition;
+			return {
+				ok: true,
+				x: position.x,
+				y: position.y - eyeHeight,
+				z: position.z,
+				moved: landing.moved,
+				carrying: this.carry.carrying,
+				riding: this.ride.riding,
+				ms: performance.now() - start
+			};
+		} finally {
+			this.travelling = false;
 		}
-		return { x, z };
 	}
 
 	/**

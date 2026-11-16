@@ -38,6 +38,9 @@ export class TerrainManager {
 	private generating: { job: ChunkJob; chunk: TerrainChunk; rows: Generator<void> } | null = null;
 	/** Leave most of the 16.7 ms frame for scene updates and drawing. */
 	private readonly generationBudgetMs = 2;
+	/** A larger budget for a few seconds after a jump (fast travel), until the queue empties. */
+	private boostBudgetMs = 0;
+	private boostUntil = 0;
 
 	/** Kept in sync with `active` incrementally (push/splice) so callers raycasting every frame never allocate a fresh array. */
 	private readonly activeMeshes: THREE.Mesh[] = [];
@@ -164,6 +167,49 @@ export class TerrainManager {
 
 		const jobs = this.queue.takeWithinDistance(chunkX, chunkZ, immediateRadius * immediateRadius);
 		for (const job of jobs) this.materializeJob(job, true);
+	}
+
+	/**
+	 * Fast travel: like `primeAround`, but builds only the chunks within `margin` metres of the point
+	 * (the one underfoot, plus a neighbour or three near its edges), so the cut stays short. The
+	 * rest of the 3 × 3 streams in nearest-first over the next frames.
+	 */
+	primeNear(worldX: number, worldZ: number, margin: number): void {
+		this.cancelGeneration(true);
+		const size = this.settings.chunkSize;
+		const chunkX = worldToChunkCoord(worldX, size);
+		const chunkZ = worldToChunkCoord(worldZ, size);
+
+		this.refreshActiveArea(chunkX, chunkZ);
+		this.lastPlayerChunkX = chunkX;
+		this.lastPlayerChunkZ = chunkZ;
+		this.hydrologySync?.(worldX, worldZ);
+
+		for (const job of this.queue.takeWithinDistance(chunkX, chunkZ, 2)) {
+			const dx = Math.max(job.chunkX * size - worldX, 0, worldX - (job.chunkX + 1) * size);
+			const dz = Math.max(job.chunkZ * size - worldZ, 0, worldZ - (job.chunkZ + 1) * size);
+			if (Math.hypot(dx, dz) <= margin) this.materializeJob(job, true);
+			else this.queue.enqueue(job.chunkX, job.chunkZ, job.revision);
+		}
+	}
+
+	/**
+	 * After a jump the whole view refills at once. For `durationMs` (or until the queue empties) each
+	 * frame may spend up to `budgetMs` generating instead of the usual 2 ms: frames get a little
+	 * longer while the land fills in seconds sooner.
+	 */
+	boostGeneration(budgetMs: number, durationMs: number): void {
+		this.boostBudgetMs = Math.max(this.generationBudgetMs, budgetMs);
+		this.boostUntil = this.now() + Math.max(0, durationMs);
+	}
+
+	private currentBudgetMs(): number {
+		if (this.boostUntil === 0) return this.generationBudgetMs;
+		if (this.now() >= this.boostUntil || (this.queue.size === 0 && this.generating === null)) {
+			this.boostUntil = 0;
+			return this.generationBudgetMs;
+		}
+		return this.boostBudgetMs;
 	}
 
 	/** Non-topology settings changed (noise, shape, seed, warp): regenerate visible chunks in place, progressively. */
@@ -378,7 +424,7 @@ export class TerrainManager {
 				this.generating = null;
 				completed++;
 			}
-			if (this.now() - started >= this.generationBudgetMs) return;
+			if (this.now() - started >= this.currentBudgetMs()) return;
 		}
 	}
 

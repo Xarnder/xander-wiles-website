@@ -252,6 +252,23 @@ export class FirstPersonController {
 		return this.mount !== null;
 	}
 
+	/** Seated on the mount: the climb on has finished and the climb off hasn't started. */
+	get seatedOnMount(): boolean {
+		return this.mount?.phase === 'riding';
+	}
+
+	/**
+	 * Fast travel while riding: the mount was moved, so the eye jumps with it. Counts as a teleport
+	 * (others snap rather than slide); from the next frame the eye follows the seat again.
+	 */
+	moveWithMount(eye: { x: number; y: number; z: number }): void {
+		if (![eye.x, eye.y, eye.z].every(Number.isFinite)) return;
+		this.countTeleport(eye.x, eye.y, eye.z);
+		this.worldPosition.set(eye.x, eye.y, eye.z);
+		this.keys.clear();
+		this.syncCamera();
+	}
+
 	/**
 	 * Climbs onto `seat`: the eye blends there over `duration` seconds, then follows it. Mouse look
 	 * stays free (world-relative, Q11 A); movement keys go to `rideInput` instead of the feet, and
