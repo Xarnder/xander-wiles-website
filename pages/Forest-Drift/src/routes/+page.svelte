@@ -128,6 +128,8 @@
 	import LocatorBar from '#lib/components/LocatorBar.svelte';
 	import BiomeIndicator from '#lib/components/BiomeIndicator.svelte';
 	import BiomeMinimap from '#lib/components/BiomeMinimap.svelte';
+	import BiomeMapOverlay from '#lib/components/BiomeMapOverlay.svelte';
+	import type { FullMapHost } from '#lib/game/map/BiomeMapSystem';
 	import ConfirmBiomesDialog from '#lib/components/ConfirmBiomesDialog.svelte';
 	import RestorePointsDialog from '#lib/components/RestorePointsDialog.svelte';
 	import JoinWorldDialog from '#lib/components/JoinWorldDialog.svelte';
@@ -468,6 +470,33 @@
 	let mpSaving = $state(false);
 	/** The locator bar's element, handed to the multiplayer session to place markers in. */
 	let locatorElement = $state<HTMLDivElement | null>(null);
+	/** The full-screen biome map while it's open (biome minimap Phase 2). */
+	let biomeMapHost = $state<FullMapHost | null>(null);
+	function openFullMap() {
+		const scene = session?.scene;
+		if (!scene || biomeMapHost) return;
+		scene.closePlacementCustomize();
+		scene.closePlacementHeight();
+		scene.setTouchMovement(0, 0);
+		document.exitPointerLock?.();
+		showHelp = false;
+		paused = false;
+		biomeMapHost = {
+			client: scene.openFullBiomeMap(),
+			pose: () => scene.mapPose(),
+			markers: () => scene.mapMarkers(),
+			biomeNameAt: (x, z) => scene.biomeNameAt(x, z),
+			setTileListener: (listener) => (scene.biomeMap.onTile = listener)
+		};
+	}
+	function closeFullMap() {
+		if (!biomeMapHost) return;
+		biomeMapHost = null;
+		session?.scene.closeFullBiomeMap();
+	}
+	$effect(() => {
+		if (screen !== 'game' && biomeMapHost) biomeMapHost = null;
+	});
 	// Corner HUD (tutorial buttons) steps left of the biome minimap while it's shown.
 	$effect(() => {
 		const map = screen === 'game' && stats?.biomeMap?.visible ? stats.biomeMap.sizePx + 12 : 0;
@@ -487,6 +516,7 @@
 			multiplayerMenuOpen ||
 			settingsOpen ||
 			creatureLabOpen ||
+			biomeMapHost !== null ||
 			midiOpen ||
 			paintPaletteOpen ||
 			placementCustomizeOpen ||
@@ -756,6 +786,13 @@
 			if (matchesAction(event, 'ui.back')) closeCreatureLab();
 			return;
 		}
+		if (biomeMapHost) {
+			if (matchesAction(event, 'ui.back') || matchesAction(event, 'map.open')) {
+				event.preventDefault();
+				closeFullMap();
+			}
+			return;
+		}
 		if (midiOpen) {
 			if (matchesAction(event, 'ui.back')) closeMidi();
 			return;
@@ -784,6 +821,12 @@
 		if (matchesAction(event, 'multiplayer.stopTracking') && trackedPlayerId) {
 			event.preventDefault();
 			multiplayerSession?.trackPlayer(null);
+			return;
+		}
+		if (matchesAction(event, 'map.open')) {
+			if (!session || miniBuildEditor || event.repeat) return;
+			event.preventDefault();
+			openFullMap();
 			return;
 		}
 		// The biome minimap (biome minimap Phase 1): show/hide, and zoom while it's shown.
@@ -2518,6 +2561,7 @@
 					biomeName={currentBiomeName}
 					onElements={(elements) => session?.scene.setBiomeMapElements(elements)}
 					onZoom={(delta) => session?.scene.zoomBiomeMap(delta)}
+					onOpen={openFullMap}
 				/>
 			{/if}
 			{#if stats?.dayCycleEnabled}
@@ -3115,6 +3159,15 @@
 					onClose={closeMidi}
 				/>{/if}
 		</div>
+		{#if biomeMapHost}
+			<BiomeMapOverlay
+				host={biomeMapHost}
+				biomes={stats?.biomeMap?.biomes ?? true}
+				grid={session?.scene.biomeMapPrefs.grid ?? true}
+				startZoom={session?.scene.biomeMapPrefs.zoom ?? 2}
+				onClose={closeFullMap}
+			/>
+		{/if}
 		{#if paused && !settingsOpen && !showHelp && !creatureLabOpen}
 			<PauseMenu
 				worldName={currentWorldName}
@@ -3181,6 +3234,7 @@
 				onOpenControls={() => (showHelp = true)}
 				onOpenKeyBindings={openKeyBindings}
 				onOpenCreatureLab={openCreatureLab}
+				onOpenMap={openFullMap}
 				onOpenDebug={() => {
 					debugControlsOpen = true;
 					paused = false;

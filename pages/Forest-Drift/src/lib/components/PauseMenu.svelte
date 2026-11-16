@@ -29,6 +29,8 @@
 		/** The full-screen key mapping screen. */
 		onOpenKeyBindings: () => void;
 		onOpenCreatureLab: () => void;
+		/** The full-screen biome map (biome minimap Phase 2). */
+		onOpenMap?: () => void;
 		onOpenDebug: () => void;
 		onOpenMultiplayer: () => void;
 		/** Waypoints: the creature waypoint first, then the player's own. */
@@ -71,6 +73,7 @@
 		onOpenControls,
 		onOpenKeyBindings,
 		onOpenCreatureLab,
+		onOpenMap,
 		onOpenDebug,
 		onOpenMultiplayer,
 		waypoints = [],
@@ -230,6 +233,7 @@
 					<button data-testid="pause-controls" onclick={onOpenControls}>Help</button>
 					<button data-testid="pause-key-bindings" onclick={onOpenKeyBindings}>Controls</button>
 					<button data-testid="pause-creature-lab" onclick={onOpenCreatureLab}>Creature Lab</button>
+					{#if onOpenMap}<button data-testid="pause-map" onclick={onOpenMap}>Map</button>{/if}
 					<button data-testid="pause-waypoints" onclick={() => (panel = 'waypoints')}>
 						Waypoints
 					</button>

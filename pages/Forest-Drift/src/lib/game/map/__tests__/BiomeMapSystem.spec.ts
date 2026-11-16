@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	BiomeMapSystem,
+	compassDirection,
+	formatDistance,
+	FULL_MAP_ZOOM_METRES,
+	fullMapViewport,
 	formatMapCoordinates,
 	formatMapWidth,
 	gridSpacing,
@@ -37,6 +41,34 @@ describe('minimap maths', () => {
 		expect(formatMapCoordinates(-0.2, 7)).toBe('x 0 · z 7');
 		expect(formatMapWidth(500)).toBe('500 m');
 		expect(formatMapWidth(2000)).toBe('2 km');
+	});
+});
+
+describe('full map maths', () => {
+	it('keeps a full-screen view to a modest number of tiles at every zoom', () => {
+		for (const [w, h] of [
+			[1280, 720],
+			[1920, 1080],
+			[390, 844]
+		])
+			for (let zoom = 0; zoom < FULL_MAP_ZOOM_METRES.length; zoom++) {
+				const view = fullMapViewport(zoom, w, h, 0, 0);
+				expect(view.scale).toBeGreaterThan(0.99);
+				// At most ~4.3× (500 m across a 1080 px tall screen, from 2 m tiles): soft, not pixelated.
+				expect(view.scale).toBeLessThan(4.5);
+				const tile = 128 * view.scale; // CSS px per tile
+				const tiles = (Math.ceil(w / tile) + 1) * (Math.ceil(h / tile) + 1);
+				expect(tiles, `${w}×${h} zoom ${zoom}`).toBeLessThanOrEqual(70);
+			}
+	});
+
+	it('names directions with north as −Z, and distances in m or km', () => {
+		expect(compassDirection(0, 0, 0, -100)).toBe('north');
+		expect(compassDirection(0, 0, 100, 0)).toBe('east');
+		expect(compassDirection(0, 0, -70, 70)).toBe('south-west');
+		expect(formatDistance(640.4)).toBe('640 m');
+		expect(formatDistance(2440)).toBe('2.4 km');
+		expect(formatDistance(12_600)).toBe('13 km');
 	});
 });
 
@@ -123,6 +155,24 @@ describe('BiomeMapSystem', () => {
 		expect(map.workerRunning).toBe(true);
 		map.attach(null);
 		expect(raw.dispose).toHaveBeenCalled();
+		expect(map.workerRunning).toBe(false);
+	});
+
+	it('shares its worker with the full map, which keeps it alive until both are closed', () => {
+		const { client, raw } = fakeClient();
+		let created = 0;
+		const map = new BiomeMapSystem(() => (created++, client));
+		expect(map.openFull(world())).toBe(client);
+		expect(map.workerRunning).toBe(true);
+		map.attach(fakeElements().elements);
+		map.closeFull();
+		expect(map.workerRunning).toBe(true); // the minimap still shows
+		map.attach(null);
+		expect(map.workerRunning).toBe(false);
+		expect(raw.dispose).toHaveBeenCalledTimes(1);
+		map.openFull(world());
+		map.closeFull();
+		expect(created).toBe(2);
 		expect(map.workerRunning).toBe(false);
 	});
 

@@ -12,7 +12,8 @@
 		biomes,
 		biomeName,
 		onElements,
-		onZoom
+		onZoom,
+		onOpen
 	}: {
 		/** CSS pixels across. */
 		size: number;
@@ -21,6 +22,8 @@
 		biomeName: string | null;
 		onElements: (elements: MinimapElements | null) => void;
 		onZoom: (delta: number) => void;
+		/** Tap or click the map: open the full map (Phase 2, Q14). */
+		onOpen: () => void;
 	} = $props();
 
 	let canvas = $state<HTMLCanvasElement>();
@@ -36,7 +39,7 @@
 </script>
 
 <div class="minimap" data-testid="biome-minimap" style:--map-size="{size}px">
-	<div class="frame" aria-hidden="true">
+	<div class="frame" aria-hidden="true" onclick={onOpen} data-testid="biome-minimap-open">
 		<canvas bind:this={canvas} data-testid="biome-minimap-canvas"></canvas>
 		<span class="north">N</span>
 		<span class="arrow" bind:this={arrow} data-testid="biome-minimap-arrow"></span>
@@ -84,6 +87,8 @@
 	}
 	.frame {
 		position: relative;
+		pointer-events: auto;
+		cursor: pointer;
 		width: var(--map-size);
 		height: var(--map-size);
 	}

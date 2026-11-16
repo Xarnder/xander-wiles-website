@@ -29,6 +29,13 @@ const LABEL_INTERVAL_MS = 250;
 /** The world's settings are compared this often (ms), to notice a changed world. */
 const WORLD_CHECK_MS = 1000;
 
+/**
+ * Metres across the full map's shorter side at each zoom step (Q4: out to 16 km). It starts at
+ * 500 m: a whole screen of 250 m would stretch the finest tiles about 6×. Step n is twice the
+ * minimap's step n, so the full map opens one step further out than the minimap.
+ */
+export const FULL_MAP_ZOOM_METRES = [500, 1000, 2000, 4000, 8000, 16000] as const;
+
 export const clampZoom = (zoom: number) =>
 	Math.max(0, Math.min(MINIMAP_ZOOM_METRES.length - 1, Math.round(zoom)));
 
@@ -57,6 +64,46 @@ export function minimapViewport(
 	};
 }
 
+/**
+ * The full map's tile level and scale. Its view is much larger than the minimap's, so tiles may be
+ * enlarged up to 2.5×, which keeps a full screen to about 40 tiles (the cache holds 120). The
+ * closest step can enlarge the finest tiles up to ~4.3× on a tall screen: soft, not pixelated.
+ */
+export function fullMapViewport(
+	zoom: number,
+	width: number,
+	height: number,
+	centreX: number,
+	centreZ: number
+): MapViewport {
+	const step = Math.max(0, Math.min(FULL_MAP_ZOOM_METRES.length - 1, Math.round(zoom)));
+	const wanted = FULL_MAP_ZOOM_METRES[step] / Math.max(1, Math.min(width, height));
+	let level = 0;
+	while (level + 1 < MAP_LEVELS && metresPerPixel(level + 1) <= wanted * 2.5) level++;
+	return { level, centreX, centreZ, width, height, scale: metresPerPixel(level) / wanted };
+}
+
+/** Compass direction (8 points) from one point to another; north is −Z. */
+export function compassDirection(fromX: number, fromZ: number, toX: number, toZ: number): string {
+	const bearing = (Math.atan2(toX - fromX, fromZ - toZ) * 180) / Math.PI;
+	const points = [
+		'north',
+		'north-east',
+		'east',
+		'south-east',
+		'south',
+		'south-west',
+		'west',
+		'north-west'
+	];
+	return points[Math.round(((bearing + 360) % 360) / 45) % 8];
+}
+
+export const formatDistance = (metres: number) =>
+	metres < 1000
+		? `${Math.round(metres)} m`
+		: `${(metres / 1000).toFixed(metres < 10_000 ? 1 : 0)} km`;
+
 /** Grid spacing (m): about four or five lines across, at a round number (Q2). */
 export function gridSpacing(metresAcross: number): number {
 	for (const step of [50, 100, 250, 500, 1000, 2000]) if (step >= metresAcross / 5) return step;
@@ -83,6 +130,16 @@ export interface MapMarker {
 	dim?: boolean;
 }
 
+/** What the full-screen map (`BiomeMapOverlay.svelte`) needs from the game. */
+export interface FullMapHost {
+	client: BiomeMapClient;
+	pose(): { x: number; z: number; yaw: number };
+	markers(): MapMarker[];
+	biomeNameAt(x: number, z: number): string | null;
+	/** Called when a tile arrives (to repaint); null to stop. */
+	setTileListener(listener: (() => void) | null): void;
+}
+
 /** The minimap's DOM, from `BiomeMinimap.svelte`. */
 export interface MinimapElements {
 	canvas: HTMLCanvasElement;
@@ -102,6 +159,8 @@ export interface MinimapCost {
 export class BiomeMapSystem {
 	private client: BiomeMapClient | null = null;
 	private elements: MinimapElements | null = null;
+	/** The full map is open: it shares this client, so the worker stays while either map is. */
+	private fullOpen = false;
 	private worldKey = '';
 	private lastWorldCheck = -Infinity;
 	private zoom = DEFAULT_MINIMAP_ZOOM;
@@ -134,9 +193,7 @@ export class BiomeMapSystem {
 	attach(elements: MinimapElements | null): void {
 		this.elements = elements;
 		if (!elements) {
-			this.client?.dispose();
-			this.client = null;
-			this.worldKey = '';
+			if (!this.fullOpen) this.release();
 			return;
 		}
 		this.dirty = true;
@@ -173,17 +230,7 @@ export class BiomeMapSystem {
 		const start = performance.now();
 		if (now - this.lastWorldCheck >= WORLD_CHECK_MS) {
 			this.lastWorldCheck = now;
-			const settings = world();
-			const key = JSON.stringify(settings);
-			if (key !== this.worldKey) {
-				this.worldKey = key;
-				if (!this.client) {
-					this.client = this.createClient();
-					this.client.onTile = () => (this.dirty = true);
-				}
-				this.client.init(settings);
-				this.dirty = true;
-			}
+			this.ensureClient(world());
 		}
 		const view = minimapViewport(this.zoom, this.sizePx, x, z);
 		const pxPerMetre = view.scale / metresPerPixel(view.level);
@@ -295,8 +342,50 @@ export class BiomeMapSystem {
 		ctx.globalAlpha = 1;
 	}
 
+	/** Starts the worker for a world, or restarts it when the world's settings changed. */
+	private ensureClient(settings: MapWorldSettings): BiomeMapClient {
+		const key = JSON.stringify(settings);
+		if (!this.client) {
+			this.client = this.createClient();
+			this.client.onTile = () => {
+				this.dirty = true;
+				this.onTile?.();
+			};
+		}
+		if (key !== this.worldKey) {
+			this.worldKey = key;
+			this.client.init(settings);
+			this.dirty = true;
+		}
+		return this.client;
+	}
+
+	/** Also told when a tile arrives (the full map repaints). */
+	onTile: (() => void) | null = null;
+
+	/** The full map opened: returns the shared tile client (started if the minimap is off). */
+	openFull(settings: MapWorldSettings): BiomeMapClient {
+		this.fullOpen = true;
+		return this.ensureClient(settings);
+	}
+
+	/** The full map closed: the worker stops too unless the minimap is showing. */
+	closeFull(): void {
+		this.fullOpen = false;
+		this.onTile = null;
+		if (!this.elements) this.release();
+	}
+
+	private release(): void {
+		this.client?.dispose();
+		this.client = null;
+		this.worldKey = '';
+	}
+
 	/** Frees the worker and tiles (the world closed). */
 	dispose(): void {
-		this.attach(null);
+		this.fullOpen = false;
+		this.elements = null;
+		this.release();
 	}
 }

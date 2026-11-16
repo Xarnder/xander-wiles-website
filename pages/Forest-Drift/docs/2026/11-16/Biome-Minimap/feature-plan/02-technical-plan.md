@@ -1,7 +1,7 @@
 # Forest Drift — Biome Minimap: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 4: Phases 0–1 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): the full map has pan, zoom and a pointer readout only (Q11), and both maps get a grid and coordinates (Q2). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 5: Phases 0–2 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): the full map has pan, zoom and a pointer readout only (Q11), and both maps get a grid and coordinates (Q2). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -25,6 +25,13 @@ Paths are relative to `pages/Forest-Drift/`.
 8. **The minimap picks the coarsest tile level at least as sharp as the screen** (drawn at 0.5–2×), not "no finer than the screen" (1–2×).
 9. **Preferences have their own store** (`biomeMapPreferences.ts`), with a "not chosen yet" state for Q6.
 10. **The tutorial buttons and day clock step aside** while the minimap is shown (`--fd-map-inset`).
+
+**Phase 2 (2026-11-16):**
+
+11. **The full map opens with `` ` ``** (rebindable), from the pause menu, or by tapping or clicking the minimap.
+12. **The full map zooms 500 m to 16 km** (six steps, twice the minimap's), not from 250 m, and it may enlarge tiles up to 2.5× to keep a screen to about 40 tiles.
+13. **One tile worker serves both maps** (`openFull` / `closeFull`).
+14. **Views request only the tiles their width and height need**, not a square of the longer side.
 
 ## 1. Summary
 

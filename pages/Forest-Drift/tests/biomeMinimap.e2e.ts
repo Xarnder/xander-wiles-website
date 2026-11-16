@@ -147,3 +147,76 @@ test('costs the main thread almost nothing on a long flight', async ({ page }) =
 	expect(result.frames).toBeGreaterThan(20);
 	expect(result.averageMs).toBeLessThan(0.5);
 });
+
+test('the full map opens with `, pauses alone, reads out what you point at, pans, zooms and closes', async ({
+	page
+}) => {
+	test.setTimeout(180_000);
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(String(e)));
+	await page.goto('/');
+	await createAndEnterWorld(page, { name: 'Full map', seed: 'minimap-e2e' });
+	await expect(page.getByTestId('biome-minimap')).toBeVisible({ timeout: 15_000 });
+	await page.keyboard.press('Backquote');
+	const map = page.getByTestId('biome-full-map');
+	await expect(map).toBeVisible();
+	expect(await sceneValue(page, (s) => s.simulationPaused)).toBe(true);
+	// Opens one step further out than the minimap (1 km → 2 km), centred on you.
+	await expect(page.getByTestId('biome-full-map-scale')).toHaveText('2 km across');
+	await expect(page.getByTestId('biome-full-map-biome')).not.toHaveText('—', { timeout: 20_000 });
+	await expect(page.getByTestId('biome-full-map-distance')).toHaveText('You are here');
+	await expect
+		.poll(() => sceneValue(page, (s) => s.biomeMap.tileClient?.cachedCount ?? 0), {
+			timeout: 30_000
+		})
+		.toBeGreaterThan(4);
+	if (process.env.MINIMAP_SHOTS)
+		await page.screenshot({ path: `${process.env.MINIMAP_SHOTS}/full-map.png` });
+
+	// Pointing somewhere else: its own biome, distance, direction and coordinates.
+	const box = (await page.getByTestId('biome-full-map-canvas').boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2);
+	await expect(page.getByTestId('biome-full-map-distance')).toContainText('east');
+	const before = await page.getByTestId('biome-full-map-coordinates').textContent();
+	// Dragging pans: the same screen point is now a different place.
+	await page.mouse.down();
+	await page.mouse.move(box.x + box.width / 2 + 50, box.y + box.height / 2 + 120, { steps: 5 });
+	await page.mouse.up();
+	await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2);
+	await expect(page.getByTestId('biome-full-map-coordinates')).not.toHaveText(before ?? '');
+
+	await page.getByTestId('biome-full-map-zoom-out').click();
+	await expect(page.getByTestId('biome-full-map-scale')).toHaveText('4 km across');
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.wheel(0, -120);
+	await expect(page.getByTestId('biome-full-map-scale')).toHaveText('2 km across');
+	await page.keyboard.press('Minus');
+	await expect(page.getByTestId('biome-full-map-scale')).toHaveText('4 km across');
+
+	await page.keyboard.press('Escape');
+	await expect(map).toBeHidden();
+	expect(await sceneValue(page, (s) => s.simulationPaused)).toBe(false);
+	await expect(page.getByTestId('pause-menu')).toBeHidden();
+
+	// From the pause menu, and by clicking the minimap.
+	await page.keyboard.press('Escape');
+	await page.getByTestId('pause-map').click();
+	await expect(map).toBeVisible();
+	await page.getByTestId('biome-full-map-close').click();
+	await expect(map).toBeHidden();
+	await page.getByTestId('biome-minimap-open').click();
+	await expect(map).toBeVisible();
+	await page.keyboard.press('Backquote');
+	await expect(map).toBeHidden();
+
+	// With the minimap off, the full map still works and stops its worker when closed.
+	await page.keyboard.press('Semicolon');
+	await expect(page.getByTestId('biome-minimap')).toBeHidden();
+	expect(await sceneValue(page, (s) => s.biomeMap.workerRunning)).toBe(false);
+	await page.keyboard.press('Backquote');
+	await expect(map).toBeVisible();
+	expect(await sceneValue(page, (s) => s.biomeMap.workerRunning)).toBe(true);
+	await page.keyboard.press('Escape');
+	expect(await sceneValue(page, (s) => s.biomeMap.workerRunning)).toBe(false);
+	expect(errors).toEqual([]);
+});

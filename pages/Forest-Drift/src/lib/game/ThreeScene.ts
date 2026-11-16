@@ -47,6 +47,7 @@ import {
 } from './map/BiomeMapSystem';
 import { loadBiomeMapPreferences, saveBiomeMapPreferences } from './map/biomeMapPreferences';
 import type { MapWorldSettings } from './map/mapWorld';
+import type { BiomeMapClient } from './map/BiomeMapClient';
 import type { Vec3Like } from './player/creatureProjectile';
 import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
 import { clearCoatCache } from './creatures/biome/CreatureBiomeCoat';
@@ -232,6 +233,7 @@ import { writeBiomeMapColor, writeClimateColor } from './biomes/biomeDebugColor'
 import { getBiomeDefinition } from './biomes/biomeDefinitions';
 import { BiomeTracker } from './biomes/BiomeTracker';
 import {
+	BIOME_COUNT,
 	BIOME_IDS,
 	createBiomeWeightVector,
 	createClimateSample,
@@ -241,6 +243,7 @@ import {
 	type BiomeId,
 	type BiomeSettings
 } from './biomes/BiomeTypes';
+import { BIOME_DEFINITIONS } from './biomes/biomeDefinitions';
 import { BaseTerrainSampler } from './hydrology/BaseTerrainSampler';
 import { HydrologyDebugView } from './hydrology/HydrologyDebugView';
 import { HydrologySystem } from './hydrology/HydrologySystem';
@@ -4473,6 +4476,34 @@ export class ThreeScene implements WorldRuntime {
 	biomeMapSizePx(): number {
 		const narrow = typeof window !== 'undefined' && window.innerWidth < SMALL_SCREEN_WIDTH;
 		return MINIMAP_SIZES[narrow ? 'small' : this.biomeMapPrefs.size];
+	}
+
+	/** The full-screen map opened (Phase 2): the shared tile client, started if needed. */
+	openFullBiomeMap(): BiomeMapClient {
+		return this.biomeMap.openFull(this.biomeMapWorld());
+	}
+
+	closeFullBiomeMap(): void {
+		this.biomeMap.closeFull();
+	}
+
+	private readonly mapWeights = new Float32Array(BIOME_COUNT);
+	/** The biome's name at a world point (the full map's pointer readout), or null with biomes off. */
+	biomeNameAt(x: number, z: number): string | null {
+		if (!this.biomeField.isEnabled()) return null;
+		const index = this.biomeField.classifyPoint(x, z, this.mapWeights);
+		return BIOME_DEFINITIONS[index]?.name ?? null;
+	}
+
+	/** Where the player is and faces, for the full map. */
+	mapPose(): { x: number; z: number; yaw: number } {
+		const p = this.controller.worldPosition;
+		return { x: p.x, z: p.z, yaw: this.controller.getYaw() };
+	}
+
+	/** Other players and active waypoints, for the full map. */
+	mapMarkers(): MapMarker[] {
+		return this.biomeMapMarkers();
 	}
 
 	/** The minimap's elements while it's on screen, or null: the worker and tiles are freed. */

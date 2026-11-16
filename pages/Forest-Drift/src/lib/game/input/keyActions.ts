@@ -941,6 +941,13 @@ export const KEY_ACTIONS = [
 		keys: [key('Semicolon')]
 	}),
 	action({
+		id: 'map.open',
+		label: 'Open the biome map',
+		category: 'interface',
+		contexts: MOVING,
+		keys: [key('Backquote')]
+	}),
+	action({
 		id: 'map.zoomIn',
 		label: 'Zoom biome map in',
 		category: 'interface',

@@ -258,6 +258,10 @@
 					'Show or hide the biome map in the corner, and zoom it in or out (250 m to 8 km across).'
 				],
 				[
+					k('map.open'),
+					'Open the full biome map: drag to pan, scroll to zoom, point at a place to see its biome, distance and direction. Esc closes it.'
+				],
+				[
 					k('ui.screenshot'),
 					'Capture a best-quality PNG: temporarily use Ultra, wait for loading, save the image and restore your graphics preference.'
 				]

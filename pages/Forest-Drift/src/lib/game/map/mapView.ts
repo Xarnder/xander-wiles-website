@@ -15,8 +15,11 @@ export interface MapViewport {
 	scale: number;
 }
 
-const metresAcross = (view: MapViewport) =>
-	(Math.max(view.width, view.height) / view.scale) * metresPerPixel(view.level);
+/** The view's size in world metres, [across, down]. */
+const metresOf = (view: MapViewport): [number, number] => {
+	const m = metresPerPixel(view.level) / view.scale;
+	return [view.width * m, view.height * m];
+};
 
 /**
  * The tiles a view wants, in request order. While any of the view's own tiles is missing, the next
@@ -27,17 +30,19 @@ export function wantedTiles(
 	client: Pick<BiomeMapClient<unknown>, 'get'>,
 	view: MapViewport
 ): MapTileRef[] {
-	const across = metresAcross(view);
-	const own = tilesForView(view.level, view.centreX, view.centreZ, across).map((t) => ({
+	const [across, down] = metresOf(view);
+	const own = tilesForView(view.level, view.centreX, view.centreZ, across, down).map((t) => ({
 		level: view.level,
 		...t
 	}));
 	const missing = own.some(({ level, tx, tz }) => !client.get(level, tx, tz));
 	if (!missing || view.level + 1 >= MAP_LEVELS) return own;
-	const parents = tilesForView(view.level + 1, view.centreX, view.centreZ, across).map((t) => ({
-		level: view.level + 1,
-		...t
-	}));
+	const parents = tilesForView(view.level + 1, view.centreX, view.centreZ, across, down).map(
+		(t) => ({
+			level: view.level + 1,
+			...t
+		})
+	);
 	return [...parents, ...own];
 }
 
@@ -67,9 +72,9 @@ export function paintView<B>(
 ): number {
 	const mpp = metresPerPixel(view.level);
 	const cssPerMetre = view.scale / mpp;
-	const across = metresAcross(view);
+	const [across, down] = metresOf(view);
 	let blank = 0;
-	for (const { tx, tz } of tilesForView(view.level, view.centreX, view.centreZ, across)) {
+	for (const { tx, tz } of tilesForView(view.level, view.centreX, view.centreZ, across, down)) {
 		const size = tileMetres(view.level);
 		// Whole pixels, each tile meeting the next exactly: no hairline seams between tiles.
 		const left = Math.round((tx * size - view.centreX) * cssPerMetre + view.width / 2);

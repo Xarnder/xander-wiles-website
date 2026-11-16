@@ -32,21 +32,24 @@ export const tileKey = (generation: number, level: number, tx: number, tz: numbe
 	`${generation}:${level}:${tx}:${tz}`;
 
 /**
- * The tiles covering a square view of `widthMetres` centred on (x, z) at a level, nearest to the
+ * The tiles covering a view of `widthMetres` × `heightMetres` (square by default) centred on
+ * (x, z) at a level, nearest to the
  * centre first (the order they're drawn in, §4.3).
  */
 export function tilesForView(
 	level: number,
 	centreX: number,
 	centreZ: number,
-	widthMetres: number
+	widthMetres: number,
+	heightMetres = widthMetres
 ): { tx: number; tz: number }[] {
 	const size = tileMetres(level);
-	const half = widthMetres / 2;
-	const x0 = Math.floor((centreX - half) / size),
-		x1 = Math.floor((centreX + half) / size);
-	const z0 = Math.floor((centreZ - half) / size),
-		z1 = Math.floor((centreZ + half) / size);
+	const halfX = widthMetres / 2,
+		halfZ = heightMetres / 2;
+	const x0 = Math.floor((centreX - halfX) / size),
+		x1 = Math.floor((centreX + halfX) / size);
+	const z0 = Math.floor((centreZ - halfZ) / size),
+		z1 = Math.floor((centreZ + halfZ) / size);
 	const out: { tx: number; tz: number; d: number }[] = [];
 	for (let tz = z0; tz <= z1; tz++)
 		for (let tx = x0; tx <= x1; tx++)
