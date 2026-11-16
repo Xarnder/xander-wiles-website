@@ -183,6 +183,24 @@ test('others see a trip as a snap, and the owner can switch fast travel off for 
 	const visitorSlot = await sceneValue(visitor, (s) =>
 		s.multiplayer?.selfSlot !== undefined ? s.multiplayer.selfSlot : null
 	);
+	// The visitor stands 8 m east of the owner, who faces them (for the shimmer screenshot).
+	const ownerAt = await feet(owner);
+	await sceneValue(
+		visitor,
+		(s, at) => {
+			const y = s.worldSurfaceSampler.getSupportingSurfaceY(at.x + 8, at.z, Infinity);
+			s.controller.restoreState({ x: at.x + 8, y: y + 1.7, z: at.z }, 0, 0);
+		},
+		ownerAt
+	);
+	await sceneValue(
+		owner,
+		(s, at) => {
+			const y = s.worldSurfaceSampler.getSupportingSurfaceY(at.x, at.z, Infinity);
+			s.controller.restoreState({ x: at.x, y: y + 1.7, z: at.z }, -Math.PI / 2, -0.15);
+		},
+		ownerAt
+	);
 	const start = await feet(visitor);
 	// The owner sees the visitor where they are first.
 	await expect
@@ -214,7 +232,13 @@ test('others see a trip as a snap, and the owner can switch fast travel off for 
 	await expect
 		.poll(() => sceneValue(owner, (s) => s.remoteTravels.length), { timeout: 10_000 })
 		.toBeGreaterThan(0);
+	if (SHOTS) {
+		await owner.waitForTimeout(250);
+		await owner.screenshot({ path: `${SHOTS}/shimmer-departure.jpg`, quality: 85 });
+	}
 	const heard = await sceneValue(owner, (s) => s.remoteTravels.at(-1));
+	// The owner saw the shimmer where the visitor left (8 m away; the landing is out of range).
+	expect(heard.particles).toBeGreaterThan(10);
 	if (visitorSlot !== null) expect(heard.slot).toBe(visitorSlot);
 	expect(Math.hypot(heard.to[0] - landed.x, heard.to[2] - landed.z)).toBeLessThan(2);
 	expect(Math.hypot(heard.from[0] - start.x, heard.from[2] - start.z)).toBeLessThan(2);

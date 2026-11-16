@@ -170,11 +170,13 @@ export class TerrainManager {
 	}
 
 	/**
-	 * Fast travel: like `primeAround`, but builds only the chunks within `margin` metres of the point
-	 * (the one underfoot, plus a neighbour or three near its edges), so the cut stays short. The
-	 * rest of the 3 × 3 streams in nearest-first over the next frames.
+	 * Fast travel: like `primeAround`, but keeps the cut short. The chunk underfoot is always built
+	 * at once; then neighbours within `margin` metres of the point, nearest first, only while the
+	 * whole call has taken less than `budgetMs` (a slow machine builds fewer). Everything else in the
+	 * 3 × 3 streams in nearest-first over the next frames.
 	 */
-	primeNear(worldX: number, worldZ: number, margin: number): void {
+	primeNear(worldX: number, worldZ: number, margin: number, budgetMs = Infinity): void {
+		const started = this.now();
 		this.cancelGeneration(true);
 		const size = this.settings.chunkSize;
 		const chunkX = worldToChunkCoord(worldX, size);
@@ -185,10 +187,18 @@ export class TerrainManager {
 		this.lastPlayerChunkZ = chunkZ;
 		this.hydrologySync?.(worldX, worldZ);
 
-		for (const job of this.queue.takeWithinDistance(chunkX, chunkZ, 2)) {
-			const dx = Math.max(job.chunkX * size - worldX, 0, worldX - (job.chunkX + 1) * size);
-			const dz = Math.max(job.chunkZ * size - worldZ, 0, worldZ - (job.chunkZ + 1) * size);
-			if (Math.hypot(dx, dz) <= margin) this.materializeJob(job, true);
+		const jobs = this.queue
+			.takeWithinDistance(chunkX, chunkZ, 2)
+			.map((job) => {
+				const dx = Math.max(job.chunkX * size - worldX, 0, worldX - (job.chunkX + 1) * size);
+				const dz = Math.max(job.chunkZ * size - worldZ, 0, worldZ - (job.chunkZ + 1) * size);
+				return { job, distance: Math.hypot(dx, dz) };
+			})
+			.sort((a, b) => a.distance - b.distance);
+		for (const { job, distance } of jobs) {
+			const underfoot = distance === 0;
+			if (underfoot || (distance <= margin && this.now() - started < budgetMs))
+				this.materializeJob(job, true);
 			else this.queue.enqueue(job.chunkX, job.chunkZ, job.revision);
 		}
 	}

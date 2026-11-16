@@ -1,7 +1,7 @@
 # Forest Drift — Fast Travel: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 4: approved; Phases 0–2 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 5: all phases built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md), [Phase 3](../phase-3/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biome Minimap plan](../../Biome-Minimap/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -31,6 +31,13 @@ Paths are relative to `pages/Forest-Drift/`.
 11. **The "Fast travel for others" switch** sits in its own **Travel** group under Settings → Rules, shown only in online worlds.
 12. **Other players' trips are kept on the scene** (`remoteTravels`) for the Phase 3 shimmer; tests read them in the meantime.
 13. **The two-player test runs in WebKit and Firefox too** (the `webkit-online` and `firefox-online` projects).
+
+**Phase 3 (2026-11-16):**
+
+14. **Neighbour chunks are built only within a time budget** (`primeNear(…, 30 ms)`): the chunk underfoot always, then neighbours while the jump has taken under 30 ms. On a 4× slower CPU this halved the longest jumps.
+15. **Dropping a pin also builds the water for the chunk underfoot,** which can lie in the next 1.28 km region.
+16. **The shimmer is larger and lasts about a second** (motes 24 cm, rising to head height, with a few soft glow puffs). The first version was too small to see from 8 m.
+17. **Your own arrival plays the shimmer too,** round your feet, as planned.
 
 ## 1. Summary
 
@@ -205,14 +212,14 @@ Paths are relative to `pages/Forest-Drift/`.
 
 ## 13. Definition of done
 
-- [ ] Pin and Travel here on the full map, with keyboard and touch.
-- [ ] Safe landing (dry, on a surface, out of walls), ground present on the first frame.
-- [ ] Carried and ridden creatures arrive with you.
-- [ ] Go back on the map and in the pause menu.
-- [ ] Online: the owner's switch, the room-checked travel message, and others see a snap and a shimmer.
-- [ ] Budgets in §10 met and measured.
-- [ ] Tests in §11 pass in three browsers.
-- [ ] Docs (`docs/biomes.md`'s map section, the player guide) and phase records with screenshots.
+- [x] Pin and Travel here on the full map, with keyboard and touch.
+- [x] Safe landing (dry, on a surface, out of walls), ground present on the first frame.
+- [x] Carried and ridden creatures arrive with you.
+- [x] Go back on the map and in the pause menu.
+- [x] Online: the owner's switch, the room-checked travel message, and others see a snap and a shimmer.
+- [x] Budgets in §10 met and measured.
+- [x] Tests in §11 pass in three browsers.
+- [x] Docs (`docs/biomes.md`'s map section, the player guide) and phase records with screenshots.
 
 ## 14. Assumptions (to confirm in Phase 0)
 

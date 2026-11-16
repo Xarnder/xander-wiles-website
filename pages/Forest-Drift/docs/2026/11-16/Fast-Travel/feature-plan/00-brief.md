@@ -1,7 +1,7 @@
 # Forest Drift — Fast Travel: Brief
 
 **Feature cycle:** 2026-11-16
-**Status:** **Draft for approval (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). No implementation until you approve the plan in chat.
+**Status:** **Built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [`../phase-0/`](../phase-0/implementation.md) to [`../phase-3/`](../phase-3/implementation.md).
 **Related:** [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`02-technical-plan.md`](02-technical-plan.md) · builds on the [Biome Minimap](../../Biome-Minimap/feature-plan/02-technical-plan.md) (its full map is where travel starts)
 
 Paths are relative to `pages/Forest-Drift/`.

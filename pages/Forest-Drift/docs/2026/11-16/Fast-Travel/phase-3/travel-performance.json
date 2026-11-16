@@ -1,0 +1,198 @@
+{
+	"cpu1x": {
+		"idle": {
+			"medianMs": 16.7,
+			"p95Ms": 16.8
+		},
+		"trips": [
+			{
+				"distance": 1000,
+				"prepared": false,
+				"jumpMs": 53,
+				"longestFrameMs": 83.3,
+				"settledMs": 1999,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.7
+			},
+			{
+				"distance": 3000,
+				"prepared": false,
+				"jumpMs": 41.4,
+				"longestFrameMs": 66.6,
+				"settledMs": 1745,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 5000,
+				"prepared": false,
+				"jumpMs": 25.6,
+				"longestFrameMs": 83.4,
+				"settledMs": 1672,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 4950,
+				"prepared": false,
+				"jumpMs": 32.2,
+				"longestFrameMs": 100,
+				"settledMs": 1895,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.7
+			},
+			{
+				"distance": 5000,
+				"prepared": false,
+				"jumpMs": 38.3,
+				"longestFrameMs": 83.3,
+				"settledMs": 1883,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 1000,
+				"prepared": true,
+				"jumpMs": 13.4,
+				"longestFrameMs": 83.4,
+				"settledMs": 1787,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.7
+			},
+			{
+				"distance": 3000,
+				"prepared": true,
+				"jumpMs": 14.3,
+				"longestFrameMs": 50,
+				"settledMs": 1639,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 4000,
+				"prepared": true,
+				"jumpMs": 33.6,
+				"longestFrameMs": 50.1,
+				"settledMs": 1717,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 4950,
+				"prepared": true,
+				"jumpMs": 45.3,
+				"longestFrameMs": 83.4,
+				"settledMs": 2071,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.7
+			},
+			{
+				"distance": 5000,
+				"prepared": true,
+				"jumpMs": 28.2,
+				"longestFrameMs": 66.7,
+				"settledMs": 1925,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			}
+		]
+	},
+	"cpu4x": {
+		"idle": {
+			"medianMs": 16.7,
+			"p95Ms": 16.7
+		},
+		"trips": [
+			{
+				"distance": 1000,
+				"prepared": false,
+				"jumpMs": 301.7,
+				"longestFrameMs": 300,
+				"settledMs": 15741,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 3000,
+				"prepared": false,
+				"jumpMs": 112.6,
+				"longestFrameMs": 166.7,
+				"settledMs": 13188,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 5000,
+				"prepared": false,
+				"jumpMs": 54.3,
+				"longestFrameMs": 283.4,
+				"settledMs": 14324,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 4950,
+				"prepared": false,
+				"jumpMs": 49.9,
+				"longestFrameMs": 166.7,
+				"settledMs": 8675,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 5000,
+				"prepared": false,
+				"jumpMs": 48,
+				"longestFrameMs": 200,
+				"settledMs": 11820,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 1000,
+				"prepared": true,
+				"jumpMs": 80,
+				"longestFrameMs": 233.3,
+				"settledMs": 16826,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 3000,
+				"prepared": true,
+				"jumpMs": 130.8,
+				"longestFrameMs": 183.3,
+				"settledMs": 13533,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 16.8
+			},
+			{
+				"distance": 4000,
+				"prepared": true,
+				"jumpMs": 71.5,
+				"longestFrameMs": 183.3,
+				"settledMs": 11830,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			},
+			{
+				"distance": 4950,
+				"prepared": true,
+				"jumpMs": 88.7,
+				"longestFrameMs": 216.7,
+				"settledMs": 16689,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.4
+			},
+			{
+				"distance": 5000,
+				"prepared": true,
+				"jumpMs": 131.7,
+				"longestFrameMs": 183.2,
+				"settledMs": 14956,
+				"boostMedianMs": 16.7,
+				"boostP95Ms": 33.3
+			}
+		]
+	}
+}

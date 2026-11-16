@@ -53,7 +53,7 @@ Refresh the page after the 18 October locator deployment to load this feature.
 
 ### Fast travel online
 
-Pin a place on the full biome map and press **Travel here** to jump there, as when playing alone. Online, the room checks each trip first, and everyone else sees you jump straight to the new place. The world's owner can stop everyone else from fast travelling in **Settings → Rules → Fast travel for others**; the owner can always travel. While it's off, the map's button says "The owner has turned off fast travel".
+Pin a place on the full biome map and press **Travel here** to jump there, as when playing alone. Online, the room checks each trip first. Everyone else sees you jump straight to the new place, with a brief golden shimmer where you vanish and where you appear (a soft glow instead, with reduced motion). The world's owner can stop everyone else from fast travelling in **Settings → Rules → Fast travel for others**; the owner can always travel. While it's off, the map's button says "The owner has turned off fast travel".
 
 ## Pause menus: Multiplayer and Dev & Debug
 

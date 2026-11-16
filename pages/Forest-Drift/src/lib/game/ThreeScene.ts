@@ -262,6 +262,7 @@ import { foundationOverlapsWater } from './hydrology/foundationWater';
 import { UnderwaterTint } from './hydrology/underwater';
 import { WaterRenderer, type WaterRenderStats } from './hydrology/WaterRenderer';
 import { ParticleEffectManager } from './particles/ParticleEffectManager';
+import { TravelShimmer } from './particles/effects/travelShimmer';
 import { WEATHER_SURFACE_UNIFORMS } from './materials/shader/weatherSurface';
 import { WeatherExposureMap } from './weather/WeatherExposureMap';
 import { WeatherSystem, type WeatherFrame, type WeatherStats } from './weather/WeatherSystem';
@@ -623,6 +624,8 @@ const KNOCKED_OUT_CAMERA_PITCH = -0.8;
 const FAST_TRAVEL_FLYING_HEIGHT = 2;
 /** Fast travel builds the terrain chunks within this many metres of the landing at once. */
 const FAST_TRAVEL_PRIME_MARGIN = 24;
+/** …but neighbours only while the jump has taken less than this (ms): slow machines build fewer. */
+const FAST_TRAVEL_PRIME_BUDGET_MS = 30;
 /** After a trip, terrain may use this much of each frame (ms) for up to FAST_TRAVEL_BOOST_MS. */
 const FAST_TRAVEL_TERRAIN_BUDGET_MS = 7;
 const FAST_TRAVEL_BOOST_MS = 5000;
@@ -696,6 +699,8 @@ export class ThreeScene implements WorldRuntime {
 	private readonly underwaterTint: UnderwaterTint;
 	/** The shared procedural particle system (one pool, one draw call per blend mode). */
 	readonly particles: ParticleEffectManager;
+	/** Fast travel's shimmer at both ends of a trip (fast travel Q7). */
+	private readonly travelShimmer: TravelShimmer;
 	private readonly lakeSplashes: LakeShoreSplashSource;
 	private readonly particleSettings: ParticleDebugSettings;
 	private readonly particleFrustum = new THREE.Frustum();
@@ -1016,6 +1021,7 @@ export class ThreeScene implements WorldRuntime {
 		this.particleSettings = createDefaultParticleDebugSettings();
 		this.particles = new ParticleEffectManager();
 		this.particles.setQuality(PARTICLE_QUALITY[this.graphicsSettings.quality]);
+		this.travelShimmer = new TravelShimmer(this.particles);
 		this.scene.add(this.particles.group);
 		this.lakeSplashes = new LakeShoreSplashSource(
 			this.particles,
@@ -3284,7 +3290,17 @@ export class ThreeScene implements WorldRuntime {
 
 	/** Where a trip to (x, z) would land: the pin, or the nearest dry ground (the map's readout). */
 	fastTravelLanding(x: number, z: number): Landing {
-		return findLanding(x, z, this.landingWater());
+		const landing = findLanding(x, z, this.landingWater());
+		// Build the water for the chunk underfoot too (it can sit in the next region), so the trip
+		// itself only has terrain left to build.
+		const hydrology = this.hydrology;
+		if (hydrology.settings.enabled) {
+			const size = this.settings.chunkSize;
+			const cx = (Math.floor(landing.x / size) + 0.5) * size;
+			const cz = (Math.floor(landing.z / size) + 0.5) * size;
+			if (!hydrology.isReady(cx, cz)) hydrology.ensureSync(cx, cz);
+		}
+		return landing;
 	}
 
 	/** Where Go back returns to (feet), or null before the first trip in this world. */
@@ -3356,15 +3372,30 @@ export class ThreeScene implements WorldRuntime {
 		const start = performance.now();
 		const origin = this.travelOriginHere();
 		const outcome = this.travelJump(landing, exact, start);
-		if (outcome.ok) this.travelMemory.remember(origin);
+		if (outcome.ok) {
+			this.travelMemory.remember(origin);
+			// Q7: you see the same shimmer others do, round your own feet as you arrive.
+			const at = { x: outcome.x, y: outcome.y, z: outcome.z };
+			this.lastTravelShimmer = this.travelShimmer.play(at, at, this.reducedMotion);
+		}
 		return outcome;
 	}
 
-	/** Other players' trips seen online, newest last (tests read it; Phase 3 draws the shimmer). */
-	readonly remoteTravels: { slot: number; from: Vec3Tuple; to: Vec3Tuple }[] = [];
+	/**
+	 * Other players' trips seen online, newest last, with how many shimmer particles each started
+	 * (0 when both ends were out of range or particles are off). Tests read it.
+	 */
+	readonly remoteTravels: { slot: number; from: Vec3Tuple; to: Vec3Tuple; particles: number }[] =
+		[];
+	/** Shimmer particles started for this player's own last landing. */
+	lastTravelShimmer = 0;
 
 	private showRemoteTravel(slot: number, from: Vec3Tuple, to: Vec3Tuple): void {
-		this.remoteTravels.push({ slot, from, to });
+		const viewer = this.controller.worldPosition;
+		let particles = 0;
+		for (const [x, y, z] of [from, to])
+			particles += this.travelShimmer.play({ x, y, z }, viewer, this.reducedMotion);
+		this.remoteTravels.push({ slot, from, to, particles });
 		if (this.remoteTravels.length > 8) this.remoteTravels.shift();
 	}
 
@@ -3392,7 +3423,12 @@ export class ThreeScene implements WorldRuntime {
 			// Q11: sitting on furniture ends as if you stood up.
 			if (this.miniBuildInteraction.controller.state.type !== 'none')
 				this.miniBuildInteraction.controller.exit();
-			this.terrainManager.primeNear(landing.x, landing.z, FAST_TRAVEL_PRIME_MARGIN);
+			this.terrainManager.primeNear(
+				landing.x,
+				landing.z,
+				FAST_TRAVEL_PRIME_MARGIN,
+				FAST_TRAVEL_PRIME_BUDGET_MS
+			);
 			this.terrainManager.boostGeneration(FAST_TRAVEL_TERRAIN_BUDGET_MS, FAST_TRAVEL_BOOST_MS);
 			const riding = this.ride.riding && this.controller.seatedOnMount;
 			if (riding) {

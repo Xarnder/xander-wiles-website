@@ -310,4 +310,32 @@ test.describe('fast travel (single player)', () => {
 			});
 		}
 	});
+
+	test('a shimmer plays round your feet on arrival; with reduced motion, a soft glow', async ({
+		page
+	}) => {
+		await page.waitForTimeout(1500);
+		await run(page, (s) => s.toggleThirdPerson());
+		const started = await run(page, async (s) => {
+			const p = s.controller.worldPosition;
+			await s.fastTravel(p.x + 1500, p.z);
+			return (s as unknown as { lastTravelShimmer: number }).lastTravelShimmer;
+		});
+		expect(started).toBeGreaterThan(10);
+		if (process.env.FAST_TRAVEL_SHOTS) {
+			await page.waitForTimeout(300);
+			await page.screenshot({
+				path: `${process.env.FAST_TRAVEL_SHOTS}/shimmer-arrival.jpg`,
+				quality: 85
+			});
+		}
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const glow = await run(page, async (s) => {
+			const p = s.controller.worldPosition;
+			await s.fastTravel(p.x, p.z + 1500);
+			return (s as unknown as { lastTravelShimmer: number }).lastTravelShimmer;
+		});
+		expect(glow).toBeGreaterThan(0);
+		expect(glow).toBeLessThanOrEqual(3);
+	});
 });
