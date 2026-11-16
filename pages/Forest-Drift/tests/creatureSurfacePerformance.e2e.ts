@@ -176,3 +176,59 @@ test('creature release A/B: coats and detail on vs off', async ({ page }) => {
 	await writeFile(out, JSON.stringify(results, null, 2));
 	console.table(results);
 });
+
+/**
+ * Biome-specific species (Phase 2): the same biome world with family rosters on and off
+ * (`?creatureRosters=off`, today's regional species). Saved to the species Phase 2 folder
+ * (`SPECIES_RELEASE_OUT`).
+ */
+test('species release A/B: rosters on vs off', async ({ page }) => {
+	test.setTimeout(900_000);
+	const results: Record<string, unknown>[] = [];
+	for (const [label, query] of [
+		['on', ''],
+		['off', '?creatureRosters=off'],
+		['on (again)', '']
+	] as const) {
+		const frames = await worldFrames(page, query);
+		const herd = await page.evaluate(() => {
+			const s = (window as unknown as { __forestSession: { scene: Scene } }).__forestSession.scene;
+			const species = new Set<string>();
+			let giants = 0;
+			for (const r of s.creatures.logical.values()) {
+				species.add(r.spawn.species.id);
+				const p = r.spawn.species.proportions;
+				if (
+					(p.legLength + p.bodyDepth + p.neckLength + p.headSize) * r.spawn.individual.sizeFactor >
+					6
+				)
+					giants++;
+			}
+			let shadowed = 0;
+			const me = s.controller.worldPosition;
+			let near = 0;
+			for (const live of s.creatures.live.values()) {
+				let casts = false;
+				live.compiled.object.traverse((o: { castShadow?: boolean }) => {
+					if (o.castShadow) casts = true;
+				});
+				if (casts) shadowed++;
+				const p = live.compiled.object.position;
+				if (Math.hypot(p.x - me.x, p.z - me.z) < 40) near++;
+			}
+			return {
+				logical: s.creatures.logical.size,
+				species: species.size,
+				giants,
+				shadowed,
+				within40m: near
+			};
+		});
+		results.push({ label, scene: 'Biome world near spawn', ...frames, ...herd });
+	}
+	const out =
+		process.env.SPECIES_RELEASE_OUT ??
+		'docs/2026/11-13/Biome-Specific-Species/phase-2/species-release-performance.json';
+	await writeFile(out, JSON.stringify(results, null, 2));
+	console.table(results);
+});

@@ -1,7 +1,7 @@
 # Forest Drift — Biome-Specific Species: Technical Plan
 
 **Feature cycle:** 2026-11-13
-**Status:** **Revision 4: Phases 0–1 built (2026-11-13).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 5: all phases built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`docs/creature-system.md`](../../../../creature-system.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -22,6 +22,11 @@ Paths are relative to `pages/Forest-Drift/`.
 5. **The height bands and `stature()` moved to `creatures/regionBands.ts`**, avoiding a circular import between the population and rosters.
 6. **The Worker grew by about 54 KiB raw (15 KiB gzipped), not 30 KB.** The roster code and species leanings add to the terrain and biome code. Accepted; the first carry in a room costs about 7.5 ms.
 7. **The pellet-flight e2e now picks open ground to fire from.** With rosters, its small creature can stand on a hillside that stops the pellet within a few metres.
+
+**Phase 2 (2026-11-16):**
+
+8. **Draw calls rose 9% near spawn** (budget: unchanged), from 12 more nearby shadow casters. Frame and CPU time are unchanged. Accepted.
+9. **Tuning kept the agreed values.** Open land has about 2.2× today's animals; its density is the one value to lower if it feels crowded.
 
 ## 1. Summary
 
@@ -225,13 +230,13 @@ Rosters live behind `CREATURE_ROSTERS_AVAILABLE` and `?creatureRosters=off`, whi
 
 ## 16. Definition of done
 
-- [ ] Six family rosters with the profiles in §5 (or your answers), cached and deterministic.
-- [ ] Carryable and rideable guarantees hold for every family (tested).
-- [ ] Biomes-off worlds unchanged (parity tests).
-- [ ] The room resolves biome-world creatures exactly like clients; generator 5 with relabel; Worker and site deployed in order.
-- [ ] `biomeSpecies` golden passes in 3 engines; creature, multiplayer and determinism suites pass.
-- [ ] Lab roster gallery; screenshots per family reviewed by you.
-- [ ] Docs and phase records written.
+- [x] Six family rosters with the profiles in §5 (or your answers), cached and deterministic.
+- [x] Carryable and rideable guarantees hold for every family (tested).
+- [x] Biomes-off worlds unchanged (parity tests).
+- [x] The room resolves biome-world creatures exactly like clients; generator 5 with relabel; Worker and site deployed in order (Worker `be6c016f`, then commit `1617deec` pushed; the site build wasn't checked).
+- [x] `biomeSpecies` golden passes in 3 engines; creature, multiplayer and determinism suites pass.
+- [ ] Lab roster gallery ✓; screenshots per family **waiting for your review**.
+- [x] Docs and phase records written.
 
 ## 17. Assumptions (to confirm)
 

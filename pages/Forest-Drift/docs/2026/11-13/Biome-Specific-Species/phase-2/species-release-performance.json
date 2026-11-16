@@ -1,0 +1,44 @@
+[
+	{
+		"label": "on",
+		"scene": "Biome world near spawn",
+		"live": 40,
+		"frameMs": 4.85,
+		"p95FrameMs": 7.6,
+		"cpuFrameMs": 4.66,
+		"drawCalls": 447,
+		"logical": 1963,
+		"species": 40,
+		"giants": 133,
+		"shadowed": 33,
+		"within40m": 12
+	},
+	{
+		"label": "off",
+		"scene": "Biome world near spawn",
+		"live": 40,
+		"frameMs": 4.77,
+		"p95FrameMs": 9.2,
+		"cpuFrameMs": 4.63,
+		"drawCalls": 411,
+		"logical": 1108,
+		"species": 24,
+		"giants": 130,
+		"shadowed": 21,
+		"within40m": 12
+	},
+	{
+		"label": "on (again)",
+		"scene": "Biome world near spawn",
+		"live": 40,
+		"frameMs": 4.84,
+		"p95FrameMs": 8.7,
+		"cpuFrameMs": 4.66,
+		"drawCalls": 447,
+		"logical": 1963,
+		"species": 40,
+		"giants": 133,
+		"shadowed": 33,
+		"within40m": 12
+	}
+]

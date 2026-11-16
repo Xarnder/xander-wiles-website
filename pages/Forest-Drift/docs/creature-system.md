@@ -145,7 +145,7 @@ Creatures wear the colours of their biome, and their surface has fine coat textu
 
 - **Profiles.** `creatureBiomeProfiles.ts` holds 26 biome profiles plus `neutral` (biomes off), built from six families. Each gives OKLCh body hues, a lightness range, an underside rule, at least three accents, pattern weights (leaned per body plan) and coat thickness, length and gloss.
 - **Region coats.** `coatRegionSpecies` colours a region's six species together. Each gets its own OKLab lightness step (at least 0.06 apart), species one step apart never share a pattern, and accents are dealt by step. Colour maths is pure (`oklch.ts`), so every engine agrees. Only `appearance` changes, in a cached copy; id, anatomy, sizes and behaviour are shared. The `appearance.coat` marker switches `resolveCreaturePalette` to natural clamps (near-grey and snow-pale bodies, white or black accents). Classic palettes keep the original clamps.
-- **In the world.** A herd wears the dominant biome at its group centre. `cellGroupCentres` is shared by `generatePopulationCell` and `resolveAmbientCreature`, so a creature rebuilt from its id has exactly its herd's coat. The room calls the resolver without a profile and stays biome-free; carrying and riding are unchanged. Remote pellet colours come from each client's own lookup. Biome setting changes call `CreatureRuntimeManager.regenerateAmbient()`; carried and ridden creatures keep their coat.
+- **In the world.** A herd wears the dominant biome at its group centre. `cellGroupCentres` is shared by `generatePopulationCell` and `resolveAmbientCreature`, so a creature rebuilt from its id has exactly its herd's coat. The room passes no coat profile (colours don't affect abilities); since biome species it does pass the roster lookup, below. Remote pellet colours come from each client's own lookup. Biome setting changes call `CreatureRuntimeManager.regenerateAmbient()`; carried and ridden creatures keep their coat.
 - **Rare morphs.** About 1 in 60 herd members (`coatMorph`, from the member id) is pale or dark, keeping the species accent.
 - **Saves.** Placing a coated creature bakes its colours into today's recipe fields (`recipeForSave`), with an id per biome and morph. Phase 3 patterns map to the original ten, which are the only ones `validateSurfaceGenome` accepts in saves.
 
@@ -170,6 +170,26 @@ Creatures wear the colours of their biome, and their surface has fine coat textu
 | Full-screen close-ups (five coats) | 2.0–2.1 ms    | 2.0–2.1 ms           |
 
 Both columns use one shader program, with draw calls unchanged. The coat function costs about 0.007 ms per species, and each result is cached.
+
+## Biome species (November 2026)
+
+Each biome family has its own animals. Decisions, plan and phase records: `docs/2026/11-13/Biome-Specific-Species/`.
+
+- **Families and rosters** (`creatures/biome/biomeRosters.ts`, `BiomeRoster.ts`). The six families are the coat families. Each has a species count (4–7), height bands, body-plan weights, anatomy leanings, name words, behaviour multipliers and a density. Desert, Snowy Plains, Snowy Slopes and Bamboo Jungle override their family and get their own roster key. `biomeRoster(worldSeed, rx, rz, key)` builds a 512-m region's roster, cached (LRU 128, about 0.09 ms each).
+- **Guarantees.** Band 0 is always a carryable quadruped (≤ 0.9 m). If no biped was drawn, the smallest band from 1 to 3 becomes one, so every roster has something to ride. Giants appear only on open land and in the jungle, with a rare one in the desert.
+- **Leanings.** `generateSpecies(seed, plan, lean?)` and `deriveSpeciesForm(species, lean?)` replace a uniform pick with a weighted pick on the same single random draw. Without a lean the original code runs, so regional species are unchanged (the fingerprint snapshots prove it).
+- **In the world.** `slotSpecies` (`CreaturePopulationSystem.ts`) is the one rule for a herd slot's species, group size and density, used by the population, both resolvers and the determinism report. With a roster lookup it takes the family at the herd's centre and picks a species per slot from a per-cell seeded order. Giants herd alone, and the family density thins or fills herds. Without one it uses today's `regionSpecies`. Coats apply on top either way.
+- **Online.** The room builds a `BiomeField` once, lazily, from the published base world (`roomBiomeSources.ts`), so `resolveAmbientCreature` gives it the same animal as every player. Generator 5; the Worker relabels biomes-off worlds published at 1–4.
+- **Switches.** `?creatureRosters=off` (local only: online, the room follows the published world) and the build constant `CREATURE_ROSTERS_AVAILABLE`.
+
+**Population and cost.** Measured 16 November 2026 on Apple M4 with Metal, in the release biome world near spawn (`tests/creatureSurfacePerformance.e2e.ts`, "species release A/B", opt-in with `CREATURE_BENCH=1`).
+
+| Rosters | Live | Frame   | CPU     | Draw calls | Logical creatures | Species | Shadow casters |
+| ------- | ---- | ------- | ------- | ---------- | ----------------- | ------- | -------------- |
+| On      | 40   | 4.85 ms | 4.66 ms | 447        | 1,963             | 40      | 33             |
+| Off     | 40   | 4.77 ms | 4.63 ms | 411        | 1,108             | 24      | 21             |
+
+Spawn is on open land, whose bigger herds (×1.5) and density (×1.3) give about 2.2× today's animals per area. The extra draw calls are the extra nearby shadow casters (3 cascades × 12). Per 100 cells, animals relative to today: open land 2.2×, forest 1.05×, swamp 0.94×, jungle 0.96×, taiga and savanna 0.73×, desert and snowfields 0.52×. The room's first creature check builds its biome lookup in under 1 ms (warm process); later checks take about 0.03 ms.
 
 ## Limits and next milestone
 
