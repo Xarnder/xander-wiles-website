@@ -70,6 +70,12 @@ export default defineConfig({
 		},
 		// Multiplayer has to work in every engine: the same world from a seed, and the same online
 		// session. These two run only the online checks (the full suite stays Chromium-only, as before).
+		// The biome map's worker, bitmaps and canvas in every engine (biome minimap Phase 0).
+		{
+			name: 'webkit-map',
+			testMatch: /biomeMap\.e2e\.ts$/,
+			use: { ...devices['Desktop Safari'] }
+		},
 		{
 			name: 'webkit-online',
 			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
@@ -78,6 +84,25 @@ export default defineConfig({
 		{
 			name: 'firefox-online',
 			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
+			use: {
+				...devices['Desktop Firefox'],
+				launchOptions: firefoxHome
+					? {
+							env: {
+								...Object.fromEntries(
+									Object.entries(process.env).filter(
+										(entry): entry is [string, string] => entry[1] !== undefined
+									)
+								),
+								CFFIXED_USER_HOME: firefoxHome
+							}
+						}
+					: undefined
+			}
+		},
+		{
+			name: 'firefox-map',
+			testMatch: /biomeMap\.e2e\.ts$/,
 			use: {
 				...devices['Desktop Firefox'],
 				launchOptions: firefoxHome

@@ -167,6 +167,11 @@ export class BiomeField {
 		return classifyBiomes(this.input, this.settings, out);
 	}
 
+	/** The pre-water base height the last `classifyPoint` call computed (the biome map's shading). */
+	lastBaseElevation(): number {
+		return this.input.baseElevation;
+	}
+
 	private tile(tx: number, tz: number): Float32Array {
 		const key = tileKey(tx, tz);
 		if (key === this.lastKey && this.lastTile) return this.lastTile;
