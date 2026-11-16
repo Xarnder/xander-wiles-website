@@ -1,7 +1,7 @@
 # Forest Drift — Biome Minimap: Brief
 
 **Feature cycle:** 2026-11-16
-**Status:** **Decisions locked (2026-11-16)** in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). No implementation code until you approve the plan.
+**Status:** **Built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md); phase records in [`../phase-0/`](../phase-0/implementation.md) to [`../phase-3/`](../phase-3/implementation.md).
 **Related:** [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`02-technical-plan.md`](02-technical-plan.md) · builds on [Biomes](../../../11-12/Biomes-and-Enviroments/feature-plan/02-technical-plan.md), waypoints and the locator bar ([social features plan](../../../10-22/Multiplayer/multiplayer-social-features.plan.md))
 
 Paths are relative to `pages/Forest-Drift/`.

@@ -11,6 +11,20 @@ New worlds are divided into **26 biomes**: forests, taiga, jungles, meadows, mou
 - **Creatures belong where they live.** Each herd wears the colours of the biome at its centre: sand, ochre and rust in the desert; slate, grey and white in the snow; deep green with scarlet and teal accents in the jungle. Each species keeps one brighter accent, and the six species of an area differ in lightness and pattern. Some blend in, like real animals. About one creature in 60 is a rare pale or dark morph. In rain their coats darken and glisten, and when it snows, snow settles on their backs and heads (not under a roof). Up close, coats have fur, hide, scale, chitin or skin texture. Worlds with biomes off use a neutral, natural palette.
 - **Air and water.** Jungles are hazy, swamps and Silverwood misty, deserts dusty, snowfields cool blue and Cherry Grove faintly pink. Swamp water is darker and greener, and cold water bluer. Crossing a border changes the air and weather over about 4 seconds.
 
+### The biome map
+
+A round **minimap** in the top-right corner shows the land around you, coloured by biome, so the next desert or snowfield is easy to spot. It shows hill shading, rivers and lakes, your arrow, other players online and your waypoints. Under it are the biome you're in, the zoom and your coordinates. North is always up.
+
+| Key (rebindable) | What it does                                                                    |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `;`              | Show or hide the minimap. Hidden, it costs nothing.                             |
+| `'` / `/`        | Zoom the minimap in or out: 250 m, 500 m, 1 km, 2 km, 4 km or 8 km across.      |
+| `` ` ``          | Open the full map. Also **Map** in the pause menu, or tap or click the minimap. |
+
+On the **full map**, drag (or use the arrow keys) to pan, and scroll, pinch or press `+`/`−` to zoom from 500 m to 16 km. Point at a place to see its biome, how far it is, which way it lies and its coordinates. **Centre on me** (or `C`) brings you back, and `Esc` closes it. Playing alone, the full map pauses the game; online, the world carries on and you stand still.
+
+**Settings → Graphics** has **Show biome map**, **Biome map size** (Small, Medium, Large) and **Map grid**. The map is on by default in worlds with biomes and remembers your choices. In a world with biomes off it stays hidden until you turn it on, then shows the land without biome colours. On touch screens, `+` and `−` buttons sit under the minimap.
+
 ### Settings (World → Biomes)
 
 | Setting                  | What it does                                                                                                   |
@@ -95,6 +109,10 @@ flowchart LR
 Biome coats live in `src/lib/game/creatures/biome/`: 26 creature profiles plus a neutral one, and the region coat function. Coat detail lives in `src/lib/game/creatures/surface/CreatureCoatDetail.ts`. See "Biome coats and coat detail" in [`creature-system.md`](creature-system.md). `?creatureCoats=off` gives the classic regional colours and `?creatureDetail=off` drops the coat texture, each for one session. The plan and phase records are in [`2026/11-12/Biomes-Specfic-Creatures/`](2026/11-12/Biomes-Specfic-Creatures/).
 
 Biome species live in `src/lib/game/creatures/biome/biomeRosters.ts` (family profiles) and `BiomeRoster.ts` (rosters). See "Biome species" in [`creature-system.md`](creature-system.md). `?creatureRosters=off` gives today's regional species in a local world, for comparison. The plan and phase records are in [`2026/11-13/Biome-Specific-Species/`](2026/11-13/Biome-Specific-Species/).
+
+### Biome map
+
+Map tiles are drawn off the main thread by a worker (`game/map/biomeMap.worker.ts`) with its own terrain, biome field and hydrology, built from the world's settings: 128-px tiles at seven levels (2–128 m per pixel), land first and water after. `BiomeMapClient` caches up to 120 tiles as `ImageBitmap`s; `BiomeMapSystem` paints the minimap from the scene (only when something changed, at most 15 times a second), and `BiomeMapOverlay.svelte` is the full map. The palette (`biomeMapPalette.ts`) is tested against real neighbouring biomes, including colour-blind simulation. A developer preview of the tiles is at `/biome-map/?dev`. Plan, decisions and phase records: [`2026/11-16/Biome-Minimap/`](2026/11-16/Biome-Minimap/).
 
 ### Kill switch
 

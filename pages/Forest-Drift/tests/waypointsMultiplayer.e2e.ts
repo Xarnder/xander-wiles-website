@@ -113,6 +113,10 @@ interface SceneHandle {
 	controller: { worldPosition: Vec; restoreState(p: Vec, yaw: number, pitch: number): void };
 	scene: { getObjectsByProperty(key: string, value: string): { visible: boolean }[] };
 	getWaypoints(): WaypointRow[];
+	// Biome minimap Phase 3.
+	worldSurfaceSampler: { getSupportingSurfaceY(x: number, z: number, y: number): number };
+	mapMarkers(): { kind: string; x: number; z: number; colour: string }[];
+	multiplayer: { roomSeconds(): number | null } | null;
 }
 type GameWindow = { __forestSession: { scene: SceneHandle } };
 
@@ -254,4 +258,83 @@ test('public waypoints: seen by everyone, controlled only when allowed', async (
 	await expect(ownerRenamed).toHaveAttribute('data-visibility', 'private');
 	await expect.poll(async () => (await rows(visitor)).length).toBe(0);
 	expect((await rows(owner)).map((w) => [w.name, w.visibility])).toEqual([['Old oak', 'private']]);
+});
+
+test('the biome maps show other players online (biome minimap Phase 3)', async ({ browser }) => {
+	test.setTimeout(600_000);
+	const owner = await newPlayer(browser);
+	await owner.getByRole('button', { name: '← Main menu', exact: true }).click();
+	await owner.getByRole('button', { name: 'Online', exact: true }).click();
+	await owner.getByRole('tab', { name: 'Owner', exact: true }).click();
+	await owner.getByTestId('owner-password').fill(ADMIN_KEY);
+	await owner.getByTestId('owner-create-invites').click();
+	await expect(owner.getByTestId('owner-publish-success')).toBeVisible({ timeout: 30_000 });
+	await owner.getByTestId('owner-invite-role').selectOption('viewer');
+	const viewerLink = await owner.getByTestId('invite-link-viewer').locator('input').inputValue();
+	await owner.getByRole('button', { name: 'Join as owner', exact: true }).click();
+	await joinWorld(owner, 'Olive');
+	const visitor = await newPlayer(browser);
+	await visitor.goto(viewerLink);
+	await joinWorld(visitor, 'Vince');
+	await walking(owner);
+	await walking(visitor);
+	// The Main World has biomes, so both minimaps are on by default.
+	await expect(owner.getByTestId('biome-minimap')).toBeVisible({ timeout: 15_000 });
+	await expect(visitor.getByTestId('biome-minimap')).toBeVisible({ timeout: 15_000 });
+
+	// The visitor walks 150 m east of the owner.
+	const ownerAt = await owner.evaluate(() => {
+		const p = (window as unknown as GameWindow).__forestSession.scene.controller.worldPosition;
+		return { x: p.x, z: p.z };
+	});
+	const target = { x: ownerAt.x + 150, z: ownerAt.z };
+	await visitor.evaluate(({ x, z }) => {
+		const s = (window as unknown as GameWindow).__forestSession.scene;
+		const y = s.worldSurfaceSampler.getSupportingSurfaceY(x, z, Infinity);
+		s.controller.restoreState({ x, y: y + 1.7, z }, 0, 0);
+	}, target);
+
+	// Each map shows the other player where they are, in their colour.
+	const playersOn = (page: Page) =>
+		page.evaluate(() =>
+			(window as unknown as GameWindow).__forestSession.scene
+				.mapMarkers()
+				.filter((m) => m.kind === 'player')
+		);
+	await expect
+		.poll(
+			async () => {
+				const players = await playersOn(owner);
+				return players.some((m) => Math.hypot(m.x - target.x, m.z - target.z) < 10);
+			},
+			{ timeout: 20_000 }
+		)
+		.toBe(true);
+	await expect
+		.poll(
+			async () => {
+				const players = await playersOn(visitor);
+				return players.some((m) => Math.hypot(m.x - ownerAt.x, m.z - ownerAt.z) < 10);
+			},
+			{ timeout: 20_000 }
+		)
+		.toBe(true);
+	if (SHOTS) await owner.screenshot({ path: `${SHOTS}/minimap-online.png` });
+
+	// The full map online: input stops, but the world (the room's clock) carries on.
+	const clock = () =>
+		owner.evaluate(
+			() =>
+				(window as unknown as GameWindow).__forestSession.scene.multiplayer?.roomSeconds() ?? null
+		);
+	await owner.keyboard.press('Backquote');
+	await expect(owner.getByTestId('biome-full-map')).toBeVisible();
+	const before = await clock();
+	await owner.waitForTimeout(2500);
+	const after = await clock();
+	if (typeof before === 'number' && typeof after === 'number')
+		expect(after).toBeGreaterThan(before);
+	if (SHOTS) await owner.screenshot({ path: `${SHOTS}/full-map-online.png` });
+	await owner.keyboard.press('Escape');
+	await expect(owner.getByTestId('biome-full-map')).toBeHidden();
 });

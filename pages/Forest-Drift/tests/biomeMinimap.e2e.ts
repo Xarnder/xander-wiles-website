@@ -220,3 +220,43 @@ test('the full map opens with `, pauses alone, reads out what you point at, pans
 	expect(await sceneValue(page, (s) => s.biomeMap.workerRunning)).toBe(false);
 	expect(errors).toEqual([]);
 });
+
+test('the full map works by keyboard alone and describes itself to screen readers', async ({
+	page,
+	browserName
+}) => {
+	// Safari moves focus to buttons with Option+Tab (Tab alone skips them unless set otherwise).
+	const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+	test.setTimeout(180_000);
+	await page.goto('/');
+	await createAndEnterWorld(page, { name: 'Keyboard map', seed: 'minimap-e2e' });
+	await expect(page.getByTestId('biome-minimap')).toBeVisible({ timeout: 15_000 });
+	// The minimap is decorative; the biome card already announces where you are.
+	await expect(page.locator('[data-testid="biome-minimap"] .frame')).toHaveAttribute(
+		'aria-hidden',
+		'true'
+	);
+	await page.keyboard.press('Backquote');
+	const dialog = page.getByRole('dialog', { name: 'Biome map' });
+	await expect(dialog).toBeVisible();
+	await expect(dialog).toHaveAttribute('aria-modal', 'true');
+	await expect(page.getByRole('application', { name: /Arrow keys pan/ })).toBeFocused();
+	await expect(page.getByTestId('biome-full-map-distance')).toHaveText('You are here');
+	// Arrow keys move the centre crosshair; the readout follows it.
+	await page.keyboard.press('ArrowRight');
+	await page.keyboard.press('ArrowRight');
+	await expect(page.getByTestId('biome-full-map-distance')).toContainText('east');
+	await expect(dialog.getByRole('status')).not.toBeEmpty({ timeout: 5000 });
+	// Tab reaches the buttons; Enter presses them.
+	await page.keyboard.press(tab);
+	await expect(page.getByTestId('biome-full-map-zoom-in')).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('biome-full-map-scale')).toHaveText('1 km across');
+	await page.keyboard.press(tab);
+	await page.keyboard.press(tab);
+	await expect(page.getByTestId('biome-full-map-centre')).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('biome-full-map-distance')).toHaveText('You are here');
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+});

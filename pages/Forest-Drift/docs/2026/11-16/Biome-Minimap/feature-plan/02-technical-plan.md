@@ -1,7 +1,7 @@
 # Forest Drift — Biome Minimap: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 5: Phases 0–2 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): the full map has pan, zoom and a pointer readout only (Q11), and both maps get a grid and coordinates (Q2). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 6: all phases built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md), [Phase 3](../phase-3/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -251,14 +251,14 @@ None: no server or protocol changes, and no Worker (Cloudflare) deploy.
 
 ## 16. Definition of done
 
-- [ ] Corner minimap with biome colours, shading (and water if cheap), you, other players and waypoints.
-- [ ] Six zoom steps by key, button and touch; toggle by key and setting, remembered; off costs nothing.
-- [ ] Full map with pan, zoom and the pointer readout (name, distance, direction, coordinates).
-- [ ] Grid and coordinates on both maps, with a setting to hide the grid.
-- [ ] Budgets in §12 met and measured; numbers in the phase records.
-- [ ] Tests in §14 pass in three browsers.
-- [ ] Screenshots per phase reviewed by you.
-- [ ] Docs and phase records written.
+- [x] Corner minimap with biome colours, shading (and water if cheap), you, other players and waypoints.
+- [x] Six zoom steps by key, button and touch; toggle by key and setting, remembered; off costs nothing.
+- [x] Full map with pan, zoom and the pointer readout (name, distance, direction, coordinates).
+- [x] Grid and coordinates on both maps, with a setting to hide the grid.
+- [x] Budgets in §12 met and measured; numbers in the phase records.
+- [x] Tests in §14 pass in three browsers.
+- [ ] Screenshots per phase reviewed by you (in the Phase 1–3 records).
+- [x] Docs and phase records written.
 
 ## 17. Assumptions (to confirm)
 

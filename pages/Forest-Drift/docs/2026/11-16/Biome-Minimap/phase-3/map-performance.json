@@ -1,0 +1,40 @@
+{
+	"throttled4x": {
+		"minimapOff": {
+			"medianFrameMs": 27.8,
+			"p95FrameMs": 41,
+			"mapAverageMs": 0,
+			"mapMaxMs": 0,
+			"paints": 0,
+			"frames": 0
+		},
+		"minimapOn": {
+			"medianFrameMs": 26.7,
+			"p95FrameMs": 36.5,
+			"mapAverageMs": 0.05,
+			"mapMaxMs": 0.9000000059604645,
+			"paints": 79,
+			"frames": 440
+		}
+	},
+	"farthestZoomThrottled4x": {
+		"firstTilesMs": 298,
+		"allWithWaterMs": 1233,
+		"perLevel": [
+			{
+				"level": 4,
+				"tiles": 4,
+				"landMs": 32,
+				"waterTiles": 4,
+				"waterMs": 113
+			},
+			{
+				"level": 5,
+				"tiles": 4,
+				"landMs": 35,
+				"waterTiles": 1,
+				"waterMs": 282
+			}
+		]
+	}
+}
