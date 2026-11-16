@@ -1,5 +1,7 @@
 import { MeshStandardMaterial, type WebGLProgramParametersWithUniforms } from 'three';
 import { setOwnShaderHook } from '../materials/shader/shaderHooks';
+import { WEATHER_SURFACE_UNIFORMS } from '../materials/shader/weatherSurface';
+import { creatureWeatherAvailable } from './biome/creatureCoatSwitches';
 import { creatureSurfaceTable } from './surface/CreatureSurfaceTable';
 import { creatureNoiseTexture } from './surface/CreatureSurfaceNoise';
 
@@ -117,6 +119,26 @@ float creatureCoatHeight(int type, vec3 q, float u, int region) {
 }
 float creatureCoatH = 0.5;
 float creatureCoatAmount = 0.0;
+int creatureCoatKind = 0;
+vec3 creatureBaseNormal = vec3(0.0, 0.0, 1.0);
+// Weather on coats: the same world-wide wetness, snow cover and building exposure as terrain.
+uniform float uWxWet;
+uniform float uWxSnow;
+uniform sampler2D uWxExposure;
+uniform vec4 uWxExposureArea;
+uniform vec2 uWxExposureDepth;
+uniform vec3 uWxSky;
+uniform float creatureWeatherScale;
+varying vec3 vCreatureWorld;
+// Mirrors wxExposed() in materials/shader/weatherSurface.ts: 0 under a roof, 1 in the open.
+float creatureExposed(vec3 world) {
+	if (uWxExposureArea.w < 0.5) return 1.0;
+	vec2 uv = (world.xz - uWxExposureArea.xy) * uWxExposureArea.z;
+	if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) return 1.0;
+	uv.y = 1.0 - uv.y;
+	float coverTop = uWxExposureDepth.x - texture2D(uWxExposure, uv).r * uWxExposureDepth.y;
+	return smoothstep(-0.25, -0.05, world.y - coverTop);
+}
 vec3 creaturePerturbNormal(vec3 surfPos, vec3 surfNorm, vec2 dHdxy, float faceDir) {
 	vec3 sx = normalize(dFdx(surfPos));
 	vec3 sy = normalize(dFdy(surfPos));
@@ -187,18 +209,58 @@ const PATTERN_APPLY = /* glsl */ `
 // Derivatives are taken outside any per-pixel branch (they are undefined in divergent flow).
 const COAT_NORMAL = /* glsl */ `
 {
+	creatureBaseNormal = normal;
 	vec2 dH = vec2(dFdx(creatureCoatH), dFdy(creatureCoatH)) * creatureCoatAmount;
 	vec3 coatNormal = creaturePerturbNormal(-vViewPosition, normal, dH, faceDirection);
 	if (creatureCoatAmount > 0.001) normal = coatNormal;
 }
 `;
+/**
+ * Weather on coats (deferred Q12 of the biome-creatures cycle, built 2026-11-16). Snow settles on
+ * the upward parts of a coat (backs, heads, the tops of tails) in patches fixed to the body, so it
+ * rides along as the animal moves; fur holds the most, scales and chitin the least. Rain darkens
+ * coats (fur most), makes them glossier and adds a faint sky sheen. Eyes, noses and hard
+ * adornments are left alone, and a creature under a roof stays dry. Uniform-only, skipped while
+ * dry and snow-free; it follows the same world-wide wetness and snow cover as the terrain.
+ */
+const WEATHER_APPLY = /* glsl */ `
+if ((uWxWet + uWxSnow) * creatureWeatherScale > 0.002) {
+	int region = int(vCreatureSurface.w + 0.5);
+	float onCoat = min(1.0, creatureCoatRegion(region) * 1.5);
+	float open = creatureExposed(vCreatureWorld) * onCoat * creatureWeatherScale;
+	vec3 upView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+	float up = smoothstep(0.2, 0.7, dot(creatureBaseNormal, upView));
+	// How much a coat holds: fur most, then hide and skin, scales and chitin least.
+	float holds = creatureCoatKind == 1 ? 1.0 : creatureCoatKind == 3 ? 0.55 : creatureCoatKind == 4 ? 0.45 : 0.8;
+	int slot = int(vCreatureSurface.z + 0.5);
+	float bodyScale = texelFetch(creatureSurfaceTable, ivec2(3, slot), 0).y;
+	vec3 b = vCreatureBind * bodyScale;
+	float field = creatureNoiseAt(b * 4.0) * 0.7 + creatureNoiseAt(b * 11.0 + 3.1) * 0.3;
+	float snow = up * open * holds * smoothstep(1.0 - uWxSnow * 1.15, 1.1 - uWxSnow * 1.15, field);
+	snow = min(snow, 0.92);
+	float wet = uWxWet * open * (1.0 - snow);
+	float darken = creatureCoatKind == 1 ? 0.32 : 0.2;
+	diffuseColor.rgb *= 1.0 - darken * wet;
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.9, 0.95), snow);
+	roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.45, wet);
+	roughnessFactor = mix(roughnessFactor, 0.9, snow);
+	// Snow smooths the coat's texture; wet fur lies flatter.
+	normal = normalize(mix(normal, creatureBaseNormal, clamp(snow * 0.85 + wet * 0.4, 0.0, 1.0)));
+	float facing = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+	float fresnel = 0.04 + 0.96 * pow(1.0 - facing, 5.0);
+	totalEmissiveRadiance += uWxSky * fresnel * wet * 0.14;
+}
+`;
 const uniforms = {
 	creatureSurfaceTable: { value: creatureSurfaceTable().texture },
-	creatureNoise: { value: creatureNoiseTexture() }
+	creatureNoise: { value: creatureNoiseTexture() },
+	creatureWeatherScale: { value: 1 }
 };
 function creatureSurfaceHook(shader: WebGLProgramParametersWithUniforms) {
 	shader.uniforms.creatureSurfaceTable = uniforms.creatureSurfaceTable;
 	shader.uniforms.creatureNoise = uniforms.creatureNoise;
+	shader.uniforms.creatureWeatherScale = uniforms.creatureWeatherScale;
+	Object.assign(shader.uniforms, WEATHER_SURFACE_UNIFORMS);
 	shader.vertexShader = shader.vertexShader
 		.replace(
 			'#include <common>',
@@ -207,7 +269,8 @@ attribute vec4 surface;
 attribute vec4 surfacePattern;
 varying vec4 vCreatureSurface;
 varying vec4 vCreaturePattern;
-varying vec3 vCreatureBind;`
+varying vec3 vCreatureBind;
+varying vec3 vCreatureWorld;`
 		)
 		.replace(
 			'#include <begin_vertex>',
@@ -215,6 +278,11 @@ varying vec3 vCreatureBind;`
 vCreatureSurface = vec4(surface.x / 1000.0, surface.y / 1000.0, surface.z, surface.w);
 vCreaturePattern = vec4(surfacePattern.x * (65535.0 / 1024.0), surfacePattern.y * 2.0 - 1.0, surfacePattern.z, surfacePattern.w);
 vCreatureBind = position;`
+		)
+		.replace(
+			'#include <project_vertex>',
+			`#include <project_vertex>
+vCreatureWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`
 		);
 	shader.fragmentShader = shader.fragmentShader
 		.replace('#include <common>', `#include <common>\n${PATTERN_GLSL}`)
@@ -226,14 +294,20 @@ vCreatureBind = position;`
 		)
 		.replace(
 			'#include <emissivemap_fragment>',
-			'#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vCreatureSurface.y;'
+			`#include <emissivemap_fragment>\n${WEATHER_APPLY}\ntotalEmissiveRadiance += diffuseColor.rgb * vCreatureSurface.y;`
 		);
 }
 
+/** The Lab and `?creatureWeather=off`: weather on coats on (1) or off (0) for every creature. */
+export function setCreatureWeatherScale(scale: number): void {
+	uniforms.creatureWeatherScale.value = scale;
+}
+
 export function createCreatureMaterial(): MeshStandardMaterial {
+	uniforms.creatureWeatherScale.value = creatureWeatherAvailable() ? 1 : 0;
 	const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
 	material.name = 'CreatureSurface';
-	setOwnShaderHook(material, creatureSurfaceHook, 'creature-surface-v3', uniforms);
+	setOwnShaderHook(material, creatureSurfaceHook, 'creature-surface-v4', uniforms);
 	return material;
 }
 

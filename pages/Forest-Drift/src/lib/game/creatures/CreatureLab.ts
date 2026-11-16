@@ -24,6 +24,7 @@ import { creatureSurfaceTable, type SurfaceDebugMode } from './surface/CreatureS
 import { createMulberry32 } from '../terrain/seededRandom';
 import { coatRegionSpecies } from './biome/CreatureBiomeCoat';
 import { readCreatureCoatSwitches } from './biome/creatureCoatSwitches';
+import { WEATHER_SURFACE_UNIFORMS } from '../materials/shader/weatherSurface';
 import { biomeRoster } from './biome/BiomeRoster';
 import { rosterKeyOf } from './biome/biomeRosters';
 import type { CreatureBiomeProfileId } from './biome/creatureBiomeProfiles';
@@ -1089,7 +1090,16 @@ export class CreatureLab {
 		}
 		this.raf = requestAnimationFrame(this.frame);
 	};
+	/**
+	 * Weather preview for coats (the Lab has no weather of its own): sets the same world-wide
+	 * wetness and snow cover the game's weather drives, 0..1 each.
+	 */
+	setWeatherPreview(wet: number, snow: number) {
+		WEATHER_SURFACE_UNIFORMS.uWxWet.value = wet;
+		WEATHER_SURFACE_UNIFORMS.uWxSnow.value = snow;
+	}
 	dispose() {
+		this.setWeatherPreview(0, 0);
 		cancelAnimationFrame(this.raf);
 		this.observer.disconnect();
 		this.controls.dispose();

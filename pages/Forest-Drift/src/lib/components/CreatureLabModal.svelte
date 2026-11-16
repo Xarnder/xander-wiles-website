@@ -90,6 +90,13 @@
 	// Biome coat preview (developer): recolours the specimen and galleries as a biome would.
 	let biome = $state<CreatureBiomeProfileId | 'classic'>('classic');
 	let colourBlind = $state<'none' | 'deuteranopia' | 'protanopia'>('none');
+	const WEATHER_PREVIEWS = {
+		dry: [0, 0],
+		rain: [1, 0],
+		'light snow': [0, 0.45],
+		'heavy snow': [0, 1]
+	} as const;
+	let weatherPreview = $state<keyof typeof WEATHER_PREVIEWS>('dry');
 	let swatches = $state<{ label: string; hex: string }[]>([]);
 	const biomeLabel = (id: CreatureBiomeProfileId) =>
 		id === 'neutral' ? 'Neutral (biomes off)' : getBiomeDefinition(id).name;
@@ -412,6 +419,20 @@
 								bind:value={colourBlind}
 								><option value="none">Off</option><option value="deuteranopia">Deuteranopia</option
 								><option value="protanopia">Protanopia</option></select
+							></label
+						>
+						<label
+							>Weather<select
+								data-testid="creature-weather"
+								bind:value={weatherPreview}
+								onchange={() =>
+									lab.setWeatherPreview(
+										WEATHER_PREVIEWS[weatherPreview][0],
+										WEATHER_PREVIEWS[weatherPreview][1]
+									)}
+								>{#each Object.keys(WEATHER_PREVIEWS) as id (id)}<option value={id}
+										>{id[0].toUpperCase() + id.slice(1)}</option
+									>{/each}</select
 							></label
 						>
 						<div class="pair">

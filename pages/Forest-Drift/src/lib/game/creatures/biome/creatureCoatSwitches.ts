@@ -12,18 +12,23 @@ export const CREATURE_DETAIL_AVAILABLE = true;
  * would disagree about creature identity: a development switch only.
  */
 export const CREATURE_ROSTERS_AVAILABLE = true;
+/** Weather on coats (2026-11-16): `?creatureWeather=off` keeps coats dry and snow-free. */
+export const CREATURE_WEATHER_AVAILABLE = true;
 
 let coatsOff = false;
 let detailOff = false;
 let rostersOff = false;
+let weatherOff = false;
 
 export function readCreatureCoatSwitches(search: string): void {
 	const params = new URLSearchParams(search);
 	coatsOff = params.get('creatureCoats') === 'off';
 	detailOff = params.get('creatureDetail') === 'off';
 	rostersOff = params.get('creatureRosters') === 'off';
+	weatherOff = params.get('creatureWeather') === 'off';
 }
 
 export const creatureCoatsAvailable = () => CREATURE_COATS_AVAILABLE && !coatsOff;
 export const creatureDetailAvailable = () => CREATURE_DETAIL_AVAILABLE && !detailOff;
 export const creatureRostersAvailable = () => CREATURE_ROSTERS_AVAILABLE && !rostersOff;
+export const creatureWeatherAvailable = () => CREATURE_WEATHER_AVAILABLE && !weatherOff;

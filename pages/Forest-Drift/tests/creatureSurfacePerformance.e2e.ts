@@ -232,3 +232,57 @@ test('species release A/B: rosters on vs off', async ({ page }) => {
 	await writeFile(out, JSON.stringify(results, null, 2));
 	console.table(results);
 });
+
+/**
+ * Weather on coats (2026-11-16): full-screen close-ups and 100 Lab creatures, dry, in rain and in
+ * snow (the Lab's weather preview drives the same uniforms as the game's weather). Saved to the
+ * weather-on-coats folder (`CREATURE_WEATHER_OUT`).
+ */
+test('weather on coats GPU A/B', async ({ page }) => {
+	test.setTimeout(600_000);
+	const results: Record<string, unknown>[] = [];
+	await open(page, '');
+	for (const [weather, wet, snow] of [
+		['dry', 0, 0],
+		['rain', 1, 0],
+		['snow', 0, 0.9],
+		['dry (again)', 0, 0]
+	] as const) {
+		await page.evaluate(
+			([wet, snow]) =>
+				(
+					window as unknown as { creatureLab: { setWeatherPreview(w: number, s: number): void } }
+				).creatureLab.setWeatherPreview(wet, snow),
+			[wet, snow]
+		);
+		for (const [plan, biome, seed] of SPECIMENS) {
+			await page.evaluate(
+				({ plan, biome, seed }) => {
+					const lab = (window as unknown as { creatureLab: Lab }).creatureLab;
+					lab.biome = biome;
+					lab.generate(seed, 7, plan, 1, 0);
+					lab.gait = 'idle';
+					lab.frameView([1, 0.3, 0.7], 0.45);
+				},
+				{ plan, biome, seed }
+			);
+			await page.waitForTimeout(400);
+			results.push({ weather, scene: `close-up ${plan} (${biome})`, ...(await frames(page)) });
+		}
+		const lab = await page.evaluate(() =>
+			(window as unknown as { creatureLab: Lab }).creatureLab.benchmark(100)
+		);
+		results.push({
+			weather,
+			scene: 'Lab 100 creatures',
+			frameMs: Math.round(lab.frameMs * 100) / 100,
+			programs: lab.programs,
+			drawCalls: lab.drawCalls
+		});
+	}
+	const out =
+		process.env.CREATURE_WEATHER_OUT ??
+		'docs/2026/11-16/Weather-On-Coats/weather-coats-performance.json';
+	await writeFile(out, JSON.stringify(results, null, 2));
+	console.table(results);
+});

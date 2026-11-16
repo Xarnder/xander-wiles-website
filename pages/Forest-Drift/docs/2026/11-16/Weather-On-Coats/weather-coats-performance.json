@@ -1,0 +1,170 @@
+[
+	{
+		"weather": "dry",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 1.9,
+		"p95Ms": 2.4,
+		"frames": 2063
+	},
+	{
+		"weather": "dry",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 2028
+	},
+	{
+		"weather": "dry",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 2.1,
+		"p95Ms": 2.4,
+		"frames": 2026
+	},
+	{
+		"weather": "dry",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2041
+	},
+	{
+		"weather": "dry",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2051
+	},
+	{
+		"weather": "dry",
+		"scene": "Lab 100 creatures",
+		"frameMs": 2.3,
+		"programs": 1,
+		"drawCalls": 99
+	},
+	{
+		"weather": "rain",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 0.4,
+		"p95Ms": 2.4,
+		"frames": 2096
+	},
+	{
+		"weather": "rain",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2054
+	},
+	{
+		"weather": "rain",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 1.9,
+		"p95Ms": 2.4,
+		"frames": 2048
+	},
+	{
+		"weather": "rain",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2046
+	},
+	{
+		"weather": "rain",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2068
+	},
+	{
+		"weather": "rain",
+		"scene": "Lab 100 creatures",
+		"frameMs": 1.6,
+		"programs": 1,
+		"drawCalls": 99
+	},
+	{
+		"weather": "snow",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 0.5,
+		"p95Ms": 2.4,
+		"frames": 2091
+	},
+	{
+		"weather": "snow",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2073
+	},
+	{
+		"weather": "snow",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 1.3,
+		"p95Ms": 2.4,
+		"frames": 2071
+	},
+	{
+		"weather": "snow",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2055
+	},
+	{
+		"weather": "snow",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 1.9,
+		"p95Ms": 2.4,
+		"frames": 2071
+	},
+	{
+		"weather": "snow",
+		"scene": "Lab 100 creatures",
+		"frameMs": 1.6,
+		"programs": 1,
+		"drawCalls": 99
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "close-up quadruped (snowyTaiga)",
+		"medianMs": 1.9,
+		"p95Ms": 2.4,
+		"frames": 2086
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "close-up quadruped (desert)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2067
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "close-up serpentine (swamp)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2054
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "close-up hexapod (jungle)",
+		"medianMs": 1.9,
+		"p95Ms": 2.4,
+		"frames": 2062
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "close-up biped (swamp)",
+		"medianMs": 2,
+		"p95Ms": 2.4,
+		"frames": 2059
+	},
+	{
+		"weather": "dry (again)",
+		"scene": "Lab 100 creatures",
+		"frameMs": 1.5,
+		"programs": 1,
+		"drawCalls": 99
+	}
+]

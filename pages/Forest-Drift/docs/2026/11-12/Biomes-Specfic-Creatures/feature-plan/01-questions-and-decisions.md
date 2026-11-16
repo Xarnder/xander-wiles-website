@@ -184,6 +184,7 @@
   - [x] C — Later, not in v1 (Recommended)
   - [ ] Custom/Other: <input type="text" placeholder="Type custom answer here">
 - **Decision**: `Locked 2026-11-13`: **C**: weather on coats comes later, not in v1 (recommended default).
+- **Follow-up**: built on 2026-11-16 as snow dusting and wet sheen (option A's look). See [`../../../11-16/Weather-On-Coats/implementation.md`](../../../11-16/Weather-On-Coats/implementation.md).
 
 ---
 
