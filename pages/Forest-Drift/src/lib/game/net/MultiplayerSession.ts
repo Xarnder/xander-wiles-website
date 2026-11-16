@@ -84,6 +84,8 @@ export interface SceneMultiplayerContext {
 	locatorExtrasActive?: () => boolean;
 	/** Waypoints: places this frame's waypoint markers on the bar (between begin and end). */
 	placeLocatorExtras?: (locator: LocatorBar) => void;
+	/** Fast travel: another player jumped from `from` to `to` (feet positions), for the shimmer. */
+	showTravel?: (slot: number, from: Vec3Tuple, to: Vec3Tuple) => void;
 	/** Public waypoints: the room to send changes to, and its list (on joining and every rejoin). */
 	setSharedWaypoints?: (waypoints: SharedWaypoint[], link: WaypointLink) => void;
 	/** Public waypoints: someone changed them, or the room refused this player's change. */
@@ -194,6 +196,13 @@ export interface SceneMultiplayerHooks {
 	mapPlayers?(): { x: number; z: number; colour: string; dim: boolean }[];
 	/** Whether the room connection is up (firing offline would only fool the shooter). */
 	connected?(): boolean;
+	/** This player's role in the world, or null before the room has said. */
+	readonly role?: PlayerRole | null;
+	/**
+	 * Fast travel: asks the room to let this player jump from `from` to `to` (feet positions);
+	 * resolves with its answer (or a timeout).
+	 */
+	requestTravel?(from: Vec3Tuple, to: Vec3Tuple): Promise<{ ok: boolean; reason?: string }>;
 	detach(): void;
 }
 
@@ -236,6 +245,8 @@ export interface MultiplayerSessionOptions {
 
 /** A pick-up (or climb-on) with no answer from the room by then is given up. */
 const CARRY_CLAIM_TIMEOUT_MS = 2000;
+/** Fast travel: a trip with no answer from the room by then doesn't happen (plan §6). */
+const TRAVEL_TIMEOUT_MS = 2000;
 
 /** The owner's slider drags are coalesced into at most this many sends a second. */
 const ENV_SEND_INTERVAL_MS = 250;
@@ -281,6 +292,15 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		}
 	>();
 	private nextCarryId = 1;
+	/** Fast travel: this player's trips waiting for the room's answer, by message id. */
+	private readonly pendingTravels = new Map<
+		number,
+		{
+			resolve: (result: { ok: boolean; reason?: string }) => void;
+			timer: ReturnType<typeof setTimeout>;
+		}
+	>();
+	private nextTravelId = 1;
 	/** Riding: who rides what, and this player's climb-on waiting for the room. */
 	private readonly rides = new CreatureClaims(CARRY_CLAIM_TIMEOUT_MS);
 	private selfSlot: number | null = null;
@@ -381,6 +401,14 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 					(slot, creature, previous, self) =>
 						this.context?.setRidden?.(slot, creature, previous, message.at ?? null, self)
 				),
+			onTravelResult: (message) => {
+				const pending = this.pendingTravels.get(message.id);
+				if (!pending) return;
+				this.pendingTravels.delete(message.id);
+				clearTimeout(pending.timer);
+				pending.resolve({ ok: message.ok, reason: message.reason });
+			},
+			onTravelled: (message) => this.context?.showTravel?.(message.slot, message.from, message.to),
 			onWaypoints: (message) => this.context?.applySharedWaypoints?.(message),
 			onScores: (message) => this.applyScores(message),
 			onShot: (message) => {
@@ -715,6 +743,23 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 	dropCarry(at: CarryPlacement): void {
 		if (this.selfSlot !== null) this.carries.delete(this.selfSlot);
 		this.net.sendDrop(this.nextCarryId++, at);
+	}
+
+	requestTravel(from: Vec3Tuple, to: Vec3Tuple): Promise<{ ok: boolean; reason?: string }> {
+		if (this.status !== 'connected') return Promise.resolve({ ok: false, reason: 'offline' });
+		const id = this.nextTravelId++;
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.pendingTravels.delete(id);
+				resolve({ ok: false, reason: 'timeout' });
+			}, TRAVEL_TIMEOUT_MS);
+			this.pendingTravels.set(id, { resolve, timer });
+			if (!this.net.sendTravel(id, from, to)) {
+				clearTimeout(timer);
+				this.pendingTravels.delete(id);
+				resolve({ ok: false, reason: 'offline' });
+			}
+		});
 	}
 
 	claimRide(creature: string): Promise<ClaimResult> {

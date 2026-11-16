@@ -1,7 +1,7 @@
 # Forest Drift — Fast Travel: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 3: approved; Phases 0–1 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 4: approved; Phases 0–2 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biome Minimap plan](../../Biome-Minimap/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -24,6 +24,13 @@ Paths are relative to `pages/Forest-Drift/`.
 7. **While there's a pin, the readout describes the pin**, not the pointer. Moving the mouse away no longer changes it, and **Clear pin** (or `Esc`) goes back to pointing.
 8. **A Clear pin button** sits next to **Travel here**, for touch screens, which have no `Esc`.
 9. **The map test runs in WebKit and Firefox too** (the `webkit-map` and `firefox-map` projects). The touch test is skipped in Firefox, where Playwright can't emulate touch.
+
+**Phase 2 (2026-11-16):**
+
+10. **Fixed a bug in how other players' movement is drawn** (`RemoteMotion.tangent`). Speeds were worked out across a teleport, so a moving player who travelled (or respawned) overshot the landing by about 30 m and slid back over a couple of frames. Speeds are no longer measured across a jump.
+11. **The "Fast travel for others" switch** sits in its own **Travel** group under Settings → Rules, shown only in online worlds.
+12. **Other players' trips are kept on the scene** (`remoteTravels`) for the Phase 3 shimmer; tests read them in the meantime.
+13. **The two-player test runs in WebKit and Firefox too** (the `webkit-online` and `firefox-online` projects).
 
 ## 1. Summary
 

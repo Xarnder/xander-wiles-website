@@ -51,6 +51,10 @@ Up/down arrows indicate a height difference. Away or reconnecting players appear
 The bar is hidden when you are alone. Turn it on or off in **Settings → Graphics → Show locator bar (online worlds)**.
 Refresh the page after the 18 October locator deployment to load this feature.
 
+### Fast travel online
+
+Pin a place on the full biome map and press **Travel here** to jump there, as when playing alone. Online, the room checks each trip first, and everyone else sees you jump straight to the new place. The world's owner can stop everyone else from fast travelling in **Settings → Rules → Fast travel for others**; the owner can always travel. While it's off, the map's button says "The owner has turned off fast travel".
+
 ## Pause menus: Multiplayer and Dev & Debug
 
 **Pause → Multiplayer** lists the players currently joined, their connection status, role,

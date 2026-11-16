@@ -285,8 +285,10 @@ export class RemoteMotion {
 		const samples = this.samples;
 		const s = samples[i]!;
 		if (fromStill || !isMoving(s)) return { x: 0, y: 0, z: 0 };
-		const prev = samples[i - 1];
-		const next = samples[i + 1];
+		// Never measure speed across a teleport (a respawn, a fast travel trip): the jump isn't motion,
+		// and treating it as such flings the avatar past where it landed.
+		const prev = isTeleport(s) ? undefined : samples[i - 1];
+		const next = samples[i + 1] && !isTeleport(samples[i + 1]!) ? samples[i + 1] : undefined;
 		let from = prev && isUsableNeighbour(prev, s, this.nominalInterval) ? prev : s;
 		let to = next && isUsableNeighbour(s, next, this.nominalInterval) ? next : s;
 		if (from === s && to === s) return { x: 0, y: 0, z: 0 };
@@ -331,6 +333,10 @@ export class RemoteMotion {
 		const samples = this.samples;
 		while (samples.length > MIN_KEPT && samples[1]!.t < renderTime - HISTORY_MS) samples.shift();
 	}
+}
+
+function isTeleport(sample: MotionSample): boolean {
+	return (sample.flags & POSE_FLAGS.teleport) !== 0;
 }
 
 function isMoving(sample: MotionSample): boolean {

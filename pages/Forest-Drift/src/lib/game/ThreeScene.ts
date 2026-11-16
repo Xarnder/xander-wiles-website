@@ -56,7 +56,7 @@ import {
 	creatureRostersAvailable,
 	readCreatureCoatSwitches
 } from './creatures/biome/creatureCoatSwitches';
-import type { CarryPlacement } from './net/protocol';
+import type { CarryPlacement, Vec3Tuple } from './net/protocol';
 import type { CreatureDefinition, PersistentCreatureDefinition } from './creatures/CreatureTypes';
 import type { SceneMultiplayerHooks } from './net/MultiplayerSession';
 import type { PlayerBookmark, SharedEnvironment } from './net/protocol';
@@ -2413,6 +2413,7 @@ export class ThreeScene implements WorldRuntime {
 					this.waypoints.setShared(list);
 				},
 				applySharedWaypoints: (message) => this.waypoints.applyShared(message),
+				showTravel: (slot, from, to) => this.showRemoteTravel(slot, from, to),
 				remoteShot: (origin, dir, colour, ageMs, slot, mouth) =>
 					this.projectiles.spawnRemote(
 						{ x: origin[0], y: origin[1], z: origin[2] },
@@ -2826,7 +2827,8 @@ export class ThreeScene implements WorldRuntime {
 			rules: {
 				fallDamage: this.sharedFallDamage,
 				playerDamage: this.sharedPlayerDamage,
-				creatureProjectiles: this.sharedCreatureProjectiles
+				creatureProjectiles: this.sharedCreatureProjectiles,
+				fastTravel: this.sharedFastTravel
 			}
 		};
 	}
@@ -2837,6 +2839,7 @@ export class ThreeScene implements WorldRuntime {
 		if (env.rules?.playerDamage !== undefined) this.sharedPlayerDamage = env.rules.playerDamage;
 		if (env.rules?.creatureProjectiles !== undefined)
 			this.sharedCreatureProjectiles = env.rules.creatureProjectiles;
+		if (env.rules?.fastTravel !== undefined) this.sharedFastTravel = env.rules.fastTravel;
 		applyKnownFields(this.skySettings, env.sky, LOCAL_SKY_KEYS);
 		ensureDayCycleSettings(this.skySettings);
 		const weather = { ...env.weather };
@@ -3264,10 +3267,18 @@ export class ThreeScene implements WorldRuntime {
 	/** Whether a trip can start now, and if not, why (the Travel button's label). */
 	canFastTravel(): TravelPermission {
 		if (!fastTravelAvailable()) return { ok: false, reason: 'refused' };
+		const multiplayer = this.multiplayer;
 		return travelPermission({
 			knockedOut: this.knockedOutAt !== null || this.health.snapshot().dead,
 			travelling: this.travelling,
-			mounting: this.controller.mountActive && !this.controller.seatedOnMount
+			mounting: this.controller.mountActive && !this.controller.seatedOnMount,
+			online: multiplayer
+				? {
+						connected: (multiplayer.connected?.() ?? true) && (multiplayer.role ?? null) !== null,
+						owner: multiplayer.role === 'owner',
+						ruleOn: this.sharedFastTravel
+					}
+				: undefined
 		});
 	}
 
@@ -3291,11 +3302,8 @@ export class ThreeScene implements WorldRuntime {
 		if (!Number.isFinite(x) || !Number.isFinite(z)) return { ok: false, reason: 'refused' };
 		const permission = this.canFastTravel();
 		if (!permission.ok) return permission;
-		const start = performance.now();
-		const origin = this.travelOriginHere();
-		const outcome = this.travelJump(findLanding(x, z, this.landingWater()), null, start);
-		if (outcome.ok) this.travelMemory.remember(origin);
-		return outcome;
+		const landing = findLanding(x, z, this.landingWater());
+		return this.travel(landing, null);
 	}
 
 	/** Go back (Q6): returns to exactly where the last trip started; that trip becomes the new last. */
@@ -3304,11 +3312,60 @@ export class ThreeScene implements WorldRuntime {
 		if (!back) return { ok: false, reason: 'refused' };
 		const permission = this.canFastTravel();
 		if (!permission.ok) return permission;
+		return this.travel({ x: back.x, z: back.z, moved: false }, back);
+	}
+
+	/**
+	 * Online, asks the room first (plan §6): it checks the owner's rule and tells everyone else.
+	 * Then jumps, and remembers where the trip started for Go back.
+	 */
+	private async travel(landing: Landing, exact: TravelOrigin | null): Promise<TravelOutcome> {
+		const multiplayer = this.multiplayer;
+		if (multiplayer?.requestTravel) {
+			const eyeHeight = this.settings.player.eyeHeight;
+			const p = this.controller.worldPosition;
+			const toY = exact
+				? exact.y - eyeHeight
+				: this.worldSurfaceSampler.getSupportingSurfaceY(landing.x, landing.z, Infinity);
+			this.travelling = true;
+			let answer: { ok: boolean; reason?: string };
+			try {
+				answer = await multiplayer.requestTravel(
+					[p.x, p.y - eyeHeight, p.z],
+					[landing.x, Number.isFinite(toY) ? toY : p.y - eyeHeight, landing.z]
+				);
+			} finally {
+				this.travelling = false;
+			}
+			if (!answer.ok)
+				return {
+					ok: false,
+					reason:
+						answer.reason === 'rule'
+							? 'ruleOff'
+							: answer.reason === 'offline'
+								? 'connecting'
+								: answer.reason === 'busy'
+									? 'busy'
+									: 'refused'
+				};
+			// Something may have changed while the room answered (knocked out, climbed off).
+			const permission = this.canFastTravel();
+			if (!permission.ok) return permission;
+		}
 		const start = performance.now();
 		const origin = this.travelOriginHere();
-		const outcome = this.travelJump({ x: back.x, z: back.z, moved: false }, back, start);
+		const outcome = this.travelJump(landing, exact, start);
 		if (outcome.ok) this.travelMemory.remember(origin);
 		return outcome;
+	}
+
+	/** Other players' trips seen online, newest last (tests read it; Phase 3 draws the shimmer). */
+	readonly remoteTravels: { slot: number; from: Vec3Tuple; to: Vec3Tuple }[] = [];
+
+	private showRemoteTravel(slot: number, from: Vec3Tuple, to: Vec3Tuple): void {
+		this.remoteTravels.push({ slot, from, to });
+		if (this.remoteTravels.length > 8) this.remoteTravels.shift();
 	}
 
 	private travelOriginHere(): TravelOrigin {
@@ -3832,10 +3889,21 @@ export class ThreeScene implements WorldRuntime {
 		fallDamage: boolean;
 		playerDamage: boolean;
 		creatureProjectiles: boolean;
+		fastTravel: boolean;
 	} {
 		return Object.defineProperties(
-			{} as { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean },
+			{} as {
+				fallDamage: boolean;
+				playerDamage: boolean;
+				creatureProjectiles: boolean;
+				fastTravel: boolean;
+			},
 			{
+				fastTravel: {
+					enumerable: true,
+					get: () => this.sharedFastTravel,
+					set: (enabled: boolean) => this.setFastTravelRule(enabled)
+				},
 				creatureProjectiles: {
 					enumerable: true,
 					get: () => this.sharedCreatureProjectiles,
@@ -3853,6 +3921,13 @@ export class ThreeScene implements WorldRuntime {
 				}
 			}
 		);
+	}
+
+	/** Online only (the owner): whether everyone else may fast travel (fast travel Q3). */
+	setFastTravelRule(enabled: boolean): void {
+		if (!this.multiplayer || this.sharedFastTravel === enabled) return;
+		this.sharedFastTravel = enabled;
+		this.sharedEnvironmentEdited();
 	}
 
 	/** Online only (the owner): whether creatures can be carried and fired (ranged weapons Q15). */
@@ -3953,6 +4028,8 @@ export class ThreeScene implements WorldRuntime {
 	private sharedPlayerDamage = true;
 	/** Online worlds: the owner's creature-projectiles rule (Q15), on unless they turn it off. */
 	private sharedCreatureProjectiles = true;
+	/** Online worlds: the owner's fast travel rule (Q3), on unless they turn it off. */
+	private sharedFastTravel = true;
 	private punchSwingUntil = 0;
 	private nextPunchAt = 0;
 

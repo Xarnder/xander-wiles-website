@@ -174,7 +174,12 @@ export interface GameSettingsHost {
 		changed(): void;
 	};
 	/** This world's gameplay rules; online, the owner's (assigning applies them). */
-	rules?: { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean };
+	rules?: {
+		fallDamage: boolean;
+		playerDamage: boolean;
+		creatureProjectiles: boolean;
+		fastTravel: boolean;
+	};
 	actions: GameSettingsActions;
 }
 

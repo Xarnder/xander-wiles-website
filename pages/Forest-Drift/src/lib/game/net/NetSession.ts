@@ -34,6 +34,8 @@ import {
 	type ServerCarriedMessage,
 	type ServerRideResultMessage,
 	type ServerRiddenMessage,
+	type ServerTravelledMessage,
+	type ServerTravelResultMessage,
 	type ServerShotMessage,
 	type ServerShotResultMessage,
 	type Vec3Tuple,
@@ -132,6 +134,10 @@ export interface NetSessionOptions {
 	onRideResult?: (message: ServerRideResultMessage) => void;
 	/** Riding: someone (possibly this player) climbed on or got off a creature. */
 	onRidden?: (message: ServerRiddenMessage) => void;
+	/** Fast travel: the room's answer to this player's trip. */
+	onTravelResult?: (message: ServerTravelResultMessage) => void;
+	/** Fast travel: someone else travelled. */
+	onTravelled?: (message: ServerTravelledMessage) => void;
 	/** Ranged weapons: someone else fired a pellet. */
 	onShot?: (message: ServerShotMessage) => void;
 	/** Ranged weapons: whether this player's pellet was refused, or hurt someone. */
@@ -400,6 +406,10 @@ export class NetSession {
 		return this.sendText({ t: 'dismount', id, at });
 	}
 
+	sendTravel(id: number, from: Vec3Tuple, to: Vec3Tuple): boolean {
+		return this.sendText({ t: 'travel', id, from, to });
+	}
+
 	sendShoot(shot: number, origin: Vec3Tuple, dir: Vec3Tuple, at: number): boolean {
 		return this.sendText({ t: 'shoot', shot, origin, dir, at });
 	}
@@ -622,6 +632,12 @@ export class NetSession {
 				break;
 			case 'ridden':
 				this.options.onRidden?.(message);
+				break;
+			case 'travelResult':
+				this.options.onTravelResult?.(message);
+				break;
+			case 'travelled':
+				this.options.onTravelled?.(message);
 				break;
 			case 'shot':
 				this.options.onShot?.(message);

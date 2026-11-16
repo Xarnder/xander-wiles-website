@@ -45,6 +45,8 @@ import type {
 	CarryRefusal,
 	MiniBuildInteractionRef,
 	RideRefusal,
+	TravelRoomRefusal,
+	Vec3Tuple,
 	OccupiedMiniBuildInteraction
 } from './protocol';
 import {
@@ -265,6 +267,9 @@ export interface RoomStats {
 	ridesGranted: number;
 	ridesRefused: number;
 	ridesReleased: number;
+	/** Fast travel: trips let through and refused. */
+	travelsGranted: number;
+	travelsRefused: number;
 	/** Pellets accepted from players riding a creature (checked against the extrapolated pose). */
 	mountedShots: number;
 	/** Pellets accepted and broadcast, and refused (no carry, no charge, implausible origin…). */
@@ -317,6 +322,9 @@ interface PlayerState {
 	lastPunchAt: number;
 	lastCarryId: number;
 	lastRideId: number;
+	/** Fast travel: the last trip's message id, and when the room last let this player travel. */
+	lastTravelId: number;
+	lastTravelAt: number;
 	/** Ranged weapons: the carried creature's firing state, made on first shot after a grant. */
 	firing: CarryFiring | null;
 	lastShotId: number;
@@ -355,6 +363,13 @@ const CARRY_DROP_RADIUS = 3;
  * rider (a giant's shoulder is several metres off its centre) is moved to the rider.
  */
 const RIDE_DROP_RADIUS = 12;
+/**
+ * Fast travel: where a trip says it starts must be this close to the player's last pose (poses
+ * arrive several times a second, and even flying flat out covers under 10 m between them).
+ */
+const TRAVEL_FROM_RADIUS = 30;
+/** At most one trip a second: a spam guard, not a cooldown (Q2 has none). */
+const TRAVEL_MIN_INTERVAL_MS = 1000;
 
 /** `abilityFor` on recipes from rows, which only passed the store's shape check. */
 function safeAbility(definition: CreatureDefinition): boolean {
@@ -440,6 +455,8 @@ export class RoomCore {
 		ridesGranted: 0,
 		ridesRefused: 0,
 		ridesReleased: 0,
+		travelsGranted: 0,
+		travelsRefused: 0,
 		mountedShots: 0,
 		shotsFired: 0,
 		shotsRefused: 0,
@@ -815,6 +832,10 @@ export class RoomCore {
 			if (player) this.handleRide(player, message);
 			return;
 		}
+		if (message.t === 'travel') {
+			if (player) this.handleTravel(player, message);
+			return;
+		}
 		if (message.t === 'dismount') {
 			if (player && message.id > player.lastRideId) {
 				player.lastRideId = message.id;
@@ -992,6 +1013,7 @@ export class RoomCore {
 			player.lastPunchId = -1;
 			player.lastCarryId = -1;
 			player.lastRideId = -1;
+			player.lastTravelId = -1;
 			player.lastShotId = -1;
 			if (player.health?.dead) player.info.down = true;
 			player.graceExpiresAt = null;
@@ -1480,6 +1502,8 @@ export class RoomCore {
 			lastPunchAt: Number.NEGATIVE_INFINITY,
 			lastCarryId: -1,
 			lastRideId: -1,
+			lastTravelId: -1,
+			lastTravelAt: Number.NEGATIVE_INFINITY,
 			firing: null,
 			lastShotId: -1,
 			recentPoses: [],
@@ -1611,6 +1635,11 @@ export class RoomCore {
 	// --------------------------------------------------------------- ranged weapons: carrying
 
 	/** The owner's creature-projectiles rule (Q15); on unless they turn it off. */
+	/** Fast travel for everyone but the owner (fast travel Q3); on unless the owner turned it off. */
+	private fastTravelEnabled(): boolean {
+		return this.env?.rules?.fastTravel ?? true;
+	}
+
 	private creatureProjectilesEnabled(): boolean {
 		return this.env?.rules?.creatureProjectiles ?? true;
 	}
@@ -1697,6 +1726,45 @@ export class RoomCore {
 		this.persistSessionState();
 		if (player.conn) send(player.conn, { t: 'rideResult', id: message.id, ok: true });
 		this.broadcast({ t: 'ridden', slot: player.info.slot, creature }, player.conn ?? undefined);
+	}
+
+	/**
+	 * Fast travel (plan §6): the player is about to jump from `from` to `to`. Checks the owner's rule
+	 * (the owner is exempt), that they're up and where they say they are, and at most one trip a
+	 * second; then answers, and tells everyone else (for the shimmer). The jump itself arrives as a
+	 * teleport-flagged pose, as respawns always have.
+	 */
+	private handleTravel(
+		player: PlayerState,
+		message: { id: number; from: Vec3Tuple; to: Vec3Tuple }
+	): void {
+		if (message.id <= player.lastTravelId) return;
+		player.lastTravelId = message.id;
+		const refuse = (reason: TravelRoomRefusal) => {
+			this.stats.travelsRefused++;
+			if (player.conn) send(player.conn, { t: 'travelResult', id: message.id, ok: false, reason });
+		};
+		const now = this.now();
+		if (player.info.role !== 'owner' && !this.fastTravelEnabled()) return refuse('rule');
+		const pose = player.pose;
+		const [fx, fy, fz] = message.from;
+		const [tx, ty, tz] = message.to;
+		if (
+			this.healthOf(player, now).dead ||
+			!pose ||
+			!isPlausiblePosition(fx, fy, fz) ||
+			!isPlausiblePosition(tx, ty, tz) ||
+			Math.hypot(fx - pose.x, fz - pose.z) > TRAVEL_FROM_RADIUS
+		)
+			return refuse('state');
+		if (now - player.lastTravelAt < TRAVEL_MIN_INTERVAL_MS) return refuse('busy');
+		player.lastTravelAt = now;
+		this.stats.travelsGranted++;
+		if (player.conn) send(player.conn, { t: 'travelResult', id: message.id, ok: true });
+		this.broadcast(
+			{ t: 'travelled', slot: player.info.slot, from: message.from, to: message.to },
+			player.conn ?? undefined
+		);
 	}
 
 	/**

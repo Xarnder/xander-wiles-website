@@ -1283,7 +1283,20 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 											)
 										]
 									: [])
-							])
+							]),
+							// Fast travel only needs a rule online: alone, it's always yours to use.
+							...(host.worldAccess && host.worldAccess !== 'local'
+								? [
+										group('rules-travel', 'Travel', [
+											boolField(
+												'rules.fastTravel',
+												'Fast travel for others',
+												host.rules,
+												'fastTravel'
+											)
+										])
+									]
+								: [])
 						]
 					}
 				]

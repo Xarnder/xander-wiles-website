@@ -43,7 +43,8 @@ export interface SceneLike {
 		nearestRideable(from: Vec): { x: number; z: number } | null;
 	};
 }
-export type TestWindow = { forestScene: SceneLike };
+/** `forestScene` with `?musicTest`; online tests reach the scene through `__forestSession`. */
+export type TestWindow = { forestScene?: SceneLike; __forestSession?: { scene: SceneLike } };
 
 export async function lowGraphics(page: Page) {
 	await page.addInitScript(() => localStorage.setItem('forest-drift.graphics.v1', 'low'));
@@ -55,7 +56,8 @@ export async function aimAt(page: Page, kind: 'ride' | 'carry'): Promise<void> {
 		.poll(
 			() =>
 				page.evaluate((kind) => {
-					const s = (window as unknown as TestWindow).forestScene;
+					const w = window as unknown as TestWindow;
+					const s = (w.forestScene ?? w.__forestSession?.scene)!;
 					const me = s.controller.worldPosition;
 					let best: { d: number; id: string } | null = null;
 					for (const [id, live] of s.creatures.live) {
@@ -96,7 +98,8 @@ export async function aimAt(page: Page, kind: 'ride' | 'carry'): Promise<void> {
 
 export const scene = <T>(page: Page, fn: (s: SceneLike) => T) =>
 	page.evaluate((source) => {
-		const s = (window as unknown as TestWindow).forestScene;
+		const w = window as unknown as TestWindow;
+		const s = (w.forestScene ?? w.__forestSession?.scene)!;
 		return new Function('s', `return (${source})(s)`)(s);
 	}, fn.toString()) as Promise<T>;
 

@@ -217,6 +217,29 @@ describe('RemoteMotion corrections', () => {
 		const frame = motion.update(300, 16)!;
 		expect(frame.x).toBe(500);
 	});
+
+	it('never carries the jump on as speed: no overshoot after a moving teleport (fast travel)', () => {
+		// Walking, then a trip 800 m east while still moving, then a step on from the landing.
+		const motion = new RemoteMotion({ initialDelayMs: 100, minDelayMs: 100, maxDelayMs: 100 });
+		const moving = POSE_FLAGS.moving | POSE_FLAGS.grounded;
+		motion.push({ t: 0, x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flags: moving }, 10);
+		motion.push({ t: 100, x: 0.5, y: 0, z: 0, yaw: 0, pitch: 0, flags: moving }, 110);
+		motion.update(200, 16);
+		motion.push(
+			{ t: 200, x: 800, y: 0, z: 0, yaw: 0, pitch: 0, flags: moving | POSE_FLAGS.teleport },
+			210
+		);
+		// Drawn every frame while waiting for the next pose (extrapolating), then after it arrives.
+		let furthest = 0;
+		for (let now = 216; now <= 450; now += 16) {
+			if (now === 312)
+				motion.push({ t: 300, x: 800.5, y: 0, z: 0, yaw: 0, pitch: 0, flags: moving }, 310);
+			const frame = motion.update(now, 16)!;
+			furthest = Math.max(furthest, frame.x);
+		}
+		expect(furthest).toBeGreaterThanOrEqual(800);
+		expect(furthest).toBeLessThan(802);
+	});
 });
 
 describe('character motion state', () => {

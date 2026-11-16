@@ -42,7 +42,9 @@ import type { DamageSource, HealthState } from '../player/PlayerHealth';
 //    multiplayer stats (scores, resetScores, welcome.scores): see `playerScores.ts`. Both sides
 //    ignore stats messages they don't know, so stats needed no bump of their own.
 // 8: riding bipeds (ride, dismount, rideResult, ridden, welcome.rides): see `creatureRiding.ts`.
-export const PROTOCOL_VERSION = 8;
+// 9: fast travel (travel, travelResult, travelled; rules.fastTravel): the room checks each trip
+//    against the owner's rule and tells everyone else (docs/2026/11-16/Fast-Travel).
+export const PROTOCOL_VERSION = 9;
 
 /**
  * Bump whenever terrain, vegetation or hydrology generation output changes. Every client in one world
@@ -378,7 +380,13 @@ export interface SharedEnvironment {
 	/** The shared subset of the weather settings (see `SHARED_WEATHER_KEYS`). */
 	weather: Record<string, unknown>;
 	/** The owner's gameplay rules (Q22). Absent until the owner first changes one. */
-	rules?: { fallDamage?: boolean; playerDamage?: boolean; creatureProjectiles?: boolean };
+	rules?: {
+		fallDamage?: boolean;
+		playerDamage?: boolean;
+		creatureProjectiles?: boolean;
+		/** Fast travel for everyone but the owner (fast travel Q3). True when absent. */
+		fastTravel?: boolean;
+	};
 }
 
 /** The room clock: accumulated time the world has been occupied (Q11-A), at `serverTime`. */
@@ -552,6 +560,37 @@ export interface ClientShotHitMessage {
 	point: Vec3Tuple;
 }
 
+/**
+ * Fast travel: the sender is about to jump from `from` to `to` (feet positions). The room checks
+ * the owner's rule, the sender's health and where they are, answers with `travelResult`, and tells
+ * everyone else with `travelled` (for the shimmer at both ends).
+ */
+export interface ClientTravelMessage {
+	t: 'travel';
+	id: number;
+	from: Vec3Tuple;
+	to: Vec3Tuple;
+}
+
+/** `rule`: the owner turned fast travel off; `busy`: too soon after the last trip; `state`: not now. */
+export type TravelRoomRefusal = 'rule' | 'busy' | 'state';
+
+/** The room's answer to the sender's `travel`. */
+export interface ServerTravelResultMessage {
+	t: 'travelResult';
+	id: number;
+	ok: boolean;
+	reason?: TravelRoomRefusal;
+}
+
+/** Someone else fast travelled from `from` to `to` (feet positions). */
+export interface ServerTravelledMessage {
+	t: 'travelled';
+	slot: number;
+	from: Vec3Tuple;
+	to: Vec3Tuple;
+}
+
 export type CarryRefusal = 'taken' | 'ineligible' | 'rule' | 'state';
 
 export type RideRefusal = 'taken' | 'ineligible' | 'role' | 'state';
@@ -633,7 +672,8 @@ export type ClientJsonMessage =
 	| ClientShootMessage
 	| ClientShotHitMessage
 	| ClientWaypointMessage
-	| ClientResetScoresMessage;
+	| ClientResetScoresMessage
+	| ClientTravelMessage;
 
 export interface WelcomeMessage {
 	t: 'welcome';
@@ -815,7 +855,9 @@ export type ServerJsonMessage =
 	| ServerRideResultMessage
 	| ServerRiddenMessage
 	| ServerShotMessage
-	| ServerShotResultMessage;
+	| ServerShotResultMessage
+	| ServerTravelResultMessage
+	| ServerTravelledMessage;
 
 const NAME_MAX = 20;
 const NAME_MIN = 2;
@@ -883,6 +925,7 @@ export function parseSharedEnvironment(raw: unknown): SharedEnvironment | null {
 		if (typeof raw.rules.playerDamage === 'boolean') rules.playerDamage = raw.rules.playerDamage;
 		if (typeof raw.rules.creatureProjectiles === 'boolean')
 			rules.creatureProjectiles = raw.rules.creatureProjectiles;
+		if (typeof raw.rules.fastTravel === 'boolean') rules.fastTravel = raw.rules.fastTravel;
 	}
 	return {
 		anchor: { roomSeconds, timeOfDay, weatherTime },
@@ -1004,6 +1047,12 @@ export function parseClientMessage(text: string): ClientJsonMessage | null {
 		if (typeof at !== 'number' || !Number.isFinite(at)) return null;
 		return { t: 'shotHit', shot, target, at, point: point as Vec3Tuple };
 	}
+	if (message.t === 'travel') {
+		const from = finiteTuple(message.from, 3);
+		const to = finiteTuple(message.to, 3);
+		if (!isMessageId(message.id) || !from || !to) return null;
+		return { t: 'travel', id: message.id, from: from as Vec3Tuple, to: to as Vec3Tuple };
+	}
 	if (message.t === 'waypoint') return parseWaypointMessage(message);
 	if (message.t === 'resetScores') return { t: 'resetScores' };
 	if (message.t === 'punch') {
@@ -1047,6 +1096,8 @@ export function parseServerMessage(text: string): ServerJsonMessage | null {
 		t === 'ridden' ||
 		t === 'shot' ||
 		t === 'shotResult' ||
+		t === 'travelResult' ||
+		t === 'travelled' ||
 		t === 'waypoints' ||
 		t === 'scores'
 		? (value as ServerJsonMessage)

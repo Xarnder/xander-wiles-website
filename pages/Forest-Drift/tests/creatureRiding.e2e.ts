@@ -35,7 +35,7 @@ async function jumpAndWatch(page: Page) {
 	const rest = await scene(page, sampleSource);
 	const watching = page.evaluate(
 		async ({ rest, source }) => {
-			const s = (window as unknown as TestWindow).forestScene;
+			const s = (window as unknown as TestWindow).forestScene!;
 			const sample = new Function('s', `return (${source})(s)`) as (s: SceneLike) => {
 				lift: number;
 				seat: number;
@@ -166,7 +166,7 @@ test.describe('riding a two-legged creature (single player)', () => {
 		// The mount is back in its herd, standing.
 		expect(
 			await page.evaluate(
-				(id) => (window as unknown as TestWindow).forestScene.creatures.logical.has(id!),
+				(id) => (window as unknown as TestWindow).forestScene!.creatures.logical.has(id!),
 				ridden
 			)
 		).toBe(true);

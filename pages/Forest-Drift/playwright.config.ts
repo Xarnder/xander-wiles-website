@@ -78,12 +78,12 @@ export default defineConfig({
 		},
 		{
 			name: 'webkit-online',
-			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
+			testMatch: /(determinism|multiplayer|fastTravelMultiplayer)\.e2e\.ts$/,
 			use: { ...devices['Desktop Safari'] }
 		},
 		{
 			name: 'firefox-online',
-			testMatch: /(determinism|multiplayer)\.e2e\.ts$/,
+			testMatch: /(determinism|multiplayer|fastTravelMultiplayer)\.e2e\.ts$/,
 			use: {
 				...devices['Desktop Firefox'],
 				launchOptions: firefoxHome
