@@ -136,6 +136,7 @@
   - [ ] Custom/Other: <input type="text" placeholder="Type custom answer here">
 - **Your Answer**: <input type="text" placeholder="Type your answer here" style="width: 100%;">
 - **Decision**: `Locked 2026-11-16`: **A**: `;` toggle, `PageUp`/`PageDown` zoom, `'` full map, all rebindable (recommended default).
+- **Follow-up (Phase 1)**: `PageUp`/`PageDown` turned out to be Build level keys while walking (the key-conflict tests caught it), so zoom is `'` (in) and `/` (out) for now. The full-map key is chosen in Phase 2. **Confirmed by you 2026-11-16** ("Keep ' and /").
 
 ### Question 8: Worlds with biomes off (Multiple Choice)
 

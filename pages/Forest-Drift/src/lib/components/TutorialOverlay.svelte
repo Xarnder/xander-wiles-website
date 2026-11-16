@@ -969,7 +969,8 @@
 	}
 	.tutorial-open {
 		position: fixed;
-		right: 16px;
+		/* Left of the biome minimap while it's shown (the page sets --fd-map-inset). */
+		right: calc(16px + var(--fd-map-inset, 0px));
 		top: 64px;
 		z-index: 42;
 		display: flex;
@@ -1016,7 +1017,7 @@
 	}
 	.tutorial-controls {
 		position: fixed;
-		right: 16px;
+		right: calc(16px + var(--fd-map-inset, 0px));
 		top: 108px;
 		display: flex;
 		flex-wrap: wrap;
@@ -1262,11 +1263,11 @@
 		}
 		.tutorial-open {
 			top: max(8px, env(safe-area-inset-top));
-			right: 8px;
+			right: calc(8px + var(--fd-map-inset, 0px));
 		}
 		.tutorial-controls {
 			top: 154px;
-			right: 8px;
+			right: calc(8px + var(--fd-map-inset, 0px));
 		}
 		.tutorial-open span {
 			display: none;

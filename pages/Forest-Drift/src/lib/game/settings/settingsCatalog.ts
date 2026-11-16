@@ -80,6 +80,32 @@ function boolField(
 	};
 }
 
+/** The corner biome minimap (biome minimap Phase 1): shown, size, grid. */
+function biomeMapFields(map: NonNullable<GameSettingsHost['biomeMap']>): SettingsField[] {
+	return [
+		{
+			kind: 'boolean',
+			id: 'graphics.biomeMap',
+			label: 'Show biome map',
+			get: () => map.isVisible(),
+			set: (value) => map.setVisible(value)
+		},
+		selectField(
+			'graphics.biomeMapSize',
+			'Biome map size',
+			map.prefs,
+			'size',
+			[
+				{ value: 'small', label: 'Small' },
+				{ value: 'medium', label: 'Medium' },
+				{ value: 'large', label: 'Large' }
+			],
+			map.changed
+		),
+		boolField('graphics.biomeMapGrid', 'Map grid', map.prefs, 'grid', map.changed)
+	];
+}
+
 function selectField(
 	id: string,
 	label: string,
@@ -3616,6 +3642,7 @@ function buildUnlockedCatalog(host: GameSettingsHost): SettingsCategory[] {
 						'showBiomeNames',
 						actions.graphicsBiomeNames
 					),
+					...(host.biomeMap ? biomeMapFields(host.biomeMap) : []),
 					numberField(
 						'graphics.fov',
 						'Field of view (°)',

@@ -1,3 +1,4 @@
+import type { BiomeMapPreferences } from '../map/biomeMapPreferences';
 import type { BiomeSettings } from '../biomes/BiomeTypes';
 import type { BuildingSettings } from '../building/FoundationTypes';
 import type { GraphicsSettings } from '../graphics/GraphicsTypes';
@@ -164,6 +165,14 @@ export interface GameSettingsHost {
 	worldAccess?: 'local' | 'owner' | 'member';
 	/** This world's biome settings (saved in the world; locked online with the rest of the land). */
 	biomes?: BiomeSettings;
+	/** The corner biome minimap's settings (biome minimap Phase 1). */
+	biomeMap?: {
+		prefs: BiomeMapPreferences;
+		isVisible(): boolean;
+		setVisible(show: boolean): void;
+		/** A size or grid change: save and show it. */
+		changed(): void;
+	};
 	/** This world's gameplay rules; online, the owner's (assigning applies them). */
 	rules?: { fallDamage: boolean; playerDamage: boolean; creatureProjectiles: boolean };
 	actions: GameSettingsActions;

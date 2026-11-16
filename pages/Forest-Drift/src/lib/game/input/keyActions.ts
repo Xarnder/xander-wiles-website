@@ -934,6 +934,27 @@ export const KEY_ACTIONS = [
 		keys: [key('KeyL')]
 	}),
 	action({
+		id: 'map.toggle',
+		label: 'Show / hide biome map',
+		category: 'interface',
+		contexts: MOVING,
+		keys: [key('Semicolon')]
+	}),
+	action({
+		id: 'map.zoomIn',
+		label: 'Zoom biome map in',
+		category: 'interface',
+		contexts: MOVING,
+		keys: [key('Quote')]
+	}),
+	action({
+		id: 'map.zoomOut',
+		label: 'Zoom biome map out',
+		category: 'interface',
+		contexts: MOVING,
+		keys: [key('Slash')]
+	}),
+	action({
 		id: 'ui.screenshot',
 		label: 'Screenshot',
 		category: 'interface',

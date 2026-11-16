@@ -127,6 +127,7 @@
 	import InviteLinksDialog from '#lib/components/InviteLinksDialog.svelte';
 	import LocatorBar from '#lib/components/LocatorBar.svelte';
 	import BiomeIndicator from '#lib/components/BiomeIndicator.svelte';
+	import BiomeMinimap from '#lib/components/BiomeMinimap.svelte';
 	import ConfirmBiomesDialog from '#lib/components/ConfirmBiomesDialog.svelte';
 	import RestorePointsDialog from '#lib/components/RestorePointsDialog.svelte';
 	import JoinWorldDialog from '#lib/components/JoinWorldDialog.svelte';
@@ -467,6 +468,11 @@
 	let mpSaving = $state(false);
 	/** The locator bar's element, handed to the multiplayer session to place markers in. */
 	let locatorElement = $state<HTMLDivElement | null>(null);
+	// Corner HUD (tutorial buttons) steps left of the biome minimap while it's shown.
+	$effect(() => {
+		const map = screen === 'game' && stats?.biomeMap?.visible ? stats.biomeMap.sizePx + 12 : 0;
+		document.documentElement.style.setProperty('--fd-map-inset', `${map}px`);
+	});
 	/** F2-B: a deletion that would take other people's additions with it, waiting for an answer. */
 	let removeOthersPrompt = $state<{
 		items: DeletionItem[];
@@ -778,6 +784,20 @@
 		if (matchesAction(event, 'multiplayer.stopTracking') && trackedPlayerId) {
 			event.preventDefault();
 			multiplayerSession?.trackPlayer(null);
+			return;
+		}
+		// The biome minimap (biome minimap Phase 1): show/hide, and zoom while it's shown.
+		if (matchesAction(event, 'map.toggle')) {
+			if (!session || miniBuildEditor || event.repeat) return;
+			event.preventDefault();
+			const shown = session.scene.toggleBiomeMap();
+			showSaveToast(shown ? 'Biome map on' : `Biome map off · ${keyName('map.toggle')} to show`);
+			return;
+		}
+		if (matchesAction(event, 'map.zoomIn') || matchesAction(event, 'map.zoomOut')) {
+			if (!session || miniBuildEditor || !stats?.biomeMap?.visible) return;
+			event.preventDefault();
+			session.scene.zoomBiomeMap(matchesAction(event, 'map.zoomIn') ? -1 : 1);
 			return;
 		}
 
@@ -2491,8 +2511,25 @@
 					Flying · {formatFlySpeed(flight.speed)}
 				</div>
 			{/if}
+			{#if screen === 'game' && stats?.biomeMap?.visible && !captureStage && !miniBuildEditor}
+				<BiomeMinimap
+					size={stats.biomeMap.sizePx}
+					biomes={stats.biomeMap.biomes}
+					biomeName={currentBiomeName}
+					onElements={(elements) => session?.scene.setBiomeMapElements(elements)}
+					onZoom={(delta) => session?.scene.zoomBiomeMap(delta)}
+				/>
+			{/if}
 			{#if stats?.dayCycleEnabled}
-				<div class="day-clock" data-testid="day-clock">{formatDayClock(stats.timeOfDay)}</div>
+				<div
+					class="day-clock"
+					data-testid="day-clock"
+					style:top={stats.biomeMap?.visible
+						? `calc(${stats.biomeMap.sizePx + 64}px + var(--fd-map-buttons, 0px))`
+						: undefined}
+				>
+					{formatDayClock(stats.timeOfDay)}
+				</div>
 			{/if}
 
 			{#if stats?.miniBuildChunk && !miniBuildEditor && hotbar?.buildModeActive && hotbar.activeSlot === 8 && hotbar.globalMode === 'none' && !hotbar.locked}
@@ -3224,6 +3261,12 @@
 		border: 0;
 	}
 
+	/* The biome minimap's touch zoom buttons take a row under it; the day clock steps below. */
+	@media (hover: none) {
+		:global(:root) {
+			--fd-map-buttons: 2.5rem;
+		}
+	}
 	.day-clock {
 		position: absolute;
 		top: 0.75rem;

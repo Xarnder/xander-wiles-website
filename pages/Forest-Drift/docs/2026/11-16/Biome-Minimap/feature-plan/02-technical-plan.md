@@ -1,7 +1,7 @@
 # Forest Drift — Biome Minimap: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 3: Phase 0 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): the full map has pan, zoom and a pointer readout only (Q11), and both maps get a grid and coordinates (Q2). Phase records: [Phase 0](../phase-0/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 4: Phases 0–1 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): the full map has pan, zoom and a pointer readout only (Q11), and both maps get a grid and coordinates (Q2). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`docs/biomes.md`](../../../../biomes.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -18,6 +18,13 @@ Paths are relative to `pages/Forest-Drift/`.
 4. **`BiomeField.lastBaseElevation()`** instead of `classifyPointWithHeight`.
 5. **Tile positions snap to whole pixels** (no seams).
 6. **The map e2e runs in WebKit and Firefox from Phase 0** (`webkit-map`, `firefox-map` projects).
+
+**Phase 1 (2026-11-16):**
+
+7. **Zoom keys are `'` (in) and `/` (out)**, not `PageUp`/`PageDown`: those are already Build level keys while walking. The full-map key moves to Phase 2.
+8. **The minimap picks the coarsest tile level at least as sharp as the screen** (drawn at 0.5–2×), not "no finer than the screen" (1–2×).
+9. **Preferences have their own store** (`biomeMapPreferences.ts`), with a "not chosen yet" state for Q6.
+10. **The tutorial buttons and day clock step aside** while the minimap is shown (`--fd-map-inset`).
 
 ## 1. Summary
 

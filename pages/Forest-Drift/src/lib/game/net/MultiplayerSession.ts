@@ -190,6 +190,8 @@ export interface SceneMultiplayerHooks {
 	reportShotHit?(shot: number, target: number, point: Vec3Tuple, flightMs: number): void;
 	/** Ranged weapons: other players' feet positions as drawn, for pellets to hit. */
 	shotTargets?(): { slot: number; x: number; y: number; z: number }[];
+	/** Other players for the biome minimap: where they are, in their colours. */
+	mapPlayers?(): { x: number; z: number; colour: string; dim: boolean }[];
 	/** Whether the room connection is up (firing offline would only fool the shooter). */
 	connected?(): boolean;
 	detach(): void;
@@ -693,6 +695,15 @@ export class MultiplayerSession implements SceneMultiplayerHooks {
 		const firedAt = this.firedAt.get(shot);
 		if (firedAt === undefined) return;
 		this.net.sendShotHit(shot, target, firedAt + flightMs, point);
+	}
+
+	mapPlayers(): { x: number; z: number; colour: string; dim: boolean }[] {
+		return this.lastViews.map(({ info, frame }) => ({
+			x: frame.x,
+			z: frame.z,
+			colour: info.colour,
+			dim: info.away || info.offline || frame.stale || (frame.flags & POSE_FLAGS.away) !== 0
+		}));
 	}
 
 	shotTargets(): { slot: number; x: number; y: number; z: number }[] {

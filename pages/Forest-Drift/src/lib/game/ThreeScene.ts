@@ -36,6 +36,17 @@ import {
 } from './waypoints/WaypointSystem';
 import { WaypointBeacons } from './waypoints/WaypointBeacons';
 import { LocatorBar } from './hud/LocatorBar';
+import {
+	BiomeMapSystem,
+	MINIMAP_SIZES,
+	SMALL_SCREEN_WIDTH,
+	clampZoom,
+	MINIMAP_ZOOM_METRES,
+	type MapMarker,
+	type MinimapElements
+} from './map/BiomeMapSystem';
+import { loadBiomeMapPreferences, saveBiomeMapPreferences } from './map/biomeMapPreferences';
+import type { MapWorldSettings } from './map/mapWorld';
 import type { Vec3Like } from './player/creatureProjectile';
 import { resolveAmbientCreature } from './creatures/carryableCreatureRef';
 import { clearCoatCache } from './creatures/biome/CreatureBiomeCoat';
@@ -376,6 +387,8 @@ export interface SceneStats {
 	showRenderStats: boolean;
 	/** Player-facing FPS pill. Independent of the F3 render-stats overlay. */
 	showFpsCounter: boolean;
+	/** The corner biome minimap: shown, its size, and whether the world has biomes. */
+	biomeMap: { visible: boolean; sizePx: number; biomes: boolean };
 	/** Missed refreshes in the last second, relative to the graphics target FPS. */
 	frameDrops: number;
 	dayCycleEnabled: boolean;
@@ -764,6 +777,10 @@ export class ThreeScene implements WorldRuntime {
 	readonly carryHints: CarryHints;
 	/** The locator bar in single player (online, the multiplayer session draws it). */
 	private readonly locator = new LocatorBar();
+	/** The corner biome minimap (biome minimap Phase 1); paints only while attached. */
+	readonly biomeMap = new BiomeMapSystem();
+	/** The minimap's remembered settings (per browser). */
+	readonly biomeMapPrefs = loadBiomeMapPreferences();
 	readonly sustainSettings: SustainSettings;
 	readonly musicVisual = createDefaultMusicVisualSettings();
 	readonly settingsHost: GameSettingsHost;
@@ -2068,6 +2085,15 @@ export class ThreeScene implements WorldRuntime {
 			worldAccess: 'local',
 			rules: this.rulesSettingsPort(),
 			biomes: this.biomeSettings,
+			biomeMap: {
+				prefs: this.biomeMapPrefs,
+				isVisible: () => this.biomeMapVisible(),
+				setVisible: (show) => this.setBiomeMapVisible(show),
+				changed: () => {
+					saveBiomeMapPreferences(this.biomeMapPrefs);
+					this.emitStats();
+				}
+			},
 			actions: {
 				biomeSettings: () => this.regenerateBiomes(),
 				biomeToggleRequest: () => this.onBiomeToggleRequest?.(!this.biomeSettings.enabled),
@@ -4417,6 +4443,79 @@ export class ThreeScene implements WorldRuntime {
 		);
 	}
 
+	/** Whether the biome minimap is shown: the player's choice, or (until they choose) the world's biomes. */
+	biomeMapVisible(): boolean {
+		return this.biomeMapPrefs.chosen ? this.biomeMapPrefs.show : this.biomeSettings.enabled;
+	}
+
+	/** Shows or hides the biome minimap, remembered from then on in every world (Q6). */
+	setBiomeMapVisible(show: boolean): void {
+		this.biomeMapPrefs.show = show;
+		this.biomeMapPrefs.chosen = true;
+		saveBiomeMapPreferences(this.biomeMapPrefs);
+		this.emitStats();
+	}
+
+	/** The `;` key. Returns whether the minimap is now shown. */
+	toggleBiomeMap(): boolean {
+		this.setBiomeMapVisible(!this.biomeMapVisible());
+		return this.biomeMapVisible();
+	}
+
+	/** `PageUp` / `PageDown` and the touch buttons: −1 zooms in, +1 out. Returns metres across. */
+	zoomBiomeMap(delta: number): number {
+		this.biomeMapPrefs.zoom = clampZoom(this.biomeMapPrefs.zoom + delta);
+		saveBiomeMapPreferences(this.biomeMapPrefs);
+		return MINIMAP_ZOOM_METRES[this.biomeMapPrefs.zoom];
+	}
+
+	/** CSS pixels across the minimap: the size setting, Small on narrow screens (E9). */
+	biomeMapSizePx(): number {
+		const narrow = typeof window !== 'undefined' && window.innerWidth < SMALL_SCREEN_WIDTH;
+		return MINIMAP_SIZES[narrow ? 'small' : this.biomeMapPrefs.size];
+	}
+
+	/** The minimap's elements while it's on screen, or null: the worker and tiles are freed. */
+	setBiomeMapElements(elements: MinimapElements | null): void {
+		this.biomeMap.attach(elements);
+	}
+
+	/** What the map worker builds the world from: the same settings the game's own systems use. */
+	private readonly biomeMapWorld = (): MapWorldSettings => ({
+		seed: this.settings.seed,
+		terrain: this.settings,
+		biomes: this.biomeSettings,
+		hydrology: this.hydrologySettings
+	});
+
+	private readonly biomeMapMarkers = (): MapMarker[] => {
+		const markers: MapMarker[] = [];
+		this.waypoints.forEachActive((w) =>
+			markers.push({ x: w.x, z: w.z, colour: w.colour, kind: 'waypoint' })
+		);
+		for (const player of this.multiplayer?.mapPlayers?.() ?? [])
+			markers.push({ ...player, kind: 'player' });
+		return markers;
+	};
+
+	private updateBiomeMap(): void {
+		if (!this.biomeMap.attached) return;
+		this.biomeMap.configure({
+			zoom: this.biomeMapPrefs.zoom,
+			sizePx: this.biomeMapSizePx(),
+			grid: this.biomeMapPrefs.grid
+		});
+		const position = this.controller.worldPosition;
+		this.biomeMap.update(
+			performance.now(),
+			position.x,
+			position.z,
+			this.controller.getYaw(),
+			this.biomeMapWorld,
+			this.biomeMapMarkers
+		);
+	}
+
 	/** The HUD's locator bar element. Online, the multiplayer session owns the bar instead. */
 	setLocatorElement(element: HTMLElement | null): void {
 		this.locator.attach(this.multiplayer ? null : element);
@@ -5282,6 +5381,7 @@ export class ThreeScene implements WorldRuntime {
 		this.surfaceBinder.flush();
 		this.updateHeldCreature(deltaSeconds);
 		this.updateWaypoints(deltaSeconds);
+		this.updateBiomeMap();
 		this.projectiles.update(performance.now(), this.projectileView());
 		const renderCpuStart = this.frameCpuSamples ? performance.now() : 0;
 		this.graphicsPipeline.render();
@@ -5409,6 +5509,11 @@ export class ThreeScene implements WorldRuntime {
 			antialiasing: graphicsStats.antialiasing,
 			showRenderStats: this.graphicsSettings.showRenderStats,
 			showFpsCounter: this.graphicsSettings.showFpsCounter,
+			biomeMap: {
+				visible: this.biomeMapVisible(),
+				sizePx: this.biomeMapSizePx(),
+				biomes: this.biomeSettings.enabled
+			},
 			dayCycleEnabled: cycle.enabled,
 			timeOfDay: cycle.timeOfDay,
 			...(this.miniBuildPreferences.display.showChunkUsage
@@ -5476,6 +5581,7 @@ export class ThreeScene implements WorldRuntime {
 		this.waypointBeacons.dispose();
 		this.carryHints.dispose();
 		this.locator.dispose();
+		this.biomeMap.dispose();
 		this.creatures.dispose();
 		this.paintTool.dispose();
 		this.moveTool.dispose();
