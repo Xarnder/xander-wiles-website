@@ -5,6 +5,17 @@
  * **Go back**.
  */
 
+/**
+ * Release switch (plan §12): off for everyone with the build constant, or for one session with
+ * `?fastTravel=off`. Off hides the map's pin and buttons and the pause menu's Go back.
+ */
+export const FAST_TRAVEL_AVAILABLE = true;
+let switchedOff = false;
+export function readFastTravelSwitch(search: string): void {
+	switchedOff = new URLSearchParams(search).get('fastTravel') === 'off';
+}
+export const fastTravelAvailable = () => FAST_TRAVEL_AVAILABLE && !switchedOff;
+
 /** Why a trip can't happen right now. */
 export type TravelRefusal =
 	/** Knocked out: the death card is showing (Q2). */

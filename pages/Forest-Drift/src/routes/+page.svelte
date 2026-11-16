@@ -129,6 +129,7 @@
 	import BiomeIndicator from '#lib/components/BiomeIndicator.svelte';
 	import BiomeMinimap from '#lib/components/BiomeMinimap.svelte';
 	import BiomeMapOverlay from '#lib/components/BiomeMapOverlay.svelte';
+	import { fastTravelAvailable, TRAVEL_REFUSAL_TEXT } from '#lib/game/travel/FastTravel';
 	import type { FullMapHost } from '#lib/game/map/BiomeMapSystem';
 	import ConfirmBiomesDialog from '#lib/components/ConfirmBiomesDialog.svelte';
 	import RestorePointsDialog from '#lib/components/RestorePointsDialog.svelte';
@@ -486,8 +487,25 @@
 			pose: () => scene.mapPose(),
 			markers: () => scene.mapMarkers(),
 			biomeNameAt: (x, z) => scene.biomeNameAt(x, z),
-			setTileListener: (listener) => (scene.biomeMap.onTile = listener)
+			setTileListener: (listener) => (scene.biomeMap.onTile = listener),
+			travel: fastTravelAvailable()
+				? {
+						permission: () => scene.canFastTravel(),
+						landing: (x, z) => scene.fastTravelLanding(x, z),
+						go: (x, z) => scene.fastTravel(x, z),
+						back: () => scene.goBackFromTravel(),
+						origin: () => scene.fastTravelOrigin()
+					}
+				: undefined
 		};
+	}
+	/** The pause menu's Go back (fast travel Q6): back to where the last trip started. */
+	async function goBackFromTravel() {
+		const scene = session?.scene;
+		if (!scene) return;
+		const outcome = await scene.goBackFromTravel();
+		if (outcome.ok) paused = false;
+		else showSaveToast(TRAVEL_REFUSAL_TEXT[outcome.reason]);
 	}
 	function closeFullMap() {
 		if (!biomeMapHost) return;
@@ -3235,6 +3253,9 @@
 				onOpenKeyBindings={openKeyBindings}
 				onOpenCreatureLab={openCreatureLab}
 				onOpenMap={openFullMap}
+				onGoBack={fastTravelAvailable() && session?.scene.fastTravelOrigin()
+					? goBackFromTravel
+					: undefined}
 				onOpenDebug={() => {
 					debugControlsOpen = true;
 					paused = false;

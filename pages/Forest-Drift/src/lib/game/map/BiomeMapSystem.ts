@@ -1,3 +1,4 @@
+import type { Landing, TravelOutcome, TravelPermission } from '../travel/FastTravel';
 import { BiomeMapClient } from './BiomeMapClient';
 import { MAP_LEVELS, metresPerPixel } from './biomeMapTiles';
 import type { MapWorldSettings } from './mapWorld';
@@ -138,6 +139,19 @@ export interface FullMapHost {
 	biomeNameAt(x: number, z: number): string | null;
 	/** Called when a tile arrives (to repaint); null to stop. */
 	setTileListener(listener: (() => void) | null): void;
+	/** Fast travel from the map (fast travel Phase 1); absent when it's switched off. */
+	travel?: FullMapTravel;
+}
+
+/** What the full map needs for fast travel: the scene's `fastTravel*` methods. */
+export interface FullMapTravel {
+	permission(): TravelPermission;
+	/** Where a pin at (x, z) would land. Also builds the water there, so the trip itself is short. */
+	landing(x: number, z: number): Landing;
+	go(x: number, z: number): Promise<TravelOutcome>;
+	back(): Promise<TravelOutcome>;
+	/** Where Go back returns to, or null before the first trip. */
+	origin(): { x: number; z: number } | null;
 }
 
 /** The minimap's DOM, from `BiomeMinimap.svelte`. */

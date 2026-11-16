@@ -23,6 +23,8 @@ A round **minimap** in the top-right corner shows the land around you, coloured 
 
 On the **full map**, drag (or use the arrow keys) to pan, and scroll, pinch or press `+`/`−` to zoom from 500 m to 16 km. Point at a place to see its biome, how far it is, which way it lies and its coordinates. **Centre on me** (or `C`) brings you back, and `Esc` closes it. Playing alone, the full map pauses the game; online, the world carries on and you stand still.
 
+**Fast travel.** Click or tap a place on the full map to drop a pin (dragging still pans; from the keyboard, `Enter` pins the crosshair). The readout then describes the pin, and **Travel here** (or `T`) takes you straight there. You land on dry ground: a pin in a lake says "Lands on the shore", and that's where you arrive. You keep your view, your flight and any creature you're carrying or riding. **Go back**, on the map and in the pause menu, returns you to where you left; press it again to return. `Esc` clears the pin before it closes the map. You can't travel while knocked out.
+
 **Settings → Graphics** has **Show biome map**, **Biome map size** (Small, Medium, Large) and **Map grid**. The map is on by default in worlds with biomes and remembers your choices. In a world with biomes off it stays hidden until you turn it on, then shows the land without biome colours. On touch screens, `+` and `−` buttons sit under the minimap.
 
 ### Settings (World → Biomes)
@@ -113,6 +115,10 @@ Biome species live in `src/lib/game/creatures/biome/biomeRosters.ts` (family pro
 ### Biome map
 
 Map tiles are drawn off the main thread by a worker (`game/map/biomeMap.worker.ts`) with its own terrain, biome field and hydrology, built from the world's settings: 128-px tiles at seven levels (2–128 m per pixel), land first and water after. `BiomeMapClient` caches up to 120 tiles as `ImageBitmap`s; `BiomeMapSystem` paints the minimap from the scene (only when something changed, at most 15 times a second), and `BiomeMapOverlay.svelte` is the full map. The palette (`biomeMapPalette.ts`) is tested against real neighbouring biomes, including colour-blind simulation. A developer preview of the tiles is at `/biome-map/?dev`. Plan, decisions and phase records: [`2026/11-16/Biome-Minimap/`](2026/11-16/Biome-Minimap/).
+
+### Fast travel
+
+`ThreeScene.fastTravel(x, z)` jumps to the pin, and `goBackFromTravel()` returns from the last trip; the rules (permission, the dry-ground ring search, Go back memory) are in `game/travel/FastTravel.ts`. A trip builds only the terrain within 24 m of the landing at once (`TerrainManager.primeNear`) and lets terrain stream faster for a few seconds afterwards (`boostGeneration`). A ridden creature moves with its rider (`CreatureRuntimeManager.relocateRide`), and the biome tracker counts the new biome at once (`BiomeTracker.arrive`). The full map works out the landing as soon as a pin drops, which also builds the water there, so the trip itself takes about 15–45 ms. `?fastTravel=off` (or `FAST_TRAVEL_AVAILABLE`) hides it. Plan, decisions and phase records: [`2026/11-16/Fast-Travel/`](2026/11-16/Fast-Travel/).
 
 ### Kill switch
 

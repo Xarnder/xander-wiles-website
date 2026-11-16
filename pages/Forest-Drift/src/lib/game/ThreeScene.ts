@@ -300,7 +300,9 @@ import { sanitizePlayerState } from './world/WorldSerializer';
 import { createDefaultKeyEvent, matchesAction } from './input/KeyInput';
 import {
 	TravelMemory,
+	fastTravelAvailable,
 	findLanding,
+	readFastTravelSwitch,
 	travelPermission,
 	type Landing,
 	type LandingWater,
@@ -968,6 +970,7 @@ export class ThreeScene implements WorldRuntime {
 		heightSampler.attachHydrology(this.hydrology);
 		readBiomeKillSwitch(location.search);
 		readCreatureCoatSwitches(location.search);
+		readFastTravelSwitch(location.search);
 		// Biomes read only the pre-water, pre-edit terrain, so neither rivers nor shovel edits move them.
 		this.biomeSettings = createDefaultBiomeSettings();
 		this.biomeField = new BiomeField(heightSampler, this.biomeSettings);
@@ -3260,6 +3263,7 @@ export class ThreeScene implements WorldRuntime {
 
 	/** Whether a trip can start now, and if not, why (the Travel button's label). */
 	canFastTravel(): TravelPermission {
+		if (!fastTravelAvailable()) return { ok: false, reason: 'refused' };
 		return travelPermission({
 			knockedOut: this.knockedOutAt !== null || this.health.snapshot().dead,
 			travelling: this.travelling,

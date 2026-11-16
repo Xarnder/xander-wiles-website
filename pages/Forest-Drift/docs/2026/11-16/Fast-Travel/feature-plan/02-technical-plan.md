@@ -1,7 +1,7 @@
 # Forest Drift — Fast Travel: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 2: approved; Phase 0 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md). §0 lists changes made while building.
+**Status:** **Revision 3: approved; Phases 0–1 built (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase records: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md). §0 lists changes made while building.
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biome Minimap plan](../../Biome-Minimap/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -18,6 +18,12 @@ Paths are relative to `pages/Forest-Drift/`.
 4. **Working out the landing also builds the water there** (`fastTravelLanding`). Phase 1 calls it when the pin is dropped, so the jump itself drops to about 13–44 ms.
 5. **Trees are no longer updated inside the jump.** The next frame does it as usual (5–28 ms).
 6. **The dry-ground search moved to `FastTravel.findLanding`,** and respawning uses it too.
+
+**Phase 1 (2026-11-16):**
+
+7. **While there's a pin, the readout describes the pin**, not the pointer. Moving the mouse away no longer changes it, and **Clear pin** (or `Esc`) goes back to pointing.
+8. **A Clear pin button** sits next to **Travel here**, for touch screens, which have no `Esc`.
+9. **The map test runs in WebKit and Firefox too** (the `webkit-map` and `firefox-map` projects). The touch test is skipped in Firefox, where Playwright can't emulate touch.
 
 ## 1. Summary
 

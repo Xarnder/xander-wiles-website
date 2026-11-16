@@ -13,12 +13,17 @@
 	} from '#lib/game/map/BiomeMapSystem';
 	import { metresPerPixel } from '#lib/game/map/biomeMapTiles';
 	import { paintView, wantedTiles, type MapPainter } from '#lib/game/map/mapView';
+	import { landingNote, TRAVEL_REFUSAL_TEXT, type Landing } from '#lib/game/travel/FastTravel';
 
 	/**
 	 * The full-screen biome map (biome minimap Phase 2, decisions Q11–Q15). North up. Drag, scroll or
 	 * pinch to pan and zoom, or use the arrow keys and + / −; point at a place to read its biome,
 	 * distance, direction and coordinates. The page pauses single-player games while it's open and
 	 * closes it on Esc. Tiles come from the same worker as the minimap.
+	 *
+	 * Fast travel (fast travel Phase 1, Q8): a click or tap that doesn't drag drops a pin (Enter pins
+	 * the crosshair); the readout then describes the pin, and Travel here (or T) jumps there and
+	 * closes the map. Go back returns from the last trip. Esc clears the pin before it closes.
 	 */
 
 	let {
@@ -39,8 +44,23 @@
 	let canvas = $state<HTMLCanvasElement>();
 	let frame = $state<HTMLDivElement>();
 	let zoom = $state(0);
-	let readout = $state({ biome: '', distance: '', direction: '', coordinates: '', centre: true });
+	let readout = $state({
+		biome: '',
+		distance: '',
+		direction: '',
+		coordinates: '',
+		centre: true,
+		note: ''
+	});
 	let announcement = $state('');
+	/** The pinned destination and where it would land (fast travel). */
+	let pin = $state<{ x: number; z: number; landing: Landing; note: string | null } | null>(null);
+	let travelBlocked = $state<string | null>(null);
+	let canGoBack = $state(false);
+	let travelling = $state(false);
+	let travelError = $state<string | null>(null);
+	// The host is fixed for the overlay's life (the page remounts it per opening).
+	const travel = $derived(host.travel);
 
 	let width = 0,
 		height = 0;
@@ -98,8 +118,8 @@
 	}
 
 	function updateReadout() {
-		const target = pointer ? toWorld(pointer.x, pointer.y) : { ...centre };
-		const key = `${Math.round(target.x)}:${Math.round(target.z)}`;
+		const target = pin ?? (pointer ? toWorld(pointer.x, pointer.y) : { ...centre });
+		const key = `${pin ? 'pin:' : ''}${Math.round(target.x)}:${Math.round(target.z)}`;
 		if (key === lastReadoutKey) return;
 		lastReadoutKey = key;
 		const me = host.pose();
@@ -110,10 +130,15 @@
 			distance: distance < 5 ? 'You are here' : formatDistance(distance),
 			direction: distance < 5 ? '' : compassDirection(me.x, me.z, target.x, target.z),
 			coordinates: formatMapCoordinates(target.x, target.z),
-			centre: !pointer
+			centre: !pointer && !pin,
+			note: pin?.note ?? ''
 		};
 		const now = performance.now();
-		if (now - lastAnnounce > 1000) {
+		if (pin) {
+			// A pin is a choice: say it at once.
+			lastAnnounce = now;
+			announcement = `Pinned: ${readout.biome}${readout.direction ? `, ${readout.distance} ${readout.direction}` : ''}${readout.note ? `. ${readout.note}` : ''}`;
+		} else if (now - lastAnnounce > 1000) {
 			lastAnnounce = now;
 			announcement = `${readout.biome}${readout.direction ? `, ${readout.distance} ${readout.direction}` : ''}`;
 		}
@@ -209,7 +234,40 @@
 		ctx.stroke();
 		ctx.fill();
 		ctx.restore();
-		if (!pointer) {
+		if (pin) {
+			// The pin, and a dotted line to the shore when it would land somewhere else.
+			const [sx, sy] = toScreen(pin.x, pin.z);
+			if (pin.landing.moved) {
+				const [lx, ly] = toScreen(pin.landing.x, pin.landing.z);
+				ctx.setLineDash([3, 3]);
+				ctx.strokeStyle = 'rgba(237, 207, 133, 0.9)';
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				ctx.moveTo(sx, sy);
+				ctx.lineTo(lx, ly);
+				ctx.stroke();
+				ctx.setLineDash([]);
+				ctx.beginPath();
+				ctx.arc(lx, ly, 3.5, 0, Math.PI * 2);
+				ctx.fillStyle = '#edcf85';
+				ctx.fill();
+			}
+			ctx.beginPath();
+			ctx.moveTo(sx, sy);
+			ctx.bezierCurveTo(sx - 9, sy - 12, sx - 8, sy - 24, sx, sy - 24);
+			ctx.bezierCurveTo(sx + 8, sy - 24, sx + 9, sy - 12, sx, sy);
+			ctx.closePath();
+			ctx.fillStyle = '#edcf85';
+			ctx.strokeStyle = 'rgba(8, 14, 10, 0.9)';
+			ctx.lineWidth = 2;
+			ctx.stroke();
+			ctx.fill();
+			ctx.beginPath();
+			ctx.arc(sx, sy - 16, 3, 0, Math.PI * 2);
+			ctx.fillStyle = '#1b231e';
+			ctx.fill();
+		}
+		if (!pointer && !pin) {
 			// The centre crosshair the readout describes (keyboard users).
 			ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
 			ctx.lineWidth = 1.5;
@@ -228,11 +286,66 @@
 			lastMarkers = now;
 			markers = host.markers();
 			if (markers.length) dirty = true;
+			if (travel) {
+				const permission = travel.permission();
+				travelBlocked = permission.ok ? null : TRAVEL_REFUSAL_TEXT[permission.reason];
+				canGoBack = travel.origin() !== null;
+			}
 		}
 		if (!dirty) return;
 		dirty = false;
 		paint();
 		updateReadout();
+	}
+
+	/** Drops the pin at a world point and works out (and prepares) where it lands. */
+	function dropPin(at: { x: number; z: number }) {
+		if (!travel) return;
+		const landing = travel.landing(at.x, at.z);
+		pin = { x: at.x, z: at.z, landing, note: landingNote(at, landing) };
+		travelError = null;
+		lastReadoutKey = '';
+		dirty = true;
+	}
+
+	function clearPin() {
+		pin = null;
+		travelError = null;
+		lastReadoutKey = '';
+		dirty = true;
+	}
+
+	async function finish(trip: Promise<{ ok: boolean; reason?: string }>) {
+		if (travelling) return;
+		travelling = true;
+		try {
+			const outcome = await trip;
+			if (outcome.ok) onClose();
+			else
+				travelError =
+					TRAVEL_REFUSAL_TEXT[outcome.reason as keyof typeof TRAVEL_REFUSAL_TEXT] ??
+					'Could not travel';
+		} finally {
+			travelling = false;
+		}
+	}
+
+	function travelToPin() {
+		if (!travel || !pin || travelBlocked) return;
+		void finish(travel.go(pin.x, pin.z));
+	}
+
+	function goBack() {
+		if (!travel || !canGoBack || travelBlocked) return;
+		void finish(travel.back());
+	}
+
+	/** Esc clears the pin before it closes the map (capture: before the page's own Esc). */
+	function escape(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !pin) return;
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		clearPin();
 	}
 
 	function keydown(event: KeyboardEvent) {
@@ -250,6 +363,18 @@
 			c: centreOnMe,
 			C: centreOnMe
 		};
+		// Enter pins the crosshair, only on the map itself (on a button, Enter presses it).
+		if (event.key === 'Enter' && travel && document.activeElement === frame) {
+			event.preventDefault();
+			pointer = null;
+			dropPin({ ...centre });
+			return;
+		}
+		if ((event.key === 't' || event.key === 'T') && pin) {
+			event.preventDefault();
+			travelToPin();
+			return;
+		}
 		const action = actions[event.key];
 		if (!action) return;
 		event.preventDefault();
@@ -258,10 +383,20 @@
 		dirty = true;
 	}
 
+	/** A press that might be a click (pin) rather than a drag; null once it moves or pinches. */
+	let press: { id: number; x: number; y: number; travelled: number } | null = null;
+	/** A click (or tap) drops a pin; anything past this many CSS pixels is a drag. */
+	const CLICK_SLOP = 6;
+
 	function pointerdown(event: PointerEvent) {
 		frame?.setPointerCapture(event.pointerId);
 		pointers[event.pointerId] = { x: event.offsetX, y: event.offsetY };
+		press =
+			pointerCount() === 1 && event.button === 0
+				? { id: event.pointerId, x: event.offsetX, y: event.offsetY, travelled: 0 }
+				: null;
 		if (pointerCount() === 2) {
+			press = null;
 			const [a, b] = Object.values(pointers);
 			pinchStart = Math.hypot(a.x - b.x, a.y - b.y);
 		}
@@ -272,6 +407,8 @@
 		if (event.pointerType === 'mouse') pointer = here;
 		if (prev) {
 			pointers[event.pointerId] = here;
+			if (press?.id === event.pointerId)
+				press.travelled = Math.max(press.travelled, Math.hypot(here.x - press.x, here.y - press.y));
 			if (pointerCount() === 1) pan(here.x - prev.x, here.y - prev.y);
 			else if (pointerCount() === 2 && pinchStart > 0) {
 				const [a, b] = Object.values(pointers);
@@ -289,6 +426,14 @@
 		dirty = true;
 	}
 	function pointerup(event: PointerEvent) {
+		if (
+			event.type === 'pointerup' &&
+			press?.id === event.pointerId &&
+			press.travelled <= CLICK_SLOP &&
+			pointerCount() === 1
+		)
+			dropPin(toWorld(press.x, press.y));
+		if (press?.id === event.pointerId) press = null;
 		delete pointers[event.pointerId];
 		if (pointerCount() < 2) pinchStart = 0;
 	}
@@ -312,12 +457,14 @@
 		});
 		if (frame) resize.observe(frame);
 		window.addEventListener('keydown', keydown);
+		window.addEventListener('keydown', escape, true);
 		raf = requestAnimationFrame(loop);
 		frame?.focus();
 		return () => {
 			cancelAnimationFrame(raf);
 			resize.disconnect();
 			window.removeEventListener('keydown', keydown);
+			window.removeEventListener('keydown', escape, true);
 			host.setTileListener(null);
 		};
 	});
@@ -336,7 +483,9 @@
 		bind:this={frame}
 		tabindex="-1"
 		role="application"
-		aria-label="Map. Arrow keys pan, plus and minus zoom, C centres on you, Escape closes."
+		aria-label={travel
+			? 'Map. Arrow keys pan, plus and minus zoom, C centres on you, Enter pins the centre, T travels to the pin, Escape closes.'
+			: 'Map. Arrow keys pan, plus and minus zoom, C centres on you, Escape closes.'}
 		onpointerdown={pointerdown}
 		onpointermove={pointermove}
 		onpointerup={pointerup}
@@ -364,6 +513,14 @@
 			<button type="button" data-testid="biome-full-map-centre" onclick={centreOnMe}
 				>Centre on me</button
 			>
+			{#if travel && canGoBack}
+				<button
+					type="button"
+					data-testid="biome-full-map-go-back"
+					disabled={travelling || travelBlocked !== null}
+					onclick={goBack}>Go back</button
+				>
+			{/if}
 			<button type="button" class="close" data-testid="biome-full-map-close" onclick={onClose}
 				>Close</button
 			>
@@ -375,7 +532,26 @@
 			>{readout.distance}{readout.direction ? ` ${readout.direction}` : ''}</span
 		>
 		<span data-testid="biome-full-map-coordinates">{readout.coordinates}</span>
-		<span class="hint">Drag to pan · scroll or pinch to zoom · Esc to close</span>
+		{#if pin}
+			{#if readout.note}<span class="note" data-testid="biome-full-map-note">{readout.note}</span
+				>{/if}
+			<button
+				type="button"
+				class="travel"
+				data-testid="biome-full-map-travel"
+				disabled={travelling || travelBlocked !== null}
+				onclick={travelToPin}
+				>{travelling ? 'Travelling…' : (travelBlocked ?? 'Travel here')}</button
+			>
+			<button type="button" data-testid="biome-full-map-clear-pin" onclick={clearPin}
+				>Clear pin</button
+			>
+			{#if travelError}<span class="note" role="alert">{travelError}</span>{/if}
+		{:else}
+			<span class="hint"
+				>{travel ? 'Click to pin · ' : ''}Drag to pan · scroll or pinch to zoom · Esc to close</span
+			>
+		{/if}
 	</footer>
 	<div class="visually-hidden" role="status" aria-live="polite">{announcement}</div>
 </div>
@@ -467,6 +643,20 @@
 	}
 	footer strong {
 		font-size: 1rem;
+	}
+	.note {
+		color: #edcf85;
+		font-size: 0.85rem;
+	}
+	.travel {
+		background: #edcf85;
+		color: #1b231e;
+		border-color: transparent;
+		font-weight: 600;
+	}
+	button:disabled {
+		opacity: 0.55;
+		cursor: default;
 	}
 	.hint {
 		opacity: 0.7;

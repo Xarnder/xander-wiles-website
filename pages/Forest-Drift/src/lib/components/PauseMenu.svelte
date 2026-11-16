@@ -31,6 +31,8 @@
 		onOpenCreatureLab: () => void;
 		/** The full-screen biome map (biome minimap Phase 2). */
 		onOpenMap?: () => void;
+		/** Fast travel: back to where the last trip started (only after a trip). */
+		onGoBack?: () => void;
 		onOpenDebug: () => void;
 		onOpenMultiplayer: () => void;
 		/** Waypoints: the creature waypoint first, then the player's own. */
@@ -74,6 +76,7 @@
 		onOpenKeyBindings,
 		onOpenCreatureLab,
 		onOpenMap,
+		onGoBack,
 		onOpenDebug,
 		onOpenMultiplayer,
 		waypoints = [],
@@ -234,6 +237,7 @@
 					<button data-testid="pause-key-bindings" onclick={onOpenKeyBindings}>Controls</button>
 					<button data-testid="pause-creature-lab" onclick={onOpenCreatureLab}>Creature Lab</button>
 					{#if onOpenMap}<button data-testid="pause-map" onclick={onOpenMap}>Map</button>{/if}
+					{#if onGoBack}<button data-testid="pause-go-back" onclick={onGoBack}>Go back</button>{/if}
 					<button data-testid="pause-waypoints" onclick={() => (panel = 'waypoints')}>
 						Waypoints
 					</button>

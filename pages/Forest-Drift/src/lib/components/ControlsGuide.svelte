@@ -259,7 +259,7 @@
 				],
 				[
 					k('map.open'),
-					'Open the full biome map: drag to pan, scroll to zoom, point at a place to see its biome, distance and direction. Esc closes it.'
+					'Open the full biome map: drag to pan, scroll to zoom, point at a place to see its biome, distance and direction. Click to drop a pin, then Travel here (or T) to fast travel there; Go back returns. Esc clears the pin, then closes the map.'
 				],
 				[
 					k('ui.screenshot'),

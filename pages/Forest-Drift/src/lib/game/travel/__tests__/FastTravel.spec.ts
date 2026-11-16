@@ -4,7 +4,9 @@ import {
 	LANDING_RING_STEP,
 	TRAVEL_REFUSAL_TEXT,
 	TravelMemory,
+	fastTravelAvailable,
 	findLanding,
+	readFastTravelSwitch,
 	landingNote,
 	travelPermission,
 	type LandingWater,
@@ -123,5 +125,14 @@ describe('TravelMemory', () => {
 		expect(memory.last).toEqual(here);
 		memory.clear();
 		expect(memory.last).toBeNull();
+	});
+});
+
+describe('the release switch', () => {
+	it('?fastTravel=off turns it off for the session', () => {
+		readFastTravelSwitch('?fastTravel=off');
+		expect(fastTravelAvailable()).toBe(false);
+		readFastTravelSwitch('?other=1');
+		expect(fastTravelAvailable()).toBe(true);
 	});
 });
