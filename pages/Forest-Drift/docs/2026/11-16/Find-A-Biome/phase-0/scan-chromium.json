@@ -1,0 +1,96 @@
+{
+	"engine": "chromium",
+	"scans": [
+		{
+			"ms": 405,
+			"wallMs": 406
+		},
+		{
+			"ms": 404,
+			"wallMs": 404
+		},
+		{
+			"ms": 402,
+			"wallMs": 402
+		}
+	],
+	"slow": {
+		"ms": 403,
+		"wallMs": 405
+	},
+	"nearest": [
+		962, 643, 1088, 820, 1984, 2532, 1202, 1243, 1717, 3888, 2662, 4938, 1280, 5089, 1282, 3350,
+		896, 861, 405, 6553, 1820, 1042, 2177, 2779, 1032, 1920
+	],
+	"desert": [
+		{
+			"x": 1265.004962254513,
+			"z": -1790.379148686579,
+			"distance": 1820
+		},
+		{
+			"x": 2481.004962254513,
+			"z": -3518.379148686579,
+			"distance": 3841
+		},
+		{
+			"x": 1329.004962254513,
+			"z": 7489.620851313422,
+			"distance": 7498
+		},
+		{
+			"x": 7025.004962254513,
+			"z": 6913.620851313422,
+			"distance": 9206
+		},
+		{
+			"x": 9201.004962254514,
+			"z": -4926.379148686578,
+			"distance": 9615
+		}
+	],
+	"tiles": [
+		{
+			"scan": false,
+			"landMs": 2079,
+			"settledMs": 2079,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 2062,
+			"settledMs": 2062,
+			"scanMs": 397,
+			"scanWallMs": 2452
+		},
+		{
+			"scan": false,
+			"landMs": 2046,
+			"settledMs": 2046,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 2043,
+			"settledMs": 2043,
+			"scanMs": 397,
+			"scanWallMs": 2433
+		},
+		{
+			"scan": false,
+			"landMs": 2069,
+			"settledMs": 2069,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 2079,
+			"settledMs": 2079,
+			"scanMs": 397,
+			"scanWallMs": 2456
+		}
+	]
+}

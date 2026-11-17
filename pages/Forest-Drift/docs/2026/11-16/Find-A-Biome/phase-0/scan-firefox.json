@@ -1,0 +1,93 @@
+{
+	"engine": "firefox-map",
+	"scans": [
+		{
+			"ms": 379,
+			"wallMs": 381
+		},
+		{
+			"ms": 378,
+			"wallMs": 379
+		},
+		{
+			"ms": 378,
+			"wallMs": 378
+		}
+	],
+	"slow": null,
+	"nearest": [
+		962, 643, 1088, 820, 1984, 2532, 1202, 1243, 1717, 3888, 2662, 4938, 1280, 5089, 1282, 3350,
+		896, 861, 405, 6553, 1820, 1042, 2177, 2779, 1032, 1920
+	],
+	"desert": [
+		{
+			"x": 1265.004962254513,
+			"z": -1790.379148686579,
+			"distance": 1820
+		},
+		{
+			"x": 2481.004962254513,
+			"z": -3518.379148686579,
+			"distance": 3841
+		},
+		{
+			"x": 1329.004962254513,
+			"z": 7489.620851313422,
+			"distance": 7498
+		},
+		{
+			"x": 7025.004962254513,
+			"z": 6913.620851313422,
+			"distance": 9206
+		},
+		{
+			"x": 9201.004962254514,
+			"z": -4926.379148686578,
+			"distance": 9615
+		}
+	],
+	"tiles": [
+		{
+			"scan": false,
+			"landMs": 1855,
+			"settledMs": 1884,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 1822,
+			"settledMs": 1848,
+			"scanMs": 375,
+			"scanWallMs": 2214
+		},
+		{
+			"scan": false,
+			"landMs": 1826,
+			"settledMs": 1827,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 1835,
+			"settledMs": 1836,
+			"scanMs": 375,
+			"scanWallMs": 2201
+		},
+		{
+			"scan": false,
+			"landMs": 1845,
+			"settledMs": 1875,
+			"scanMs": null,
+			"scanWallMs": null
+		},
+		{
+			"scan": true,
+			"landMs": 1846,
+			"settledMs": 1846,
+			"scanMs": 377,
+			"scanWallMs": 2211
+		}
+	]
+}

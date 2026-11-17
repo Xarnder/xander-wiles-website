@@ -1,5 +1,5 @@
 import { BiomeField } from '../biomes/BiomeField';
-import type { BiomeSettings } from '../biomes/BiomeTypes';
+import { createBiomeWeightVector, type BiomeSettings } from '../biomes/BiomeTypes';
 import { BaseTerrainSampler } from '../hydrology/BaseTerrainSampler';
 import { clampedHydrology } from '../hydrology/HydrologyMath';
 import { HydrologySystem } from '../hydrology/HydrologySystem';
@@ -37,6 +37,7 @@ export class MapWorld {
 	readonly biomes: BiomeField | null;
 	readonly hydrology: HydrologySystem | null;
 	private readonly source: MapLandSource;
+	private readonly weights = createBiomeWeightVector();
 
 	constructor(settings: MapWorldSettings) {
 		this.terrain = new TerrainHeightSampler({ ...settings.terrain, seed: settings.seed });
@@ -55,6 +56,11 @@ export class MapWorld {
 			baseHeight: (x, z) => terrain.sampleBase(x, z),
 			lastHeight: biomes ? () => biomes.lastBaseElevation() : undefined
 		};
+	}
+
+	/** The biome at a point (Find a biome's scan), or -1 with biomes off. */
+	classify(x: number, z: number): number {
+		return this.biomes ? this.biomes.classifyPoint(x, z, this.weights) : -1;
 	}
 
 	/** Draws a tile's land (biomes or neutral land, hill shading) into `out`. */

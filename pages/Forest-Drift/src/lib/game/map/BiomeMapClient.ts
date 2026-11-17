@@ -1,4 +1,5 @@
 import type { FromMapWorker, ToMapWorker } from './biomeMapProtocol';
+import type { BiomePatch } from './biomeSearch';
 import { TILE_PIXELS, tileKey } from './biomeMapTiles';
 import type { MapWorldSettings } from './mapWorld';
 
@@ -32,6 +33,31 @@ export interface MapTileTimings {
 	waterMs: number;
 }
 
+/** Metres you can move before the Biomes list scans again (Find a biome, Q9). */
+export const SCAN_REUSE_METRES = 250;
+
+/** A Find a biome scan as far as it's got (see the worker's `scanned` message). */
+export interface BiomeScanResult {
+	x: number;
+	z: number;
+	done: boolean;
+	/** Metres to each biome's nearest pin, null for none in range; empty until done. */
+	nearest: (number | null)[];
+	here: number;
+	ms: number;
+	sampled: number;
+}
+
+interface ScanRequest {
+	id: number;
+	generation: number;
+	x: number;
+	z: number;
+	latest: BiomeScanResult | null;
+	promise: Promise<BiomeScanResult | null>;
+	resolve: (result: BiomeScanResult | null) => void;
+}
+
 /**
  * Main-thread side of the biome map (technical plan §4.3–4.4): asks the worker for the tiles a view
  * wants, nearest first, cancels the ones it stops wanting, and keeps finished tiles as images in a
@@ -46,6 +72,11 @@ export class BiomeMapClient<B = ImageBitmap> {
 	errors = 0;
 	/** Called when a tile arrives (or improves), e.g. to schedule a redraw. */
 	onTile: ((key: string) => void) | null = null;
+	/** Called as a scan progresses and when it's done. */
+	onScan: ((result: BiomeScanResult) => void) | null = null;
+	private nextId = 1;
+	private currentScan: ScanRequest | null = null;
+	private readonly finds = new Map<number, (patches: BiomePatch[]) => void>();
 
 	constructor(
 		private readonly createWorker: () => MapWorkerLike = () =>
@@ -65,6 +96,7 @@ export class BiomeMapClient<B = ImageBitmap> {
 	init(settings: MapWorldSettings): void {
 		this.generation++;
 		this.clear();
+		this.dropScan();
 		if (!this.worker) {
 			this.worker = this.createWorker();
 			this.worker.onmessage = (event) => this.receive(event.data);
@@ -108,6 +140,57 @@ export class BiomeMapClient<B = ImageBitmap> {
 			}
 	}
 
+	/**
+	 * Find a biome's scan round (x, z). Reuses the current one (running or done) while (x, z) is
+	 * within `SCAN_REUSE_METRES` of its centre in the same world; otherwise starts a new one. Resolves
+	 * when it's done, or with null if it's cancelled or replaced first. Progress goes to `onScan`.
+	 */
+	scan(x: number, z: number): Promise<BiomeScanResult | null> {
+		const current = this.currentScan;
+		if (
+			current &&
+			current.generation === this.generation &&
+			Math.hypot(x - current.x, z - current.z) <= SCAN_REUSE_METRES
+		)
+			return current.promise;
+		this.dropScan();
+		if (!this.worker) return Promise.resolve(null);
+		let resolve!: (result: BiomeScanResult | null) => void;
+		const promise = new Promise<BiomeScanResult | null>((r) => (resolve = r));
+		const id = this.nextId++;
+		this.currentScan = { id, generation: this.generation, x, z, latest: null, promise, resolve };
+		this.worker.postMessage({ t: 'scan', generation: this.generation, id, x, z });
+		return promise;
+	}
+
+	/** The current scan as far as it's got, if any. */
+	get scanResult(): BiomeScanResult | null {
+		return this.currentScan?.latest ?? null;
+	}
+
+	/** Patches of `biome` from the current scan, once it's done (none without a scan). */
+	find(biome: number): Promise<BiomePatch[]> {
+		if (!this.worker || !this.currentScan) return Promise.resolve([]);
+		const id = this.nextId++;
+		const promise = new Promise<BiomePatch[]>((resolve) => this.finds.set(id, resolve));
+		this.worker.postMessage({ t: 'find', generation: this.generation, id, biome });
+		return promise;
+	}
+
+	/** Stops the scan and forgets it (the full map closed): the worker frees its grid. */
+	cancelScan(): void {
+		if (!this.currentScan) return;
+		this.dropScan();
+		this.worker?.postMessage({ t: 'cancelScan' });
+	}
+
+	private dropScan(): void {
+		this.currentScan?.resolve(null);
+		this.currentScan = null;
+		for (const resolve of this.finds.values()) resolve([]);
+		this.finds.clear();
+	}
+
 	get pendingCount(): number {
 		return this.pending.size;
 	}
@@ -119,6 +202,21 @@ export class BiomeMapClient<B = ImageBitmap> {
 		if (message.t === 'error') {
 			this.errors++;
 			console.error('Biome map worker:', message.message);
+			return;
+		}
+		if (message.t === 'scanned') {
+			const current = this.currentScan;
+			if (!current || current.id !== message.id || message.generation !== this.generation) return;
+			const { done, nearest, here, ms, sampled } = message;
+			current.latest = { x: current.x, z: current.z, done, nearest, here, ms, sampled };
+			this.onScan?.(current.latest);
+			if (done) current.resolve(current.latest);
+			return;
+		}
+		if (message.t === 'found') {
+			const resolve = this.finds.get(message.id);
+			this.finds.delete(message.id);
+			resolve?.(message.generation === this.generation ? message.patches : []);
 			return;
 		}
 		if (message.generation !== this.generation) return;
@@ -166,6 +264,7 @@ export class BiomeMapClient<B = ImageBitmap> {
 	/** Stops the worker and frees every tile (the map turned off, or the world closed). */
 	dispose(): void {
 		this.clear();
+		this.dropScan();
 		this.worker?.terminate();
 		this.worker = null;
 	}

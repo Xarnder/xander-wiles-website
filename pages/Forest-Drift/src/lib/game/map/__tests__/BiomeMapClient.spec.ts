@@ -157,3 +157,91 @@ describe('biome map view', () => {
 		]);
 	});
 });
+
+describe('find a biome client', () => {
+	const scanned = (worker: FakeWorker, id: number, done: boolean, generation = 1) =>
+		worker.onmessage?.({
+			data: {
+				t: 'scanned',
+				generation,
+				id,
+				done,
+				nearest: [0, 2400, null],
+				here: 0,
+				ms: 5,
+				sampled: 10
+			}
+		} as MessageEvent<FromMapWorker>);
+	const scans = (worker: FakeWorker) =>
+		worker.sent.filter((m) => m.t === 'scan') as Extract<ToMapWorker, { t: 'scan' }>[];
+
+	it('reuses a scan within 250 m and starts a new one further away', async () => {
+		const { worker, client } = setup();
+		client.init(settings);
+		const progress: boolean[] = [];
+		client.onScan = (r) => progress.push(r.done);
+		const first = client.scan(100, 100);
+		expect(client.scan(300, 100)).toBe(first);
+		expect(scans(worker)).toHaveLength(1);
+		scanned(worker, scans(worker)[0].id, false);
+		expect(client.scanResult?.done).toBe(false);
+		scanned(worker, scans(worker)[0].id, true);
+		const result = await first;
+		expect(result).toMatchObject({ x: 100, z: 100, done: true, nearest: [0, 2400, null] });
+		expect(progress).toEqual([false, true]);
+		// Done and still close: no new scan.
+		expect(await client.scan(250, 150)).toBe(result);
+		// 400 m off: a new scan.
+		void client.scan(500, 100);
+		expect(scans(worker)).toHaveLength(2);
+		expect(scans(worker)[1]).toMatchObject({ x: 500, z: 100 });
+	});
+
+	it('resolves with null when a scan is replaced, cancelled, or the world changes', async () => {
+		const { worker, client } = setup();
+		client.init(settings);
+		const a = client.scan(0, 0);
+		const b = client.scan(5000, 0);
+		expect(await a).toBeNull();
+		// A late message from the replaced scan is ignored.
+		scanned(worker, scans(worker)[0].id, true);
+		expect(client.scanResult).toBeNull();
+		client.cancelScan();
+		expect(await b).toBeNull();
+		expect(worker.sent.at(-1)).toEqual({ t: 'cancelScan' });
+		const c = client.scan(0, 0);
+		client.init(settings);
+		expect(await c).toBeNull();
+		// A new world can't reuse the old scan.
+		void client.scan(0, 0);
+		expect(scans(worker).at(-1)?.generation).toBe(2);
+	});
+
+	it('answers finds by id, and none without a scan', async () => {
+		const { worker, client } = setup();
+		client.init(settings);
+		expect(await client.find(3)).toEqual([]);
+		void client.scan(0, 0);
+		const desert = client.find(20);
+		const swamp = client.find(23);
+		const asked = worker.sent.filter((m) => m.t === 'find') as Extract<
+			ToMapWorker,
+			{ t: 'find' }
+		>[];
+		expect(asked.map((m) => m.biome)).toEqual([20, 23]);
+		const reply = (id: number, x: number) =>
+			worker.onmessage?.({
+				data: {
+					t: 'found',
+					generation: 1,
+					id,
+					patches: [{ x, z: 0, distance: x, cells: 9, inset: 192 }],
+					ms: 2
+				}
+			} as MessageEvent<FromMapWorker>);
+		reply(asked[1].id, 900);
+		reply(asked[0].id, 3000);
+		expect((await desert)[0].x).toBe(3000);
+		expect((await swamp)[0].x).toBe(900);
+	});
+});

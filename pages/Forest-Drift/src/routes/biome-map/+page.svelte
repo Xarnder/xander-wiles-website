@@ -4,7 +4,10 @@
 	import { BiomeField } from '#lib/game/biomes/BiomeField';
 	import { BIOME_IDS, createDefaultBiomeSettings } from '#lib/game/biomes/BiomeTypes';
 	import { createDefaultHydrologySettings } from '#lib/game/hydrology/HydrologyTypes';
-	import { BiomeMapClient } from '#lib/game/map/BiomeMapClient';
+	import { BIOME_DEFINITIONS } from '#lib/game/biomes/biomeDefinitions';
+	import { BiomeMapClient, type BiomeScanResult } from '#lib/game/map/BiomeMapClient';
+	import { BIOME_LIST_GROUPS } from '#lib/game/map/biomeGroups';
+	import type { BiomePatch } from '#lib/game/map/biomeSearch';
 	import { biomeMapHex } from '#lib/game/map/biomeMapPalette';
 	import { MAP_LEVELS, metresPerPixel, tileMetres } from '#lib/game/map/biomeMapTiles';
 	import { mapWorldSettingsOf, type MapWorldSettings } from '#lib/game/map/mapWorld';
@@ -17,6 +20,9 @@
 	 * Biome minimap Phase 0: a developer preview of the map tiles (`/biome-map/?dev`). Drag to pan,
 	 * scroll or use the level buttons to zoom. `?seed=…` previews a new world with that seed instead
 	 * of the Main World. Exposes `window.biomeMapPreview` for tests and measurements.
+	 *
+	 * Find a biome Phase 0: **Scan** runs the worker's scan round the centre; the list shows each
+	 * biome's nearest distance, and picking one draws its patches' pins (1 = nearest).
 	 */
 	const params = new URLSearchParams(location.search);
 	const enabled = dev || params.has('dev');
@@ -30,6 +36,11 @@
 	let centre = { x: 0, z: 0 };
 	let stats = $state('');
 	let client: BiomeMapClient | null = null;
+	let scanResult = $state<BiomeScanResult | null>(null);
+	let scanWall = $state(0);
+	let picked = $state(-1);
+	let patches = $state<BiomePatch[]>([]);
+	let findMs = $state(0);
 	let dirty = true;
 	let raf = 0;
 
@@ -70,9 +81,41 @@
 		centre = { ...start };
 		client ??= new BiomeMapClient();
 		client.onTile = () => (dirty = true);
+		client.onScan = (result) => (scanResult = result);
 		client.init(settings);
+		scanResult = null;
+		patches = [];
+		picked = -1;
 		dirty = true;
 	}
+
+	async function scan() {
+		if (!client) return null;
+		patches = [];
+		picked = -1;
+		const start = performance.now();
+		const result = await client.scan(centre.x, centre.z);
+		if (result) scanWall = performance.now() - start;
+		dirty = true;
+		return result;
+	}
+
+	async function pick(biome: number) {
+		if (!client) return [];
+		picked = biome;
+		const start = performance.now();
+		patches = await client.find(biome);
+		findMs = performance.now() - start;
+		dirty = true;
+		return patches;
+	}
+
+	const km = (m: number | null | undefined) =>
+		m === null || m === undefined
+			? '…'
+			: m < 950
+				? `${Math.round(m / 10) * 10} m`
+				: `${(m / 1000).toFixed(1)} km`;
 
 	const view = (): MapViewport => ({
 		level,
@@ -104,6 +147,39 @@
 		ctx.moveTo(SIZE / 2, SIZE / 2 - 8);
 		ctx.lineTo(SIZE / 2, SIZE / 2 + 8);
 		ctx.stroke();
+		const mpp = metresPerPixel(level);
+		const scanned = scanResult;
+		if (scanned) {
+			ctx.setLineDash([8, 6]);
+			ctx.lineWidth = 2.5;
+			ctx.strokeStyle = '#111';
+			ctx.beginPath();
+			ctx.arc(
+				SIZE / 2 + (scanned.x - centre.x) / mpp,
+				SIZE / 2 + (scanned.z - centre.z) / mpp,
+				16_000 / mpp,
+				0,
+				Math.PI * 2
+			);
+			ctx.stroke();
+			ctx.setLineDash([]);
+		}
+		ctx.font = 'bold 12px system-ui';
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		patches.forEach((p, i) => {
+			const px = SIZE / 2 + (p.x - centre.x) / mpp,
+				py = SIZE / 2 + (p.z - centre.z) / mpp;
+			ctx.fillStyle = '#111';
+			ctx.strokeStyle = '#fff';
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.arc(px, py, 9, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.stroke();
+			ctx.fillStyle = '#fff';
+			ctx.fillText(String(i + 1), px, py + 0.5);
+		});
 		const t = client.timings
 			.map((v, l) =>
 				v && v.tiles
@@ -155,6 +231,14 @@
 				dirty = true;
 			},
 			centre: () => ({ ...centre }),
+			scan,
+			pick,
+			get scanResult() {
+				return scanResult;
+			},
+			/** Every tile in view has at least its land. */
+			landReady: () =>
+				!!client && wantedTiles(client, view()).every((t) => !!client!.get(t.level, t.tx, t.tz)),
 			/** Every tile in view is final (water included) and nothing is pending. */
 			settled: () =>
 				!!client &&
@@ -207,6 +291,55 @@
 			onwheel={wheel}
 		></canvas>
 		<p class="stats" data-testid="biome-map-stats">{stats}</p>
+		<section class="find" aria-label="Find a biome">
+			<h2>
+				Find a biome (Phase 0)
+				<button onclick={scan} data-testid="scan">Scan round the centre</button>
+				{#if scanResult}<span data-testid="scan-stats"
+						>{scanResult.done
+							? `${scanResult.sampled.toLocaleString()} points · ${Math.round(scanResult.ms)} ms in the worker · ${Math.round(scanWall)} ms wall`
+							: `Scanning… ${scanResult.sampled.toLocaleString()} points`}</span
+					>{/if}
+				{#if picked >= 0}<span data-testid="find-stats"
+						>{BIOME_DEFINITIONS[picked].name}: {patches.length} patch{patches.length === 1
+							? ''
+							: 'es'} · {findMs.toFixed(1)} ms</span
+					>{/if}
+			</h2>
+			<div class="groups">
+				{#each BIOME_LIST_GROUPS as group (group.group)}
+					<ul class="legend">
+						<li class="group">{group.label}</li>
+						{#each group.biomes as i (i)}<li>
+								<button
+									class:picked={picked === i}
+									disabled={!scanResult?.done}
+									onclick={() => pick(i)}
+									><i style:background={biomeMapHex(i)}></i>{BIOME_DEFINITIONS[i].name}
+									<span class="distance"
+										>{scanResult
+											? scanResult.here === i
+												? 'Here'
+												: scanResult.done && scanResult.nearest[i] === null
+													? 'None within 16 km'
+													: km(scanResult.nearest[i])
+											: ''}</span
+									></button
+								>
+							</li>{/each}
+					</ul>
+				{/each}
+			</div>
+			{#if patches.length}
+				<ol class="patches" data-testid="patches">
+					{#each patches as p, i (i)}<li>
+							{km(p.distance)} · {p.cells} cells · {p.inset} m in · ({Math.round(p.x)}, {Math.round(
+								p.z
+							)})
+						</li>{/each}
+				</ol>
+			{/if}
+		</section>
 		<ul class="legend">
 			{#each BIOME_IDS as id, i (id)}<li>
 					<i style:background={biomeMapHex(i)}></i>{id}
@@ -266,6 +399,52 @@
 		margin-right: 0.4rem;
 		vertical-align: -0.15rem;
 		border-radius: 3px;
+	}
+	.find h2 {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		align-items: center;
+		font-size: 1rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.groups {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+		gap: 0 1rem;
+		max-width: 1100px;
+	}
+	.groups .legend {
+		display: block;
+	}
+	.group {
+		font-weight: 600;
+		margin: 0.5rem 0 0.25rem;
+	}
+	.groups button {
+		display: flex;
+		width: 100%;
+		gap: 0.25rem;
+		align-items: center;
+		background: none;
+		color: inherit;
+		border: 0;
+		padding: 0.15rem 0.25rem;
+		text-align: left;
+		font: inherit;
+		cursor: pointer;
+		border-radius: 4px;
+	}
+	.groups button.picked {
+		background: #2b3a31;
+	}
+	.distance {
+		margin-left: auto;
+		opacity: 0.75;
+		font-variant-numeric: tabular-nums;
+	}
+	.patches {
+		font-variant-numeric: tabular-nums;
 	}
 	.note {
 		padding: 2rem;

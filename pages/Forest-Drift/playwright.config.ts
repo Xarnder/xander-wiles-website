@@ -73,7 +73,7 @@ export default defineConfig({
 		// The biome map's worker, bitmaps and canvas in every engine (biome minimap Phase 0).
 		{
 			name: 'webkit-map',
-			testMatch: /(biome(Map|Minimap)|fastTravelMap)\.e2e\.ts$/,
+			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*)\.e2e\.ts$/,
 			use: { ...devices['Desktop Safari'] }
 		},
 		{
@@ -102,7 +102,7 @@ export default defineConfig({
 		},
 		{
 			name: 'firefox-map',
-			testMatch: /(biome(Map|Minimap)|fastTravelMap)\.e2e\.ts$/,
+			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*)\.e2e\.ts$/,
 			use: {
 				...devices['Desktop Firefox'],
 				launchOptions: firefoxHome
