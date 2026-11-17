@@ -121,7 +121,8 @@ describe('BiomeMapSystem', () => {
 			init: (s: MapWorldSettings) => inits.push(s),
 			want: vi.fn(),
 			get: () => ({ image: {}, final: true }),
-			dispose: vi.fn()
+			dispose: vi.fn(),
+			cancelScan: vi.fn()
 		};
 		return { client: client as unknown as BiomeMapClient, inits, raw: client };
 	}
@@ -167,6 +168,8 @@ describe('BiomeMapSystem', () => {
 		map.attach(fakeElements().elements);
 		map.closeFull();
 		expect(map.workerRunning).toBe(true); // the minimap still shows
+		// Find a biome's scan stops with the full map, even while the worker stays.
+		expect(raw.cancelScan).toHaveBeenCalledTimes(1);
 		map.attach(null);
 		expect(map.workerRunning).toBe(false);
 		expect(raw.dispose).toHaveBeenCalledTimes(1);

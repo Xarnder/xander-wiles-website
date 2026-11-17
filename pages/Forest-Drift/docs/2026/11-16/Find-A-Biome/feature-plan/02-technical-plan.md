@@ -1,7 +1,7 @@
 # Forest Drift — Find a Biome: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 2 (2026-11-16): approved; Phase 0 built** ([record](../phase-0/implementation.md)). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
+**Status:** **Revision 2 (2026-11-16): approved; Phases 0–1 built** ([Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md)). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biome Minimap plan](../../Biome-Minimap/feature-plan/02-technical-plan.md) · [Fast Travel plan](../../Fast-Travel/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.

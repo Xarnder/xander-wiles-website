@@ -36,69 +36,73 @@ function world(seed: string): { settings: MapWorldSettings; x: number; z: number
 }
 
 describe.skipIf(process.env.FIND_BIOME_ACCURACY !== '1')('64 m scan accuracy', () => {
-	it.each(['main', 'forest', 'alpine', 'drift-42'])('world %s', (seed) => {
-		const { settings, x, z } = world(seed);
-		const map = new MapWorld(settings);
-		const grid = new Int8Array(SIDE * SIDE);
-		for (let j = 0; j < SIDE; j++)
-			for (let i = 0; i < SIDE; i++)
-				grid[j * SIDE + i] = map.classify(x + (i - RINGS) * FINE, z + (j - RINGS) * FINE);
-		const seen = new Uint8Array(grid.length);
-		let patches = 0,
-			sized = 0,
-			missedSized = 0,
-			missedAny = 0;
-		const missedSizes: number[] = [];
-		const perBiome = new Array(BIOME_COUNT).fill(0);
-		for (let start = 0; start < grid.length; start++) {
-			if (seen[start]) continue;
-			const biome = grid[start];
-			const stack = [start];
-			seen[start] = 1;
-			let cells = 0,
-				deep = false,
-				coarse = false;
-			while (stack.length) {
-				const index = stack.pop()!;
-				cells++;
-				const i = index % SIDE,
-					j = (index - i) / SIDE;
-				if ((i - RINGS) % 2 === 0 && (j - RINGS) % 2 === 0) coarse = true;
-				if (!deep && i >= 2 && j >= 2 && i < SIDE - 2 && j < SIDE - 2) {
-					let all = true;
-					for (let b = -2; b <= 2 && all; b++)
-						for (let a = -2; a <= 2 && all; a++)
-							if (grid[(j + b) * SIDE + i + a] !== biome) all = false;
-					deep = all;
-				}
-				for (let b = -1; b <= 1; b++)
-					for (let a = -1; a <= 1; a++) {
-						const ni = i + a,
-							nj = j + b;
-						if (ni < 0 || nj < 0 || ni >= SIDE || nj >= SIDE) continue;
-						const next = nj * SIDE + ni;
-						if (!seen[next] && grid[next] === biome) {
-							seen[next] = 1;
-							stack.push(next);
-						}
+	it.each(['main', 'forest', 'alpine', 'drift-42'])(
+		'world %s',
+		(seed) => {
+			const { settings, x, z } = world(seed);
+			const map = new MapWorld(settings);
+			const grid = new Int8Array(SIDE * SIDE);
+			for (let j = 0; j < SIDE; j++)
+				for (let i = 0; i < SIDE; i++)
+					grid[j * SIDE + i] = map.classify(x + (i - RINGS) * FINE, z + (j - RINGS) * FINE);
+			const seen = new Uint8Array(grid.length);
+			let patches = 0,
+				sized = 0,
+				missedSized = 0,
+				missedAny = 0;
+			const missedSizes: number[] = [];
+			const perBiome = new Array(BIOME_COUNT).fill(0);
+			for (let start = 0; start < grid.length; start++) {
+				if (seen[start]) continue;
+				const biome = grid[start];
+				const stack = [start];
+				seen[start] = 1;
+				let cells = 0,
+					deep = false,
+					coarse = false;
+				while (stack.length) {
+					const index = stack.pop()!;
+					cells++;
+					const i = index % SIDE,
+						j = (index - i) / SIDE;
+					if ((i - RINGS) % 2 === 0 && (j - RINGS) % 2 === 0) coarse = true;
+					if (!deep && i >= 2 && j >= 2 && i < SIDE - 2 && j < SIDE - 2) {
+						let all = true;
+						for (let b = -2; b <= 2 && all; b++)
+							for (let a = -2; a <= 2 && all; a++)
+								if (grid[(j + b) * SIDE + i + a] !== biome) all = false;
+						deep = all;
 					}
-			}
-			patches++;
-			if (!coarse) missedAny++;
-			if (deep) {
-				sized++;
-				perBiome[biome]++;
-				if (!coarse) {
-					missedSized++;
-					missedSizes.push(cells);
+					for (let b = -1; b <= 1; b++)
+						for (let a = -1; a <= 1; a++) {
+							const ni = i + a,
+								nj = j + b;
+							if (ni < 0 || nj < 0 || ni >= SIDE || nj >= SIDE) continue;
+							const next = nj * SIDE + ni;
+							if (!seen[next] && grid[next] === biome) {
+								seen[next] = 1;
+								stack.push(next);
+							}
+						}
+				}
+				patches++;
+				if (!coarse) missedAny++;
+				if (deep) {
+					sized++;
+					perBiome[biome]++;
+					if (!coarse) {
+						missedSized++;
+						missedSizes.push(cells);
+					}
 				}
 			}
-		}
-		console.log(
-			`${seed}: ${patches} patches at 32 m within 8 km; ${sized} at least ~160 m across; ` +
-				`64 m misses ${missedSized} of those (sizes in 32 m cells: ${missedSizes.join(', ') || '—'}) ` +
-				`and ${missedAny} patches of any size`
-		);
-		expect(sized).toBeGreaterThan(0);
-	}, 60_000);
+			console.log(
+				`${seed}: ${patches} patches at 32 m within 8 km; ${sized} at least ~160 m across; ` +
+					`64 m misses ${missedSized} of those (sizes in 32 m cells: ${missedSizes.join(', ') || '—'}) ` +
+					`and ${missedAny} patches of any size`
+			);
+			expect(sized).toBeGreaterThan(0);
+		},
+		60_000
+	);
 });

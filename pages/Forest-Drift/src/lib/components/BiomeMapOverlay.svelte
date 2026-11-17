@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		compassDirection,
 		formatDistance,
@@ -11,7 +11,20 @@
 		type FullMapHost,
 		type MapMarker
 	} from '#lib/game/map/BiomeMapSystem';
+	import { BIOME_IDS } from '#lib/game/biomes/BiomeTypes';
+	import type { BiomeScanResult } from '#lib/game/map/BiomeMapClient';
+	import { BIOME_LIST_GROUPS } from '#lib/game/map/biomeGroups';
+	import { biomeMapHex } from '#lib/game/map/biomeMapPalette';
+	import type { BiomePatch } from '#lib/game/map/biomeSearch';
 	import { metresPerPixel } from '#lib/game/map/biomeMapTiles';
+	import {
+		biomeRows,
+		findBiomeAvailable,
+		foundLabel,
+		foundTitle,
+		noMoreText,
+		nothingFoundText
+	} from '#lib/game/map/findBiome';
 	import { paintView, wantedTiles, type MapPainter } from '#lib/game/map/mapView';
 	import { landingNote, TRAVEL_REFUSAL_TEXT, type Landing } from '#lib/game/travel/FastTravel';
 
@@ -24,6 +37,11 @@
 	 * Fast travel (fast travel Phase 1, Q8): a click or tap that doesn't drag drops a pin (Enter pins
 	 * the crosshair); the readout then describes the pin, and Travel here (or T) jumps there and
 	 * closes the map. Go back returns from the last trip. Esc clears the pin before it closes.
+	 *
+	 * Find a biome (its Phase 1, Q1–Q7): **Biomes** (or B) opens a list of every biome with the
+	 * distance to its nearest patch, from a scan in the map worker. Picking one centres the map on
+	 * that patch and pins a spot well inside it; **Next nearest** (or N) steps to the next patch.
+	 * Esc closes the list first, then clears the pin, then closes the map.
 	 */
 
 	let {
@@ -61,6 +79,26 @@
 	let travelError = $state<string | null>(null);
 	// The host is fixed for the overlay's life (the page remounts it per opening).
 	const travel = $derived(host.travel);
+
+	// Find a biome.
+	const canFind = $derived(biomes && findBiomeAvailable());
+	let listOpen = $state(false);
+	let listEl = $state<HTMLElement>();
+	let biomesButton = $state<HTMLButtonElement>();
+	/** The scan the list shows: the latest progress, or an earlier finished scan while a new one runs. */
+	let scanShown = $state<BiomeScanResult | null>(null);
+	let scanning = $state(false);
+	/** The biome picked and its patches; `index` is the one pinned. */
+	let found = $state<{ biome: number; patches: BiomePatch[]; index: number } | null>(null);
+	/** A biome picked before the scan finished (edge case E2). */
+	let searching = $state<number | null>(null);
+	/** "No Desert within 16 km", "No more Desert within 16 km". */
+	let findMessage = $state<string | null>(null);
+	let scanToken = 0;
+	let pickToken = 0;
+	let destroyed = false;
+	/** Below this width the list is a sheet over the map, closed after picking. */
+	const NARROW = '(max-width: 900px)';
 
 	let width = 0,
 		height = 0;
@@ -134,7 +172,11 @@
 			note: pin?.note ?? ''
 		};
 		const now = performance.now();
-		if (pin) {
+		if (found && (pin || !pointer)) {
+			// A found patch: "Nearest Desert: 2.4 km north-east".
+			lastAnnounce = now;
+			announcement = `${foundLabel(found.biome, found.index, found.patches.length)}: ${readout.distance}${readout.direction ? ` ${readout.direction}` : ''}${readout.note ? `. ${readout.note}` : ''}`;
+		} else if (pin) {
 			// A pin is a choice: say it at once.
 			lastAnnounce = now;
 			announcement = `Pinned: ${readout.biome}${readout.direction ? `, ${readout.distance} ${readout.direction}` : ''}${readout.note ? `. ${readout.note}` : ''}`;
@@ -298,8 +340,15 @@
 		updateReadout();
 	}
 
-	/** Drops the pin at a world point and works out (and prepares) where it lands. */
-	function dropPin(at: { x: number; z: number }) {
+	/**
+	 * Drops the pin at a world point and works out (and prepares) where it lands. A pin the player
+	 * places themselves ends a Find (`keepFound` is for Find's own pins).
+	 */
+	function dropPin(at: { x: number; z: number }, keepFound = false) {
+		if (!keepFound) {
+			found = null;
+			findMessage = null;
+		}
 		if (!travel) return;
 		const landing = travel.landing(at.x, at.z);
 		pin = { x: at.x, z: at.z, landing, note: landingNote(at, landing) };
@@ -310,6 +359,8 @@
 
 	function clearPin() {
 		pin = null;
+		found = null;
+		findMessage = null;
 		travelError = null;
 		lastReadoutKey = '';
 		dirty = true;
@@ -340,12 +391,132 @@
 		void finish(travel.back());
 	}
 
-	/** Esc clears the pin before it closes the map (capture: before the page's own Esc). */
+	/**
+	 * Esc closes the Biomes list, then clears the pin, before it closes the map (capture: before the
+	 * page's own Esc).
+	 */
 	function escape(event: KeyboardEvent) {
-		if (event.key !== 'Escape' || !pin) return;
+		if (event.key !== 'Escape' || (!listOpen && !pin && !found)) return;
 		event.preventDefault();
 		event.stopImmediatePropagation();
-		clearPin();
+		if (listOpen) closeList();
+		else clearPin();
+	}
+
+	/** Scans round you (reusing the last scan within 250 m, Q9); keeps the old one up meanwhile. */
+	async function startScan() {
+		const token = ++scanToken;
+		const me = host.pose();
+		scanning = true;
+		const result = await host.client.scan(me.x, me.z);
+		if (destroyed || token !== scanToken) return;
+		scanning = false;
+		if (result) showScan(result);
+		// Null: the world changed (E4) or the scan was dropped. Scan again while the list is open.
+		else if (listOpen) void startScan();
+	}
+
+	/**
+	 * Shows a scan in the list. Its rows re-sort when distances arrive, and moving a focused row can
+	 * drop focus in some browsers, so focus follows the same biome.
+	 */
+	function showScan(result: BiomeScanResult) {
+		const active = document.activeElement as HTMLElement | null;
+		const focused = listEl?.contains(active) ? active?.dataset.biome : undefined;
+		scanShown = result;
+		if (focused === undefined) return;
+		void tick().then(() => {
+			const row = listEl?.querySelector<HTMLButtonElement>(`button[data-biome="${focused}"]`);
+			if (row && document.activeElement !== row) row.focus();
+		});
+	}
+
+	function openList() {
+		if (!canFind || listOpen) return;
+		listOpen = true;
+		void startScan();
+		// Focus the first row once it's drawn.
+		requestAnimationFrame(() =>
+			listEl?.querySelector<HTMLButtonElement>('button[data-biome]')?.focus()
+		);
+	}
+
+	function closeList() {
+		if (!listOpen) return;
+		const hadFocus = !!listEl?.contains(document.activeElement);
+		listOpen = false;
+		if (hadFocus) biomesButton?.focus();
+	}
+
+	/** Shows the found patch at `found.index`: centres the map on it and pins it. */
+	function showFound() {
+		if (!found) return;
+		const patch = found.patches[found.index];
+		centre = { x: patch.x, z: patch.z };
+		pointer = null;
+		findMessage = null;
+		if (travel) dropPin(patch, true);
+		else {
+			lastReadoutKey = '';
+			dirty = true;
+		}
+	}
+
+	/** Picking a biome (Q2): the nearest patch, pinned well inside (Q6). */
+	async function pick(biome: number) {
+		const token = ++pickToken;
+		searching = biome;
+		findMessage = null;
+		const me = host.pose();
+		// The scan the list is showing (or a fresh one); `find` waits for it in the worker.
+		const result = await host.client.scan(me.x, me.z);
+		const patches = result ? await host.client.find(biome) : [];
+		if (destroyed || token !== pickToken) return;
+		searching = null;
+		if (!result) return;
+		if (patches.length === 0) {
+			found = null;
+			if (pin) clearPin();
+			findMessage = nothingFoundText(biome, result.here === biome);
+			announcement = findMessage;
+			return;
+		}
+		found = { biome, patches, index: 0 };
+		showFound();
+		if (window.matchMedia(NARROW).matches) closeList();
+	}
+
+	/** Next nearest (Q4): the next separate patch, up to five. */
+	function nextNearest() {
+		if (!found) return;
+		if (found.index + 1 >= found.patches.length) {
+			findMessage = noMoreText(found.biome);
+			announcement = findMessage;
+			return;
+		}
+		found = { ...found, index: found.index + 1 };
+		showFound();
+	}
+
+	/** Up and down (and Home, End) move between the list's rows. */
+	function listKey(event: KeyboardEvent): boolean {
+		if (!listEl?.contains(document.activeElement)) return false;
+		const rows = [...listEl.querySelectorAll<HTMLButtonElement>('button[data-biome]')];
+		const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+		const next =
+			event.key === 'ArrowDown'
+				? Math.min(rows.length - 1, at + 1)
+				: event.key === 'ArrowUp'
+					? Math.max(0, at - 1)
+					: event.key === 'Home'
+						? 0
+						: event.key === 'End'
+							? rows.length - 1
+							: -1;
+		if (next < 0) return event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+		event.preventDefault();
+		rows[next]?.focus();
+		return true;
 	}
 
 	function keydown(event: KeyboardEvent) {
@@ -363,6 +534,20 @@
 			c: centreOnMe,
 			C: centreOnMe
 		};
+		if (listOpen && listKey(event)) return;
+		if (canFind && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			if (event.key === 'b' || event.key === 'B') {
+				event.preventDefault();
+				if (listOpen) closeList();
+				else openList();
+				return;
+			}
+			if ((event.key === 'n' || event.key === 'N') && found) {
+				event.preventDefault();
+				nextNearest();
+				return;
+			}
+		}
 		// Enter pins the crosshair, only on the map itself (on a button, Enter presses it).
 		if (event.key === 'Enter' && travel && document.activeElement === frame) {
 			event.preventDefault();
@@ -449,6 +634,10 @@
 		zoom = Math.max(0, Math.min(FULL_MAP_ZOOM_METRES.length - 1, startZoom));
 		centreOnMe();
 		host.setTileListener(() => (dirty = true));
+		host.client.onScan = (result) => {
+			// Keep an earlier finished scan up until the new one is done (E1).
+			if (result.done || !scanShown?.done) showScan(result);
+		};
 		const resize = new ResizeObserver(() => {
 			if (!frame) return;
 			width = frame.clientWidth;
@@ -466,6 +655,8 @@
 			window.removeEventListener('keydown', keydown);
 			window.removeEventListener('keydown', escape, true);
 			host.setTileListener(null);
+			host.client.onScan = null;
+			destroyed = true;
 		};
 	});
 </script>
@@ -483,9 +674,7 @@
 		bind:this={frame}
 		tabindex="-1"
 		role="application"
-		aria-label={travel
-			? 'Map. Arrow keys pan, plus and minus zoom, C centres on you, Enter pins the centre, T travels to the pin, Escape closes.'
-			: 'Map. Arrow keys pan, plus and minus zoom, C centres on you, Escape closes.'}
+		aria-label={`Map. Arrow keys pan, plus and minus zoom, C centres on you, ${travel ? 'Enter pins the centre, T travels to the pin, ' : ''}${canFind ? 'B lists biomes, ' : ''}Escape closes.`}
 		onpointerdown={pointerdown}
 		onpointermove={pointermove}
 		onpointerup={pointerup}
@@ -504,6 +693,16 @@
 			>{formatMapWidth(FULL_MAP_ZOOM_METRES[zoom])} across</span
 		>
 		<div class="buttons">
+			{#if canFind}
+				<button
+					type="button"
+					bind:this={biomesButton}
+					aria-expanded={listOpen}
+					aria-controls="biome-list"
+					data-testid="biome-full-map-biomes"
+					onclick={() => (listOpen ? closeList() : openList())}>Biomes</button
+				>
+			{/if}
 			<button type="button" data-testid="biome-full-map-zoom-in" onclick={() => setZoom(zoom - 1)}
 				>Zoom in</button
 			>
@@ -526,8 +725,55 @@
 			>
 		</div>
 	</header>
+	{#if canFind && listOpen}
+		<section
+			class="biome-list"
+			id="biome-list"
+			aria-label="Biomes"
+			data-testid="biome-list"
+			bind:this={listEl}
+		>
+			<div class="list-head">
+				<h3>Biomes</h3>
+				<span class="list-status" data-testid="biome-list-status"
+					>{scanning && !scanShown?.done
+						? 'Searching…'
+						: scanning
+							? 'Updating…'
+							: 'Nearest within 16 km'}</span
+				>
+				<button type="button" class="list-close" onclick={closeList}>Close list</button>
+			</div>
+			{#each BIOME_LIST_GROUPS as group (group.group)}
+				<h4>{group.label}</h4>
+				<ul>
+					{#each biomeRows(group, scanShown) as row (row.biome)}
+						<li>
+							<button
+								type="button"
+								data-biome={row.biome}
+								data-testid="biome-row-{BIOME_IDS[row.biome]}"
+								class:none={row.state === 'none'}
+								class:here={row.state === 'here'}
+								class:stale={scanning && !!scanShown?.done}
+								aria-current={found?.biome === row.biome ? 'true' : undefined}
+								aria-label={searching === row.biome ? `${row.name}, searching` : row.label}
+								onclick={() => pick(row.biome)}
+								><i class="swatch" style:background={biomeMapHex(row.biome)}></i><span class="name"
+									>{row.name}</span
+								><span class="distance">{searching === row.biome ? 'Searching…' : row.text}</span
+								></button
+							>
+						</li>
+					{/each}
+				</ul>
+			{/each}
+		</section>
+	{/if}
 	<footer data-testid="biome-full-map-readout">
-		<strong data-testid="biome-full-map-biome">{readout.biome || '—'}</strong>
+		{#if found}<strong class="found" data-testid="biome-full-map-found"
+				>{foundTitle(found.biome, found.index, found.patches.length)}</strong
+			>{:else}<strong data-testid="biome-full-map-biome">{readout.biome || '—'}</strong>{/if}
 		<span data-testid="biome-full-map-distance"
 			>{readout.distance}{readout.direction ? ` ${readout.direction}` : ''}</span
 		>
@@ -547,7 +793,16 @@
 				>Clear pin</button
 			>
 			{#if travelError}<span class="note" role="alert">{travelError}</span>{/if}
-		{:else}
+		{/if}
+		{#if found}
+			<button type="button" data-testid="biome-full-map-next" onclick={nextNearest}
+				>Next nearest</button
+			>
+		{/if}
+		{#if findMessage}<span class="note" data-testid="biome-full-map-find-message"
+				>{findMessage}</span
+			>{/if}
+		{#if !pin && !found}
 			<span class="hint"
 				>{travel ? 'Click to pin · ' : ''}Drag to pan · scroll or pinch to zoom · Esc to close</span
 			>
@@ -665,6 +920,113 @@
 	@media (hover: none) {
 		.hint {
 			display: none;
+		}
+	}
+	.found {
+		color: #edcf85;
+		font-weight: 600;
+	}
+	.biome-list {
+		position: absolute;
+		top: max(0.75rem, env(safe-area-inset-top));
+		bottom: 6rem;
+		left: max(0.75rem, env(safe-area-inset-left));
+		width: min(320px, calc(100vw - 1.5rem));
+		overflow-y: auto;
+		padding: 0.5rem 0.6rem 0.75rem;
+		border-radius: 10px;
+		background: rgba(10, 20, 15, 0.9);
+		overscroll-behavior: contain;
+	}
+	.list-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.6rem;
+		padding: 0 0.15rem 0.25rem;
+	}
+	.list-head h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+	.list-status {
+		flex: 1;
+		font-size: 0.8rem;
+		opacity: 0.75;
+	}
+	.list-close {
+		min-height: 1.8rem;
+		padding: 0.15rem 0.6rem;
+		font-size: 0.8rem;
+	}
+	.biome-list h4 {
+		margin: 0.6rem 0.15rem 0.2rem;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		opacity: 0.7;
+	}
+	.biome-list ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.biome-list li button {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		min-height: 2.1rem;
+		padding: 0.2rem 0.45rem;
+		border: 1px solid transparent;
+		background: none;
+		text-align: left;
+	}
+	.biome-list li button:hover {
+		background: rgba(234, 246, 255, 0.1);
+	}
+	.biome-list li button[aria-current='true'] {
+		border-color: rgba(237, 207, 133, 0.7);
+		background: rgba(237, 207, 133, 0.12);
+	}
+	.swatch {
+		flex: none;
+		width: 0.95rem;
+		height: 0.95rem;
+		border-radius: 3px;
+		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+	}
+	.name {
+		flex: 1;
+	}
+	.distance {
+		font-variant-numeric: tabular-nums;
+		font-size: 0.85rem;
+		opacity: 0.85;
+		white-space: nowrap;
+	}
+	.here .distance {
+		color: #edcf85;
+		opacity: 1;
+	}
+	.none {
+		opacity: 0.5;
+	}
+	.stale .distance {
+		opacity: 0.45;
+	}
+	@media (max-width: 900px) {
+		.biome-list {
+			top: auto;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			width: auto;
+			max-height: 58vh;
+			padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+			border-radius: 14px 14px 0 0;
+			background: #101a14;
+			z-index: 1;
 		}
 	}
 	.visually-hidden {

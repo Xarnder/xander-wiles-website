@@ -387,6 +387,8 @@ export class BiomeMapSystem {
 	closeFull(): void {
 		this.fullOpen = false;
 		this.onTile = null;
+		// Find a biome's scan only runs while the full map is open; this frees its grid too.
+		this.client?.cancelScan();
 		if (!this.elements) this.release();
 	}
 

@@ -259,7 +259,7 @@
 				],
 				[
 					k('map.open'),
-					'Open the full biome map: drag to pan, scroll to zoom, point at a place to see its biome, distance and direction. Click to drop a pin, then Travel here (or T) to fast travel there; Go back returns. Esc clears the pin, then closes the map.'
+					'Open the full biome map: drag to pan, scroll to zoom, point at a place to see its biome, distance and direction. Click to drop a pin, then Travel here (or T) to fast travel there; Go back returns. Biomes (or B) lists every biome with the distance to its nearest patch: pick one to pin a spot well inside it, and N for the next nearest. Esc closes the list, then clears the pin, then closes the map.'
 				],
 				[
 					k('ui.screenshot'),

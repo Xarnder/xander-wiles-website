@@ -247,7 +247,10 @@ test('the full map works by keyboard alone and describes itself to screen reader
 	await page.keyboard.press('ArrowRight');
 	await expect(page.getByTestId('biome-full-map-distance')).toContainText('east');
 	await expect(dialog.getByRole('status')).not.toBeEmpty({ timeout: 5000 });
-	// Tab reaches the buttons; Enter presses them.
+	// Tab reaches the buttons (Biomes first, Find a biome); Enter presses them.
+	await page.keyboard.press(tab);
+	await expect(page.getByRole('button', { name: 'Biomes' })).toBeFocused();
+	await expect(page.getByTestId('biome-full-map-biomes')).toHaveAttribute('aria-expanded', 'false');
 	await page.keyboard.press(tab);
 	await expect(page.getByTestId('biome-full-map-zoom-in')).toBeFocused();
 	await page.keyboard.press('Enter');

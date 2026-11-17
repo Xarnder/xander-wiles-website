@@ -299,6 +299,7 @@ import {
 import type { WorldRevisionCounters, WorldRuntime } from './world/WorldSerializer';
 import { sanitizePlayerState } from './world/WorldSerializer';
 import { createDefaultKeyEvent, matchesAction } from './input/KeyInput';
+import { readFindBiomeSwitch } from './map/findBiome';
 import {
 	TravelMemory,
 	fastTravelAvailable,
@@ -976,6 +977,7 @@ export class ThreeScene implements WorldRuntime {
 		readBiomeKillSwitch(location.search);
 		readCreatureCoatSwitches(location.search);
 		readFastTravelSwitch(location.search);
+		readFindBiomeSwitch(location.search);
 		// Biomes read only the pre-water, pre-edit terrain, so neither rivers nor shovel edits move them.
 		this.biomeSettings = createDefaultBiomeSettings();
 		this.biomeField = new BiomeField(heightSampler, this.biomeSettings);
