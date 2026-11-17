@@ -5,7 +5,10 @@ const state = {
     lines: [],         
     currentLine: null, 
     isDrawing: false,
-    image: null,       
+    image: null,
+    edgeMap: null,
+    edgeOverlay: null,
+    snapPreview: null,
     referenceIndex: 0,
     
     // Magnifier State
@@ -39,6 +42,98 @@ const debugLog = document.getElementById('debug-log');
 // Magnifier Controls
 const magToggle = document.getElementById('magToggle');
 const magZoomInput = document.getElementById('magZoom');
+const axisSnap = document.getElementById('axisSnap');
+const edgeSnap = document.getElementById('edgeSnap');
+const showEdges = document.getElementById('showEdges');
+const snapRadius = document.getElementById('snapRadius');
+const edgeSensitivity = document.getElementById('edgeSensitivity');
+const edgeStatus = document.getElementById('edgeStatus');
+let edgeWorker = null;
+let sensitivityTimer;
+let uploadVersion = 0;
+
+function invalidateEdges() {
+    clearTimeout(sensitivityTimer);
+    if (edgeWorker) edgeWorker.terminate();
+    edgeWorker = null;
+    state.edgeMap = null;
+    state.edgeOverlay = null;
+    state.snapPreview = null;
+}
+
+function prepareEdges() {
+    invalidateEdges();
+    if (!state.image || (!edgeSnap.checked && !showEdges.checked)) return;
+    edgeStatus.textContent = 'Finding Canny edges… You can keep drawing while processing.';
+    try {
+        const scale = Math.min(1, 2048 / Math.max(canvas.width, canvas.height));
+        const source = document.createElement('canvas');
+        source.width = Math.max(1, Math.round(canvas.width * scale));
+        source.height = Math.max(1, Math.round(canvas.height * scale));
+        const sourceCtx = source.getContext('2d', { willReadFrequently: true });
+        sourceCtx.drawImage(state.image, 0, 0, source.width, source.height);
+        const pixels = sourceCtx.getImageData(0, 0, source.width, source.height);
+        const worker = new Worker('edge-worker.js');
+        edgeWorker = worker;
+        const fail = () => {
+            if (edgeWorker !== worker) return;
+            invalidateEdges();
+            edgeStatus.textContent = 'Edge detection failed. Toggle Edge snap or Show Canny edges to retry. Free drawing and axis snap still work.';
+            draw();
+        };
+        worker.onerror = fail;
+        worker.onmessage = ({ data }) => {
+            if (edgeWorker !== worker) return;
+            if (data.error) { fail(); return; }
+            state.edgeMap = data;
+            const overlay = document.createElement('canvas');
+            overlay.width = data.width; overlay.height = data.height;
+            const overlayCtx = overlay.getContext('2d');
+            const rgba = overlayCtx.createImageData(data.width, data.height);
+            for (let i = 0; i < data.edges.length; i++) if (data.edges[i]) {
+                rgba.data.set([0, 235, 230, 230], i * 4);
+            }
+            overlayCtx.putImageData(rgba, 0, 0);
+            state.edgeOverlay = overlay;
+            edgeStatus.textContent = data.count
+                ? `Edges ready · ${data.width} × ${data.height} analysis. Higher sensitivity includes fainter edges.`
+                : 'No edges found. Try increasing sensitivity or use an image with more contrast.';
+            worker.terminate(); edgeWorker = null;
+            draw();
+        };
+        worker.postMessage({ pixels: pixels.data.buffer, width: source.width, height: source.height, sensitivity: Number(edgeSensitivity.value) }, [pixels.data.buffer]);
+    } catch (error) {
+        invalidateEdges();
+        edgeStatus.textContent = 'Edge detection unavailable. Free drawing and axis snap still work.';
+    }
+}
+
+function snappedPosition(pos, start = null) {
+    const snapped = RatioEdges.snapPoint(pos, start, axisSnap.checked,
+        edgeSnap.checked ? state.edgeMap : null, Number(snapRadius.value) * pos.scaleFactor, canvas.width, canvas.height);
+    state.snapPreview = snapped;
+    return { ...pos, ...snapped };
+}
+
+for (const toggle of [edgeSnap, showEdges]) toggle.addEventListener('change', () => {
+    if ((edgeSnap.checked || showEdges.checked) && !state.edgeMap && !edgeWorker) prepareEdges();
+    state.snapPreview = null;
+    draw();
+});
+axisSnap.addEventListener('change', () => { state.snapPreview = null; draw(); });
+snapRadius.addEventListener('input', () => {
+    document.getElementById('snapRadiusValue').textContent = `${snapRadius.value} px`;
+});
+edgeSensitivity.addEventListener('input', () => {
+    document.getElementById('edgeSensitivityValue').textContent = edgeSensitivity.value;
+    invalidateEdges();
+    draw();
+    if (state.image && (edgeSnap.checked || showEdges.checked)) {
+        edgeStatus.textContent = 'Updating Canny edges…';
+        sensitivityTimer = setTimeout(prepareEdges, 200);
+    }
+});
+
 const magValue = document.getElementById('magValue');
 
 /* -------------------------------------------------------------------------- */
@@ -61,32 +156,32 @@ imageLoader.addEventListener('change', handleImageUpload);
 window.addEventListener('resize', fitImageToScreen); 
 
 function handleImageUpload(e) {
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        state.image = new Image();
-        state.image.onload = function() {
-            debug(`Image loaded. Native: ${state.image.naturalWidth}x${state.image.naturalHeight}`);
-            state.lines = []; 
-            emptyState.style.display = 'none';
-            
-            // 1. Set Internal Resolution
-            canvas.width = state.image.naturalWidth;
-            canvas.height = state.image.naturalHeight;
-            
-            // 2. Set Magnifier Internal Resolution
-            magCanvas.width = state.magSize;
-            magCanvas.height = state.magSize;
-
-            // 3. Fit to screen
-            fitImageToScreen();
-
-            updateUI();
-        }
-        state.image.src = event.target.result;
-    }
-    if(e.target.files && e.target.files[0]) {
-        reader.readAsDataURL(e.target.files[0]);
-    }
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const version = ++uploadVersion;
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+        URL.revokeObjectURL(url);
+        if (version !== uploadVersion) return;
+        invalidateEdges();
+        state.image = image;
+        resetLines();
+        emptyState.style.display = 'none';
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        magCanvas.width = magCanvas.height = state.magSize;
+        fitImageToScreen();
+        edgeStatus.textContent = 'Enable Edge snap or Show Canny edges to analyze this image.';
+        prepareEdges();
+        debug(`Image loaded. Native: ${canvas.width}x${canvas.height}`);
+    };
+    image.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (version === uploadVersion) debug('Could not load that image. Please choose another image file.', true);
+    };
+    image.src = url;
+    e.target.value = '';
 }
 
 function fitImageToScreen() {
@@ -136,8 +231,8 @@ function getMapCoordinates(evt) {
     const scaleY = canvas.height / rect.height;
 
     return {
-        x: xVisual * scaleX,  
-        y: yVisual * scaleY,  
+        x: Math.max(0, Math.min(canvas.width, xVisual * scaleX)),
+        y: Math.max(0, Math.min(canvas.height, yVisual * scaleY)),
         visualX: xVisual,     
         visualY: yVisual,     
         scaleFactor: scaleX   
@@ -153,6 +248,13 @@ function draw() {
     // 1. Clear & Draw Image
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(state.image, 0, 0);
+
+    if (showEdges.checked && state.edgeOverlay) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(state.edgeOverlay, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
 
     // 2. Draw Lines
     const allLinesToDraw = [...state.lines];
@@ -193,6 +295,13 @@ function draw() {
         ctx.beginPath(); ctx.arc(line.x1, line.y1, r, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(line.x2, line.y2, r, 0, Math.PI*2); ctx.fill();
     });
+    if (state.snapPreview && state.snapPreview.edge) {
+        const scale = canvas.width / canvas.getBoundingClientRect().width;
+        ctx.beginPath();
+        ctx.strokeStyle = '#7dff90'; ctx.lineWidth = 2 * scale;
+        ctx.arc(state.snapPreview.x, state.snapPreview.y, 7 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+    }
 }
 
 function updateMagnifier(pos) {
@@ -205,12 +314,16 @@ function updateMagnifier(pos) {
     magDiv.style.display = 'block';
 
     const offset = 100; 
-    let top = pos.visualY - offset;
-    let left = pos.visualX - offset;
+    const rect = canvas.getBoundingClientRect();
+    const containerRect = canvasContainer.getBoundingClientRect();
+    const visualX = rect.left - containerRect.left + pos.x / pos.scaleFactor;
+    const visualY = rect.top - containerRect.top + pos.y / pos.scaleFactor;
+    let top = visualY - offset;
+    let left = visualX - offset;
 
     // Keep inside bounds visually
-    if(top < -50) top = pos.visualY + 80; 
-    if(left < -50) left = pos.visualX + 80;
+    if(top < -50) top = visualY + 80;
+    if(left < -50) left = visualX + 80;
 
     magDiv.style.top = top + 'px';
     magDiv.style.left = left + 'px';
@@ -234,49 +347,57 @@ function updateMagnifier(pos) {
 /*                             INTERACTION                                    */
 /* -------------------------------------------------------------------------- */
 
-// Mouse
-canvas.addEventListener('mousedown', startLogic);
-canvas.addEventListener('mousemove', handleMouseMove); // UPDATED handler
-canvas.addEventListener('mouseup', endLogic);
-canvas.addEventListener('mouseleave', () => { 
-    if(state.isDrawing) endLogic(); 
-    magDiv.style.display = 'none'; // Hide mag when leaving canvas
+let activePointer = null;
+canvas.addEventListener('pointerdown', (e) => {
+    if (activePointer !== null || e.button !== 0 || !state.image || state.lines.length >= 2) return;
+    e.preventDefault();
+    activePointer = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+    startLogic(e);
 });
-
-// Touch
-canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startLogic(e); }, {passive: false});
-canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleMouseMove(e); }, {passive: false});
-canvas.addEventListener('touchend', (e) => { e.preventDefault(); endLogic(); });
+canvas.addEventListener('pointermove', (e) => {
+    if (activePointer !== null && activePointer !== e.pointerId) return;
+    handleMouseMove(e);
+});
+canvas.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== activePointer) return;
+    handleMouseMove(e);
+    endLogic();
+    activePointer = null;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if (e.pointerType !== 'mouse') magDiv.style.display = 'none';
+});
+function cancelDrawing() {
+    activePointer = null;
+    state.isDrawing = false; state.currentLine = null; state.snapPreview = null;
+    magDiv.style.display = 'none';
+    draw(); calculateRatio();
+}
+canvas.addEventListener('pointercancel', cancelDrawing);
+canvas.addEventListener('lostpointercapture', () => { if (state.isDrawing) cancelDrawing(); });
+canvas.addEventListener('pointerleave', () => {
+    if (!state.isDrawing) { state.snapPreview = null; draw(); magDiv.style.display = 'none'; }
+});
 
 function handleMouseMove(e) {
     if (!state.image) return;
-
-    const pos = getMapCoordinates(e);
-
-    // 1. ALWAYS update magnifier if moving over canvas
-    updateMagnifier(pos);
-
-    // 2. Only update line if actively drawing
+    const start = state.isDrawing ? { x: state.currentLine.x1, y: state.currentLine.y1 } : null;
+    const pos = snappedPosition(getMapCoordinates(e), start);
     if (state.isDrawing) {
         state.currentLine.x2 = pos.x;
         state.currentLine.y2 = pos.y;
-        
-        draw(); 
-        calculateRatio(); 
+        calculateRatio();
     }
+    draw();
+    updateMagnifier(pos);
 }
 
 function startLogic(e) {
-    if (!state.image) return;
-    if (state.lines.length >= 2) return;
-
-    const pos = getMapCoordinates(e);
-    
+    const pos = snappedPosition(getMapCoordinates(e));
     state.isDrawing = true;
     state.currentLine = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
-    
-    draw(); 
-    // updateMagnifier(pos); -> Now handled by handleMouseMove implicitly or next move event
+    draw();
+    updateMagnifier(pos);
 }
 
 function endLogic() {
@@ -349,7 +470,9 @@ swapBtn.addEventListener('click', () => {
     calculateRatio();
 });
 
-resetBtn.addEventListener('click', () => {
+resetBtn.addEventListener('click', resetLines);
+function resetLines() {
+    cancelDrawing();
     state.lines = [];
     state.currentLine = null;
     state.isDrawing = false;
@@ -359,7 +482,7 @@ resetBtn.addEventListener('click', () => {
     ratioDisplay.textContent = "--";
     draw();
     updateUI();
-});
+}
 
 function updateUI() {
     swapBtn.disabled = (state.lines.length !== 2);

@@ -181,3 +181,17 @@ canvas#imageCanvas {
     .mag-controls { width: 100%; justify-content: space-between; box-sizing: border-box;}
     .results { flex-direction: column; }
 }
+.snap-controls { margin: 0 0 20px; padding: 15px; border: var(--glass-border); border-radius: 10px; min-width: 0; }
+.snap-controls legend { padding: 0 8px; font-weight: 600; }
+.snap-options { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.snap-settings { margin-top: 18px; font-size: .85rem; }
+.snap-settings input { width: 100px; accent-color: var(--primary); }
+.snap-settings output { min-width: 42px; font-variant-numeric: tabular-nums; }
+.snap-help, #edgeStatus { font-size: .8rem; line-height: 1.5; margin: 12px 0 0; }
+.snap-help { color: #bcbcbc; }
+#edgeStatus { color: #7ededa; }
+.toggle-switch input:focus-visible + .slider-toggle { outline: 2px solid white; outline-offset: 3px; }
+#imageCanvas { cursor: crosshair; touch-action: none; }
+@media (max-width: 600px) {
+    .snap-settings .range-wrapper { flex-wrap: wrap; }
+}
