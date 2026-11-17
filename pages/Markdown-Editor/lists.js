@@ -517,7 +517,7 @@ export function offsetFromPreviewAnchor(doc, segIndex, localLine, anchor = '') {
  * Map a serialized-document character offset back to a Preview anchor.
  * @param {{ segments: Array<object> }} doc
  * @param {number} offset
- * @returns {{ segIndex: number, localLine: number, needle: string }}
+ * @returns {{ segIndex: number, localLine: number, needle: string, itemId?: string }}
  */
 export function previewAnchorFromOffset(doc, offset) {
     const { offsets, parts, text } = serializeDocumentWithOffsets(doc);
@@ -537,7 +537,23 @@ export function previewAnchorFromOffset(doc, offset) {
     const ahead = part.slice(local, Math.min(part.length, local + 100));
     const behind = part.slice(Math.max(0, local - 40), local);
     const needle = firstSourceNeedle(ahead) || firstSourceNeedle(behind);
-    return { segIndex, localLine, needle };
+    const anchor = { segIndex, localLine, needle };
+    const seg = doc.segments[segIndex];
+    if (seg?.type === 'mdlist' && seg.list) {
+        const itemsStart = part.indexOf('\n  "items":');
+        const itemsEnd = part.indexOf('\n  ]', itemsStart);
+        if (itemsStart >= 0 && local >= itemsStart && itemsEnd >= 0 && local <= itemsEnd + 4) {
+            let nearest = -1;
+            for (const item of seg.list.items || []) {
+                const start = part.indexOf(`\n      "id": ${JSON.stringify(item.id)}`, itemsStart);
+                if (start >= 0 && start <= local && start > nearest) {
+                    nearest = start;
+                    anchor.itemId = item.id;
+                }
+            }
+        }
+    }
+    return anchor;
 }
 
 function firstSourceNeedle(text) {

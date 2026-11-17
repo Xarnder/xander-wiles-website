@@ -1,4 +1,6 @@
 /** Shared insertion protocol. Positions always refer to the original snapshot. */
+import { compactAiBulletLines } from './ai-spacing.js';
+
 export function insertionLines(original) {
     return String(original).match(/[^\r\n]*(?:\r\n|\r|\n|$)/g)?.filter(line => line !== '') || [];
 }
@@ -41,7 +43,7 @@ export function parseInsertions(original, text) {
 }
 
 /** Existing bytes are copied verbatim; only new separators and text are inserted. */
-export function insertAdditions(original, additions, transform = text => text) {
+export function insertAdditions(original, additions, transform = text => text, { compactBullets = false } = {}) {
     validateInsertions(original, { additions });
     const lines = insertionLines(original);
     const newline = String(original).match(/\r\n|\r|\n/)?.[0] || '\n';
@@ -51,14 +53,18 @@ export function insertAdditions(original, additions, transform = text => text) {
         list.push(transform(addition.text).replace(/\r\n|\r|\n/g, newline));
         groups.set(addition.afterLine, list);
     }
-    let result = '';
+    const result = [];
+    const generated = new Set();
     for (let position = 0; position <= lines.length; position += 1) {
-        if (position > 0) result += lines[position - 1];
+        if (position > 0) result.push(lines[position - 1]);
         for (const text of groups.get(position) || []) {
-            if (result && !/[\r\n]$/.test(result)) result += newline;
-            result += text;
-            if (!/[\r\n]$/.test(text)) result += newline;
+            if (result.length && !/[\r\n]$/.test(result.at(-1))) result[result.length - 1] += newline;
+            for (const line of insertionLines(text)) {
+                generated.add(result.length);
+                result.push(line);
+            }
+            if (!/[\r\n]$/.test(text)) result[result.length - 1] += newline;
         }
     }
-    return result;
+    return (compactBullets ? compactAiBulletLines(result, index => generated.has(index)) : result).join('');
 }

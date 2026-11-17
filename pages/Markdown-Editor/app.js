@@ -264,8 +264,10 @@ import {
     syncUndoRedoButtons,
 } from './ui.js';
 import { initViewModePicker, isSlimViewModePicker } from './view-mode-picker.js';
-import { attachAiFile, captureAiSelection, initAiPanel, syncAiPanel } from './ai-panel.js';
+import { attachAiFile, captureAiSelection, clearAiSession, confirmAiNoteChange, initAiPanel, isAiBusy, syncAiPanel } from './ai-panel.js';
 import { initAiUsage, renderAiUsage } from './ai-usage.js';
+import { firstAiChangeOffset } from './ai.js';
+import { clearAiHistoryView, initAiHistory, refreshAiHistory } from './ai-history-ui.js';
 import { initImageUsagePanel, showImageUsagePanel } from './image-usage-panel.js';
 
 const COMPUTERS_ROOT = { id: COMPUTERS_FOLDER_ID, name: COMPUTERS_FOLDER_NAME };
@@ -2281,6 +2283,8 @@ function applyViewMode(mode, {
     selectWord = false,
     focusEditor = false,
     focusTocId = null,
+    focusPreviewAnchor = null,
+    flushCurrent = true,
 } = {}) {
     if (!VIEW_MODES.has(mode)) mode = 'raw';
     if (state.editor.kind !== 'markdown') return;
@@ -2290,7 +2294,7 @@ function applyViewMode(mode, {
     let focusLine = focusLineOpt;
     let rawFocusOffset = focusOffset;
     /** @type {{ segIndex: number, localLine: number, needle: string } | null} */
-    let previewAnchor = null;
+    let previewAnchor = focusPreviewAnchor;
     let pendingPreviewOffset = null;
 
     if (rawFocusOffset == null && focusLine == null && previewAnchor == null) {
@@ -2336,12 +2340,12 @@ function applyViewMode(mode, {
     }
 
     // Leaving editable surfaces: flush first
-    if (state.viewMode === 'raw' || reparseFromTextarea) {
+    if (flushCurrent && (state.viewMode === 'raw' || reparseFromTextarea)) {
         adoptEditorBuffer(els.editor.value, { userEdit: true });
     } else if (
-        state.viewMode === 'list' ||
+        flushCurrent && (state.viewMode === 'list' ||
         state.viewMode === 'preview' ||
-        state.viewMode === 'contents'
+        state.viewMode === 'contents')
     ) {
         if (state.documentModel) {
             const serialized = serializeDocument(state.documentModel);
@@ -2402,9 +2406,11 @@ function applyViewMode(mode, {
     syncImportListButton();
     syncClickEditButton();
     if (previewAnchor && els.listsRoot && !focusTocId) {
+        const fileId = state.editor.fileId;
         // After lists-ui restoreScroll rAF, place the matching Preview block in view.
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+                if (state.editor.fileId !== fileId || state.viewMode !== mode || els.viewEditor.hidden) return;
                 scrollListsRootToAnchor(els.listsRoot, previewAnchor);
             });
         });
@@ -2412,6 +2418,33 @@ function applyViewMode(mode, {
     if (editorSearch?.isOpen()) {
         requestAnimationFrame(() => editorSearch?.revealCurrent());
     }
+}
+
+/** Display the exact saved bytes in Preview, then reveal the first changed block or list item. */
+function showSavedAiChanges(note) {
+    if (state.editor.fileId !== note.id || state.editor.editorContent !== note.markdown) {
+        throw new Error('The open document changed while AI history was saving. Open the saved note from Finder.');
+    }
+    editorSearch?.close({ restoreFocus: false });
+    state.placingList = false;
+    state.pendingImportList = null;
+    state.clickEdit = false;
+    state.tagFilters = {};
+    state.editingListIds = {};
+    state.editingPlainLists = {};
+    state.reorderingListIds = {};
+    state.reorderingPlainLists = {};
+    const doc = refreshDocumentModelFromText(note.markdown);
+    // Preview uses normalized segments; diff that same representation so custom-list formatting
+    // and hidden agent notes cannot displace the change's source coordinates.
+    const before = serializeDocument(parseDocument(note.original || ''));
+    const after = serializeDocument(doc);
+    const offset = firstAiChangeOffset(before, after) ?? 0;
+    const anchor = previewAnchorFromOffset(doc, offset);
+    showAppView('editor');
+    applyViewMode('preview', { persist: true, flushCurrent: false, focusPreviewAnchor: anchor });
+    syncEditorChrome(state.editor);
+    syncAutosaveFromEditorState();
 }
 
 function setupEditorForOpenFile(options = {}) {
@@ -2777,6 +2810,7 @@ async function openEntryInAi(file) {
         setStatus('Choose a markdown file.', 'error');
         return;
     }
+    if (!(await confirmAiNoteChange(file))) return;
     setStatus('Opening in AI…');
     try {
         let name = file.name || 'note.md';
@@ -2790,7 +2824,7 @@ async function openEntryInAi(file) {
             name = meta.name || name;
             content = await getFileContent(file.id);
         }
-        attachAiFile({ id: file.id, name, content, role: 'add' });
+        if (!(await attachAiFile({ id: file.id, name, content, role: 'add' }))) return;
         await switchAppMode('ai');
         setStatus(`Added “${name}”. Add only text is selected. Choose a mode, then send a message.`, 'ok');
     } catch (err) {
@@ -2804,7 +2838,7 @@ async function acceptAiFile({ fileId, fileName, markdown, original }) {
             id: fileId,
             name: fileName,
             mimeType: 'text/markdown',
-        });
+        }, { fromAiSave: true });
         if (state.editor.fileId !== fileId) return false;
     }
     flushCurrentEditorContent();
@@ -3557,8 +3591,9 @@ async function handleCreateNote(type = 'md') {
         return;
     }
 
-    setStatus('Creating note…');
     try {
+        if (!(await confirmAiNoteChange({ name }))) return;
+        setStatus('Creating note…');
         const created = await createMarkdownFile(parent.id, name, `# ${name.replace(/\.md$/i, '')}\n\n`);
         setStatus(`Created ${created.name}`, 'ok');
         await openMarkdownFile(created, { freshlyCreated: true });
@@ -3592,8 +3627,9 @@ async function handleCreatePlainFile(spec) {
         return;
     }
 
-    setStatus(`Creating ${spec.label}…`);
     try {
+        if (!(await confirmAiNoteChange({ name: fileName }))) return;
+        setStatus(`Creating ${spec.label}…`);
         const created = await createTextBasedFile(parent.id, fileName, spec.content, spec.mimeType);
         setStatus(`Created ${created.name}`, 'ok');
         if (spec.ext === '.csv') await openCsvFile(created);
@@ -4620,6 +4656,7 @@ async function savePdfFileExclusive(options = {}) {
 }
 
 async function openPdfFile(file) {
+    if (!(await confirmAiNoteChange(file))) return;
     const els = getEls();
     if (state.editor.fileId && state.editor.fileId !== file.id) {
         await waitForDriveWritesIdle();
@@ -4699,6 +4736,7 @@ async function openPdfFile(file) {
 }
 
 async function openCsvFile(file) {
+    if (!(await confirmAiNoteChange(file))) return;
     const els = getEls();
     if (state.editor.fileId && state.editor.fileId !== file.id) {
         await waitForDriveWritesIdle();
@@ -4801,6 +4839,7 @@ function showCsvEditor(text) {
 
 /** Open a .txt file in the plain Raw editor (no markdown parsing or reformatting). */
 async function openTextFile(file) {
+    if (!(await confirmAiNoteChange(file))) return;
     const els = getEls();
     if (state.editor.fileId && state.editor.fileId !== file.id) {
         await waitForDriveWritesIdle();
@@ -4907,6 +4946,8 @@ function showTextEditor(text) {
 }
 
 async function openMarkdownFile(file, options = {}) {
+    // The internal open applies the old proposal during Save; it must not prompt recursively.
+    if (!options.fromAiSave && !(await confirmAiNoteChange(file))) return;
     const els = getEls();
     // Finish any in-flight Drive write before switching file identity.
     if (state.editor.fileId && state.editor.fileId !== file.id) {
@@ -5156,8 +5197,14 @@ async function saveCurrentFileExclusive(options = {}) {
     }
     if (restoreInFlight) return;
 
-    // Snapshot identity + bytes so a later file switch cannot redirect this write.
-    flushCurrentEditorContent();
+    // An AI save must preserve the reviewed bytes, not reserialize the structured editor.
+    if (options.expectedAiNote) {
+        if (ed.fileId !== options.expectedAiNote.id || ed.editorContent !== options.expectedAiNote.markdown) {
+            throw new Error('The open note changed before saving the AI edits. Return to the reviewed note and retry Save.');
+        }
+    } else {
+        flushCurrentEditorContent();
+    }
     const fileId = ed.fileId;
     const mimeType = ed.mimeType || 'text/markdown';
     const snapshot = ed.editorContent;
@@ -5280,8 +5327,9 @@ async function saveCurrentFileExclusive(options = {}) {
                 version: nextVersion,
                 headRevisionId: nextHead,
             });
-            // Markdown Preview/List can rewrite whitespace. CSV / plain text stay exactly as typed.
-            if (ed.kind === 'markdown') {
+            // AI verification and history must keep the exact reviewed bytes, including
+            // intentional gaps when compact bullets is off. Other saves may normalize.
+            if (ed.kind === 'markdown' && !options.expectedAiNote) {
                 try {
                     refreshDocumentModelFromText(ed.editorContent);
                     if (state.documentModel) {
@@ -5512,6 +5560,7 @@ async function switchAppMode(mode) {
         showAppView('settings');
         showImageUsagePanel();
         renderAiUsage();
+        if (!document.getElementById('settings-panel-ai')?.hidden) refreshAiHistory();
     }
 }
 
@@ -5527,6 +5576,10 @@ async function signIn() {
 }
 
 async function signOut() {
+    if (isAiBusy()) {
+        setStatus('Wait for the AI request or save to finish before signing out.', 'warn');
+        return;
+    }
     if (state.editor.fileId) {
         flushCurrentEditorContent();
         await waitForDriveWritesIdle();
@@ -5554,6 +5607,8 @@ async function signOut() {
     spacingEdited = false;
     pinnedMetaCache.clear();
     clearImageCaches();
+    clearAiSession();
+    clearAiHistoryView();
     clearToken({ revoke: true, forget: true });
     state.editor = createEditorState();
     state.files = [];
@@ -5661,6 +5716,7 @@ function wireEvents() {
     editorSearch.bind();
 
     initAiUsage();
+    initAiHistory();
     initAiPanel({
         getDocument() {
             return {
@@ -5682,13 +5738,20 @@ function wireEvents() {
             return getAccessToken();
         },
         onAcceptFile: acceptAiFile,
-        async onSave() {
-            const fileId = state.editor.fileId;
-            flushCurrentEditorContent();
-            const expected = state.editor.editorContent;
-            await saveCurrentFile({ blocking: true });
-            assertAiSaveConfirmed(state.editor, fileId, expected);
+        async onSave(note) {
+            if (state.editor.fileId !== note.id || state.editor.editorContent !== note.markdown) {
+                throw new Error('The open note no longer matches the reviewed changes. Return to that note before retrying Save.');
+            }
+            await saveCurrentFile({ blocking: true, expectedAiNote: note });
+            assertAiSaveConfirmed(state.editor, note.id, note.markdown);
+            const saved = await getFileContent(note.id, { cache: 'no-store' });
+            if (saved !== note.markdown) {
+                throw new Error('Drive read-back did not match the AI edits. Check the note for changes from another device, then retry Save.');
+            }
+            assertAiSaveConfirmed(state.editor, note.id, note.markdown);
+            return { id: note.id, markdown: saved };
         },
+        onSaved: showSavedAiChanges,
         onGoFinder() {
             switchAppMode('finder');
         },

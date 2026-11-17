@@ -26,8 +26,10 @@ import {
     stripMdlistAgentNotes,
 } from './lists.js';
 import { attachPointerDrag } from './list-drag.js';
+import { stripAiTags, renderAiTextHtml } from './ai-tags.js';
 import {
     extractMarkdownHeadings,
+    escapeHtml,
     formatPlainItemSubtreeClipboard,
     joinMarkdownBlocks,
     movePlainListItem,
@@ -320,7 +322,7 @@ function createListReorderButton({ active = false } = {}) {
  * @param {string} text
  */
 function listItemPlainLabel(text) {
-    let s = formatDateTagsForPlainText(String(text ?? ''), false);
+    let s = stripAiTags(formatDateTagsForPlainText(String(text ?? ''), false));
     s = s
         .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
@@ -1002,7 +1004,7 @@ function buildPreviewOutline(doc) {
             items.push({
                 id: `toc-list-${seg.list.id}`,
                 level: 2,
-                title: String(seg.list.title || 'List').trim() || 'List',
+                title: stripAiTags(seg.list.title || 'List').trim() || 'List',
                 kind: 'list',
             });
         }
@@ -1342,7 +1344,7 @@ function plainListDisplayTitle(block) {
 }
 
 function applyPlainListTitleEl(titleEl, block, segIndex) {
-    titleEl.textContent = plainListDisplayTitle(block);
+    titleEl.innerHTML = renderAiTextHtml(plainListDisplayTitle(block), escapeHtml);
     const titleLine = Number(block?.titleLine);
     if (block?.title && Number.isFinite(titleLine) && titleLine > 0) {
         titleEl.id = `toc-s${segIndex}-l${titleLine}`;
@@ -1432,6 +1434,14 @@ function renderPlainListBlock({
                       });
                   },
         });
+        const rowsById = new Map([...viewItems.querySelectorAll('[data-plain-item-id]')]
+            .map(row => [row.dataset.plainItemId, row]));
+        let sourceLine = block.startLine || 1;
+        for (const item of block.items || []) {
+            const row = rowsById.get(item.id);
+            if (row) row.dataset.mdLine = String(sourceLine);
+            sourceLine += String(item.text || '').split('\n').length;
+        }
         wrap.appendChild(viewItems);
         if (openMiniPlainItemId) {
             const item = (block.items || []).find((it) => it.id === openMiniPlainItemId);
@@ -3317,7 +3327,7 @@ function renderListViewHeader(seg, doc, onChange, onStatus, { reordering = false
 
     const title = document.createElement('h2');
     title.className = 'mdlist-title';
-    title.textContent = list.title || 'Untitled list';
+    title.innerHTML = renderAiTextHtml(list.title || 'Untitled list', escapeHtml);
 
     const count = document.createElement('span');
     count.className = 'mdlist-count';
@@ -3466,6 +3476,7 @@ function renderListViewItems(list, onStatus) {
     items.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'mdlist-view-item';
+        li.dataset.itemId = item.id;
         syncImportantBullet(li, item.text);
         li.setAttribute('role', 'listitem');
         li.title = 'Double-tap to copy';

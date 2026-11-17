@@ -8,6 +8,7 @@ import {
     dateTagRe,
     renderDateTagHtml,
 } from './dates.js';
+import { AI_TAG, AI_BADGE_HTML, hasAiTag, stripAiTags, renderAiTextHtml } from './ai-tags.js';
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -20,7 +21,7 @@ export function escapeHtml(text) {
  * @param {string} text
  */
 function plainHeadingText(text) {
-    return String(text ?? '')
+    return stripAiTags(text)
         .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
         .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
         .replace(/`([^`]+)`/g, '$1')
@@ -110,7 +111,8 @@ function sanitizeUrl(url) {
  */
 export function renderInline(text, options = {}) {
     const showDates = Boolean(options.showDates);
-    let s = String(text ?? '');
+    const aiAuthored = hasAiTag(text);
+    let s = stripAiTags(text);
 
     /** @type {string[]} */
     const dateSlots = [];
@@ -174,7 +176,7 @@ export function renderInline(text, options = {}) {
         s = s.replace(/ {2,}/g, ' ').replace(/^ +| +$/g, '');
     }
 
-    return s;
+    return s + (aiAuthored ? ` ${AI_BADGE_HTML}` : '');
 }
 
 function isHr(line) {
@@ -452,7 +454,7 @@ function nextContentIsList(lines, start) {
  * @param {string} line
  */
 function isPlainListTitleLine(line) {
-    const raw = stripNonIndentPrefix(line);
+    const raw = stripAiTags(stripNonIndentPrefix(line));
     const trimmed = raw.trim();
     if (!trimmed) return false;
     if (parseAtxHeadingLine(trimmed)) return false;
@@ -488,8 +490,9 @@ function peelTrailingListTitle(blocks) {
     const plain = !atx && isPlainListTitleLine(lines[end]);
     if (!atx && !plain) return null;
 
-    const title = atx ? atx.title : plainHeadingText(lines[end].trim());
+    let title = atx ? atx.title : plainHeadingText(lines[end].trim());
     if (!title) return null;
+    if (hasAiTag(lines[end])) title += ` ${AI_TAG}`;
 
     const titleLine = (Number(prev.startLine) || 1) + end;
     const kept = lines.slice(0, end);
@@ -983,7 +986,7 @@ export function renderMarkdown(markdown, options = {}) {
             const lang = fenceLang(info);
             const isMdlist = /^\s*mdlist\s*$/i.test(info);
             const cls = isMdlist ? ' class="md-code md-code--mdlist"' : ` class="md-code${lang}"`;
-            out.push(withSourceLine(`<pre${cls}><code>${escapeHtml(body.join('\n'))}</code></pre>`, startLine));
+            out.push(withSourceLine(`<pre${cls}><code>${renderAiTextHtml(body.join('\n'), escapeHtml)}</code></pre>`, startLine));
             continue;
         }
 
@@ -1168,7 +1171,7 @@ export function renderMarkdown(markdown, options = {}) {
                 body.push(lines[i].replace(/^(?: {4}|\t)/, ''));
                 i += 1;
             }
-            out.push(withSourceLine(`<pre class="md-code"><code>${escapeHtml(body.join('\n'))}</code></pre>`, startLine));
+            out.push(withSourceLine(`<pre class="md-code"><code>${renderAiTextHtml(body.join('\n'), escapeHtml)}</code></pre>`, startLine));
             continue;
         }
 
@@ -1363,7 +1366,7 @@ export function getTextareaViewportOffset(textarea) {
 /**
  * Scroll the Preview/List root so an anchored block is near the top.
  * @param {HTMLElement} rootEl
- * @param {{ segIndex?: number, localLine?: number, needle?: string } | null} anchor
+ * @param {{ segIndex?: number, localLine?: number, needle?: string, itemId?: string } | null} anchor
  */
 export function scrollListsRootToAnchor(rootEl, anchor) {
     if (!rootEl || !anchor) return;
@@ -1374,8 +1377,13 @@ export function scrollListsRootToAnchor(rootEl, anchor) {
     const stack = rootEl.querySelector(`.mdlist-stack[data-preview-seg-index="${segIndex}"]`);
     let target = null;
 
-    if (preview) {
-        const blocks = [...preview.querySelectorAll(':scope > [data-md-line]')];
+    const blocks = [...rootEl.querySelectorAll(
+        `.md-preview--segment[data-seg-index="${segIndex}"] > [data-md-line], ` +
+        `.mdplain-block[data-seg-index="${segIndex}"][data-md-line], ` +
+        `.mdplain-block[data-seg-index="${segIndex}"] [data-md-line]`
+    )].sort((a, b) => Number(a.dataset.mdLine) - Number(b.dataset.mdLine));
+
+    if (blocks.length || preview) {
         const needle = String(anchor.needle || '').trim();
         const localLine = Math.max(1, Number(anchor.localLine) || 1);
 
@@ -1405,16 +1413,20 @@ export function scrollListsRootToAnchor(rootEl, anchor) {
         }
         if (!target) target = blocks[0] || preview;
     } else if (stack) {
-        target = stack;
+        target = anchor.itemId
+            ? stack.querySelector(`[data-item-id="${CSS.escape(anchor.itemId)}"]`) || stack
+            : stack;
     }
 
     if (!(target instanceof HTMLElement)) return;
-    const rootRect = rootEl.getBoundingClientRect();
+    // Preview content grows to its full height; the surrounding editor is the
+    // scroll viewport on desktop and in the iOS/PWA layout.
+    const scroller = rootEl.closest('.editor-scroll') || rootEl;
+    const rootRect = scroller.getBoundingClientRect();
     const stickyToc = rootEl.querySelector('.preview-toc-mount--sticky');
-    const stickyBottom = stickyToc?.getBoundingClientRect().bottom || rootRect.top;
-    const topPad = Math.max(10, stickyBottom - rootRect.top + 8);
+    const topPad = Math.max(10, (stickyToc?.getBoundingClientRect().height || 0) + 8);
     const elRect = target.getBoundingClientRect();
-    rootEl.scrollTop += elRect.top - rootRect.top - topPad;
+    scroller.scrollTop += elRect.top - rootRect.top - topPad;
 }
 
 /**

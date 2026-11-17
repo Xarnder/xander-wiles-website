@@ -42,7 +42,7 @@ test('preview and save stamp only new dates and never alter original tags', () =
     const input = { task: 'revise', addOnly: true, original: '{{date:2000-01-01}}', additions: [{ afterLine: 1, text: 'New {{date:1999-01-01}}' }] };
     const result = applyAiProposal(input);
     assert.equal(result.ok, true);
-    assert.equal(result.markdown, '{{date:2000-01-01}}\nNew ' + stampAiDateTags('{{date}}') + '\n');
+    assert.equal(result.markdown, '{{date:2000-01-01}}\nNew ' + stampAiDateTags('{{date}}') + ' {{ai}}\n');
     assert.deepEqual(applyAiProposal(input), result);
     assert.equal(applyAiProposal({ ...input, additions: undefined, proposal: 'Replacement' }).ok, false);
 });

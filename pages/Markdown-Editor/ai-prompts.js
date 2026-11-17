@@ -16,7 +16,8 @@ export function aiSystemPrompt(task, addOnly, compactBullets = true, includeDate
     let base = addOnly ? ADD_ONLY_SYSTEM : systemPromptFor(task);
     if (!includeDateTags && task === 'header') base = base.replace('one {{date:YYYY-MM-DD}} tag, and ', '');
     const instructions = [base];
-    if (compactBullets) instructions.push('For newly written bullet lists, put each bullet on its own line with no blank lines or extra gaps between consecutive bullet points. Do not add hard line breaks within a bullet unless required for nested content or code. In add-only mode, never change existing text or spacing.');
+    instructions.push('Preserve existing {{ai}} provenance tags on unchanged text. The editor adds {{ai}} tags to newly written lines automatically; do not add these tags yourself.');
+    if (compactBullets) instructions.push('For newly written bullet lists, put each bullet on its own line with no blank lines or extra gaps between consecutive bullet points. Do not add hard line breaks within a bullet unless required for nested content or code. The editor also removes blank lines between list items locally. In add-only mode, only newly inserted blanks are removed; never change existing text or spacing.');
     if (includeDateTags) instructions.push(`Include our special date tags in newly written Markdown: {{date:YYYY-MM-DD}}. Example: "- A new point {{date:${todayIso()}}}". Date new bullet items inline and new sections with a tag below the heading. Use today's date, not a date inferred from the source note. Do not place tags inside code or JSON. In add-only mode include tags only in your new insertion text; never rewrite existing lines to add a tag.`);
     else instructions.push('Do not add new date tags unless explicitly requested by the user. Preserve existing date tags.');
     return instructions.join('\n');

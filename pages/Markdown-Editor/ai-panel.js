@@ -7,6 +7,8 @@ import { buildAiProviderRequest } from './ai-prompts.js';
 import { annotateDiff, applyAiProposal, formatDiffCounts, formatAiCost, previewAiCost } from './ai.js';
 import { recordAiCall, renderAiUsage } from './ai-usage.js';
 import { displayNoteTitle, revealAiError } from './ui.js';
+import { addAiHistoryTurn, commitAiSession, createAiHistorySession, createAiSaveAttempt } from './ai-history.js';
+import { promptAiNoteSwitch } from './ai-note-switch.js';
 
 const TASK_COPY = {
     expand: {
@@ -37,7 +39,8 @@ let nodes = null;
  *   getDocument: Function,
  *   getToken: Function,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
- *   onSave: () => Promise<void>,
+ *   onSave: (note: { id: string, name: string, markdown: string }) => Promise<{ id: string, markdown: string }>,
+ *   onSaved: (note: { id: string, name: string, original: string, markdown: string }) => void,
  *   onGoFinder: Function,
  * }} */
 let deps = null;
@@ -62,6 +65,49 @@ let task = 'revise';
 let lastInstruction = '';
 let requestStartedAt = null;
 let requestTimer = null;
+let historySession = null;
+let saveAttempt = null;
+let changingNote = false;
+
+function sessionLocked() {
+    return running || accepting || saving || changingNote || Boolean(saveAttempt);
+}
+
+export function isAiBusy() {
+    return running || accepting || saving || changingNote;
+}
+
+/** Preserve unaccepted proposals and saves whose history still needs confirmation. */
+function unsavedAiNote() {
+    if (saveAttempt) {
+        const note = saveAttempt.record.note;
+        return { fileId: note?.id || pending?.fileId, fileName: note?.name || pending?.fileName };
+    }
+    return pending?.kind === 'edit' ? pending : lastEdit;
+}
+
+/** Call before fetching or opening a replacement file, while the original session is still intact. */
+export async function confirmAiNoteChange(file) {
+    if (isAiBusy()) return false;
+    const previous = unsavedAiNote();
+    if (!previous || (file?.id && previous.fileId === file.id)) return true;
+    changingNote = true;
+    syncAiPanel();
+    try {
+        return await promptAiNoteSwitch(nodes?.switchDialog, {
+            previousName: previous.fileName,
+            nextName: file?.name,
+            onSave: saveAiSession,
+        });
+    } finally {
+        changingNote = false;
+        syncAiPanel();
+    }
+}
+
+export function clearAiSession() {
+    if (nodes) resetAiSession();
+}
 
 function readEls() {
     return {
@@ -72,6 +118,7 @@ function readEls() {
         resetStatus: document.getElementById('ai-reset-status'),
         resetSlider: document.getElementById('ai-reset-slider'),
         resetCancel: document.getElementById('ai-reset-cancel'),
+        switchDialog: document.getElementById('ai-switch-note-dialog'),
         help: document.querySelector('.ai-help'),
         provider: document.getElementById('ai-provider'),
         compactBullets: document.getElementById('ai-compact-bullets'),
@@ -236,7 +283,24 @@ function refreshPromptPreview() {
     }, null, 2);
 }
 
+/** Let the AI pane scroll; the message field itself always fits all of its text. */
+function resizeAiInstruction() {
+    const input = nodes?.instruction;
+    if (!input?.getClientRects().length) return;
+    const pane = nodes.contentPane;
+    const scrollTop = pane?.scrollTop;
+    input.style.height = 'auto';
+    const borders = input.offsetHeight - input.clientHeight;
+    input.style.height = `${input.scrollHeight + borders}px`;
+    // A newly visible pane scrollbar can narrow the field and wrap one more line.
+    if (input.scrollHeight > input.clientHeight) input.style.height = `${input.scrollHeight + borders}px`;
+    input.scrollTop = 0;
+    // Temporarily shrinking for measurement must not jump the surrounding pane.
+    if (pane) pane.scrollTop = scrollTop;
+}
+
 function refreshCostPreview() {
+    resizeAiInstruction();
     refreshPromptPreview();
     if (!nodes?.preview || !deps) return;
     const doc = deps.getDocument();
@@ -263,6 +327,7 @@ function editAttachment() {
 
 /** Remember a Raw selection so Expand can use it after the user opens the AI tab. */
 export function captureAiSelection(text) {
+    if (sessionLocked()) return;
     const value = String(text || '').trim();
     if (!value || !nodes?.selection) return;
     nodes.selection.value = value;
@@ -271,10 +336,13 @@ export function captureAiSelection(text) {
 /**
  * @param {{ id: string, name?: string, content: string, role?: 'context' | 'add' | 'edit' }} file
  */
-export function attachAiFile(file) {
+export async function attachAiFile(file) {
     const id = String(file?.id || '');
+    if (!id || !(await confirmAiNoteChange(file))) return false;
+    // Opening the same note again must not discard its pending proposal or unfinished save.
+    if (unsavedAiNote()?.fileId === id) return true;
+    if (sessionLocked()) return false;
     const content = String(file?.content ?? '');
-    if (!id) return;
     const role = file.role === 'context' ? 'context' : file.role === 'edit' ? 'edit' : 'add';
     if (role !== 'context') {
         for (const existing of attachments) {
@@ -300,9 +368,11 @@ export function attachAiFile(file) {
     paintTask();
     syncAiPanel();
     nodes?.instruction?.focus();
+    return true;
 }
 
 function setAttachmentRole(id, role) {
+    if (sessionLocked()) return;
     const file = attachments.find((entry) => entry.id === id);
     if (!file) return;
     if (role !== 'context') {
@@ -317,6 +387,7 @@ function setAttachmentRole(id, role) {
 }
 
 function removeAttachment(id) {
+    if (sessionLocked()) return;
     attachments = attachments.filter((entry) => entry.id !== id);
     if (pending?.fileId === id) clearProposal();
     syncAiPanel();
@@ -338,7 +409,7 @@ function buildModeToggle(file) {
             btn.setAttribute('role', 'radio');
             btn.setAttribute('aria-checked', active ? 'true' : 'false');
             btn.addEventListener('click', () => {
-                if (running) return;
+                if (sessionLocked()) return;
                 if (attachments.some(entry => entry.id === file.id)) setAttachmentRole(file.id, role);
                 else attachAiFile({ ...file, role });
             });
@@ -578,35 +649,88 @@ function refreshResetStatus() {
         : doc?.fileId === lastEdit.fileId && doc.status === 'saving'
             ? 'Last AI edits: saving to Drive. Reset will not interrupt the save.'
             : 'Last AI edits: not confirmed saved to Drive. Reset keeps accepted edits in the document; save the note to keep them in Drive.';
+    if (saveAttempt) nodes.resetStatus.textContent += saveAttempt.file
+        ? ' A recovery snapshot is in AI history, but the history save is not yet confirmed. Retry Save to finish.'
+        : ' AI history has not been confirmed saved. Retry Save to keep this session before resetting.';
 }
 
-function resetAiSession() {
-    if (running || accepting) return;
+function resetAiSession(afterSave = false) {
+    if (running || accepting || ((saving || changingNote) && !afterSave)) return;
     attachments = [];
     clearProposal();
     lastEdit = null;
     lastInstruction = '';
+    historySession = null;
+    saveAttempt = null;
     requestStartedAt = null;
     if (nodes.timer) nodes.timer.hidden = true;
     nodes.thread?.replaceChildren();
     if (nodes.thread) nodes.thread.hidden = true;
     if (nodes.instruction) nodes.instruction.value = '';
     if (nodes.selection) nodes.selection.value = '';
+    if (nodes.promptDetails) nodes.promptDetails.open = false;
+    if (nodes.promptPreview) nodes.promptPreview.textContent = '';
     task = 'revise';
     paintTask();
     setStatus('AI session reset.');
     nodes.resetDialog.close();
     syncAiPanel();
+    if (nodes.contentPane) nodes.contentPane.scrollTop = 0;
+}
+
+/** Shared by the sticky Save action and the save-before-switching dialog. */
+async function saveAiSession(onStage = () => {}) {
+    if (running || accepting || saving || !historySession) return false;
+    saving = true;
+    syncAiPanel();
+    try {
+        if (!saveAttempt) {
+            const edit = pending?.kind === 'edit' ? pending : lastEdit;
+            const note = edit ? { id: edit.fileId, name: edit.fileName, original: edit.original, markdown: edit.markdown } : null;
+            saveAttempt = createAiSaveAttempt(historySession, note);
+        }
+        // Keep the destination before commitAiSession clears the AI session on success.
+        const savedNote = saveAttempt.record.note;
+        await commitAiSession(saveAttempt, {
+            async saveNote(note) {
+                if (pending?.kind === 'edit' && !(await acceptProposal())) {
+                    throw new Error('The proposal could not be applied. Your history snapshot is safe; resolve the note change or reset this session.');
+                }
+                return deps.onSave(note);
+            },
+            reset: () => resetAiSession(true),
+            onStage: message => {
+                if (nodes.timer) { nodes.timer.hidden = false; nodes.timer.textContent = message; }
+                onStage(message);
+            },
+        });
+        if (nodes.timer) {
+            nodes.timer.hidden = false;
+            nodes.timer.textContent = 'Saved to AI history · Session reset';
+        }
+        setStatus('Saved and verified. View this session in Settings → AI → AI history.', 'ok');
+        return { note: savedNote };
+    } catch (err) {
+        const saved = saveAttempt?.receipt ? 'The note is saved, but AI history still needs confirmation. ' : '';
+        const message = `${saved}${err?.message || 'Could not save the note.'} The session has not been reset.`;
+        setStatus(`${message} Retry Save, or use Reset to leave this session.`, 'error');
+        if (nodes.timer) nodes.timer.textContent = 'Save incomplete · Session kept';
+        throw new Error(message);
+    } finally {
+        saving = false;
+        syncAiPanel();
+    }
 }
 
 export function syncAiPanel() {
     if (!nodes || !deps) return;
+    const busySession = running || accepting || saving;
     refreshResetStatus();
     if (nodes.copyMessage) {
         nodes.copyMessage.hidden = !lastInstruction;
-        nodes.copyMessage.disabled = running;
+        nodes.copyMessage.disabled = sessionLocked();
     }
-    if (nodes.reset) nodes.reset.disabled = running || accepting || saving;
+    if (nodes.reset) nodes.reset.disabled = isAiBusy();
     const doc = deps.getDocument();
     const open = Boolean(doc?.fileId);
     const ready = attachments.length > 0 || open;
@@ -635,11 +759,11 @@ export function syncAiPanel() {
     if (pending && editAttachment() && pending.fileId !== editAttachment().id) clearProposal();
     const target = editAttachment();
     const blocked =
-        running || accepting || saving ||
+        sessionLocked() ||
         (target &&
             doc?.fileId === target.id &&
             (doc.status === 'saving' || doc.status === 'conflict'));
-    const hasResponse = Boolean(pending || lastEdit);
+    const hasResponse = Boolean(pending || lastEdit || saveAttempt || historySession?.turns.some(turn => turn.response));
     nodes.run?.closest('.ai-send-dock')?.classList.toggle('has-response', hasResponse);
     if (nodes.run) {
         nodes.run.disabled = Boolean(blocked) || (!target && !attachments.length && !open);
@@ -650,28 +774,24 @@ export function syncAiPanel() {
     if (nodes.save) {
         nodes.save.hidden = !hasResponse;
         const busy = saving || doc?.status === 'saving';
-        nodes.save.disabled = running || accepting || busy || doc?.status === 'conflict' ||
-            (pending?.kind !== 'edit' && (!open || !doc?.dirty));
+        nodes.save.disabled = isAiBusy() || busy || !hasResponse;
         nodes.save.textContent = busy ? 'Saving…' : 'Save';
         nodes.save.setAttribute('aria-busy', String(busy));
-        nodes.save.title = pending?.kind === 'edit'
-            ? 'Apply the proposed edits and save this note to Drive.'
-            : !open ? 'Generate an AI edit or open a note to save.'
-            : !doc?.dirty ? 'All document changes are saved.' : 'Save this note to Drive';
+        nodes.save.title = 'Save and verify the note and AI history, reset AI, then open the saved changes in Preview.';
     }
     if (nodes.instruction) {
-        nodes.instruction.disabled = running;
-        nodes.instruction.setAttribute('aria-busy', String(running));
+        nodes.instruction.disabled = sessionLocked();
+        nodes.instruction.setAttribute('aria-busy', String(busySession));
     }
-    if (nodes.selection) nodes.selection.disabled = running;
-    if (nodes.discard) nodes.discard.disabled = running || accepting || saving;
+    if (nodes.selection) nodes.selection.disabled = sessionLocked();
+    if (nodes.discard) nodes.discard.disabled = sessionLocked();
     if (nodes.contentPane) {
-        nodes.contentPane.inert = running;
-        nodes.contentPane.classList.toggle('is-processing', running);
-        nodes.contentPane.setAttribute('aria-busy', String(running));
+        nodes.contentPane.inert = busySession;
+        nodes.contentPane.classList.toggle('is-processing', busySession);
+        nodes.contentPane.setAttribute('aria-busy', String(busySession));
         for (const control of nodes.contentPane.querySelectorAll('button, select, input')) {
             if (control === nodes.reset || control === nodes.discard) continue;
-            control.disabled = running;
+            control.disabled = sessionLocked();
         }
     }
     refreshCostPreview();
@@ -682,7 +802,8 @@ export function syncAiPanel() {
  *   getDocument: () => { fileId?: string, fileName?: string, content?: string, status?: string },
  *   getToken: () => Promise<string | null>,
  *   onAcceptFile: (file: { fileId: string, fileName: string, markdown: string }) => Promise<boolean>,
- *   onSave: () => Promise<void>,
+ *   onSave: (note: { id: string, name: string, markdown: string }) => Promise<{ id: string, markdown: string }>,
+ *   onSaved: (note: { id: string, name: string, original: string, markdown: string }) => void,
  *   onGoFinder: () => void,
  * }} options
  */
@@ -694,6 +815,22 @@ export function initAiPanel(options) {
         return;
     }
     nodes.run.dataset.bound = '1';
+    if (nodes.instruction && typeof ResizeObserver !== 'undefined') {
+        let previousWidth = 0;
+        let resizeFrame = 0;
+        const observer = new ResizeObserver(([entry]) => {
+            const width = entry.contentRect.width;
+            if (width === previousWidth) return;
+            previousWidth = width;
+            // Resize outside the observer callback to avoid Safari layout-loop warnings.
+            cancelAnimationFrame(resizeFrame);
+            resizeFrame = requestAnimationFrame(resizeAiInstruction);
+        });
+        observer.observe(nodes.instruction);
+    } else {
+        window.addEventListener('resize', resizeAiInstruction);
+    }
+    document.fonts?.ready.then(resizeAiInstruction);
     nodes.promptDetails?.addEventListener('toggle', refreshPromptPreview);
     if (nodes.includeDateTags) {
         try { nodes.includeDateTags.checked = localStorage.getItem('md-editor:ai-include-date-tags') !== '0'; } catch { /* Enabled by default. */ }
@@ -710,19 +847,14 @@ export function initAiPanel(options) {
         });
     }
     nodes.save?.addEventListener('click', async () => {
-        if (nodes.save.disabled || saving) return;
-        saving = true;
-        syncAiPanel();
-        try {
-            if (pending?.kind === 'edit' && !(await acceptProposal())) return;
-            await deps.onSave();
-            refreshResetStatus();
-            setStatus('Saved to Drive.', 'ok');
-        } catch (err) {
-            setStatus(err?.message || 'Could not save the note.', 'error');
-        } finally {
-            saving = false;
-            syncAiPanel();
+        if (nodes.save.disabled) return;
+        let result;
+        try { result = await saveAiSession(); } catch { return; } // Save already reports its error.
+        // Only the main Save navigates; Save and reset in the switch dialog continues to its requested note.
+        if (result?.note) {
+            try { await deps.onSaved?.(result.note); } catch (err) {
+                setStatus(`The note and AI history were saved, but Preview could not open: ${err?.message || 'Try opening the note in Edit.'}`, 'error');
+            }
         }
     });
     if (nodes.help) nodes.help.open = false;
@@ -744,6 +876,7 @@ export function initAiPanel(options) {
 
     for (const btn of nodes.tasks) {
         btn.addEventListener('click', () => {
+            if (sessionLocked()) return;
             task = btn.dataset.aiTask || 'revise';
             clearProposal();
             setStatus('');
@@ -764,7 +897,9 @@ export function initAiPanel(options) {
         });
     });
     nodes.discard?.addEventListener('click', () => {
-        if (accepting || saving) return;
+        if (sessionLocked()) return;
+        const turn = historySession?.turns.at(-1);
+        if (turn) turn.outcome = 'discarded';
         clearProposal();
         setStatus('Proposal discarded. The note was not changed.', 'ok');
         syncAiPanel();
@@ -774,7 +909,7 @@ export function initAiPanel(options) {
         refreshCostPreview();
     };
     nodes.copyMessage?.addEventListener('click', () => {
-        if (running || !lastInstruction || !nodes.instruction) return;
+        if (sessionLocked() || !lastInstruction || !nodes.instruction) return;
         nodes.instruction.value = lastInstruction;
         refreshPreview();
         nodes.instruction.focus({ preventScroll: true });
@@ -806,7 +941,7 @@ function targetFile() {
 }
 
 async function runProposal() {
-    if (!deps || !nodes || running) return;
+    if (!deps || !nodes || sessionLocked()) return;
     const doc = deps.getDocument();
     const editing = editAttachment();
     const contexts = attachments.filter((file) => file.role === 'context');
@@ -847,6 +982,7 @@ async function runProposal() {
     const requestBody = buildCurrentAiRequest();
     running = true;
     let receivedResponse = false;
+    let historyTurn = null;
     startRequestTimer();
     setStatus('Preparing AI request…');
     syncAiPanel();
@@ -858,6 +994,8 @@ async function runProposal() {
         }
 
         lastInstruction = instruction;
+        const previousTurn = historySession?.turns.at(-1);
+        if (pending && previousTurn) previousTurn.outcome = 'superseded';
         clearProposal();
         setStatus(asking ? 'Reading the note…' : 'Editing the note…');
         syncAiPanel();
@@ -866,6 +1004,11 @@ async function runProposal() {
         refreshCostPreview();
 
         const provider = nodes.provider?.value || 'gemini';
+        historySession ||= createAiHistorySession();
+        const files = (asking ? contexts : [source, ...contexts]).map(file => ({
+            id: file.id, name: file.name, role: file.role || 'add', markdown: file.content,
+        }));
+        historyTurn = addAiHistoryTurn(historySession, requestBody, files);
         let response;
         try {
             response = await fetch('/api/markdown-gemini', {
@@ -881,6 +1024,7 @@ async function runProposal() {
         }
 
         const payload = await response.json().catch(() => ({}));
+        historyTurn.response = payload;
         if (!response.ok) {
             if (payload.usage) {
                 recordAiCall({ ...payload.usage, provider, at: Date.now(), task: sentTask, fileName: source.name });
@@ -923,6 +1067,7 @@ async function runProposal() {
                 proposal: reply,
                 markdown: '',
             };
+            historyTurn.outcome = 'reply';
             setStatus('Answered from the attached note. The file was not changed.', 'ok');
             showCost(usage);
             syncAiPanel();
@@ -931,6 +1076,7 @@ async function runProposal() {
 
         const live = targetFile();
         if (!live || live.id !== source.id || live.content !== source.content) {
+            historyTurn.outcome = 'stale';
             setStatus('That note changed. Send again.', 'error');
             showCost(usage);
             syncAiPanel();
@@ -940,12 +1086,15 @@ async function runProposal() {
         const applied = applyAiProposal({
             task: sentTask,
             addOnly,
+            compactBullets: requestBody.compactBullets,
             original: source.content,
             selection,
             proposal: payload.markdown,
             additions: payload.additions,
         });
         if (!applied.ok) {
+            historyTurn.outcome = 'invalid';
+            historyTurn.error = applied.error;
             if (nodes.instruction) nodes.instruction.value = instruction;
             setStatus(applied.error, 'error');
             showCost(usage);
@@ -954,6 +1103,8 @@ async function runProposal() {
         }
 
         const hasChanges = renderDiff(source.content, applied.markdown);
+        historyTurn.proposedMarkdown = applied.markdown;
+        historyTurn.outcome = hasChanges ? 'proposal' : 'unchanged';
         if (!hasChanges) {
             setStatus('The model returned the same text.', 'ok');
             showCost(usage);
@@ -978,9 +1129,11 @@ async function runProposal() {
         syncAiPanel();
         scrollAiReviewIntoView(nodes.resultWrap);
     } catch (err) {
+        if (historyTurn) { historyTurn.outcome = 'error'; historyTurn.error = err?.message || 'AI request failed'; }
         if (nodes.instruction && !nodes.instruction.value.trim()) nodes.instruction.value = instruction;
         throw err;
     } finally {
+        if (historyTurn) historyTurn.elapsedMs = Date.now() - requestStartedAt;
         running = false;
         finishRequestTimer(receivedResponse);
         syncAiPanel();
@@ -996,18 +1149,7 @@ async function acceptProposal() {
         syncAiPanel();
         return;
     }
-    const applied = applyAiProposal({
-        task: pending.task,
-        addOnly: pending.addOnly,
-        original: pending.original,
-        selection: pending.selection,
-        proposal: pending.proposal,
-        additions: pending.additions,
-    });
-    if (!applied.ok) {
-        setStatus(applied.error, 'error');
-        return;
-    }
+    // Use the validated text the user reviewed, including its date tags.
     const proposal = pending;
     accepting = true;
     syncAiPanel();
@@ -1016,7 +1158,7 @@ async function acceptProposal() {
         ok = await deps.onAcceptFile({
             fileId: proposal.fileId,
             fileName: proposal.fileName,
-            markdown: applied.markdown,
+            markdown: proposal.markdown,
             original: proposal.original,
         });
     } finally {
@@ -1024,9 +1166,9 @@ async function acceptProposal() {
         syncAiPanel();
     }
     if (!ok) return;
-    lastEdit = { fileId: proposal.fileId, markdown: applied.markdown, saved: false };
+    lastEdit = { fileId: proposal.fileId, fileName: proposal.fileName, original: proposal.original, markdown: proposal.markdown, saved: false };
     const chip = attachments.find((file) => file.id === proposal.fileId);
-    if (chip) chip.content = applied.markdown;
+    if (chip) chip.content = proposal.markdown;
     clearProposal();
     setStatus('Applying changes and saving to Drive…', 'ok');
     syncAiPanel();

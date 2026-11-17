@@ -136,7 +136,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20261001-ai-usage">
+    <link rel="stylesheet" href="style.css?v=20261117-ai-tags">
     <style>
         /* iOS paints a system-blue focus ring on <dialog showModal()>. Force greyscale in OLED. */
         html[data-theme="oled"] #saving-dialog,
@@ -388,12 +388,15 @@
                                     <input id="ai-compact-bullets" type="checkbox" checked>
                                     <span>Keep bullet points together (no blank lines between items)</span>
                                 </label>
+                                <p>When enabled, extra blank lines between bullet points are removed automatically before review and saving. Add only text keeps all original lines and removes only new blank lines.</p>
                                 <label class="ai-bullet-preference">
                                     <input id="ai-include-date-tags" type="checkbox" checked>
                                     <span>Include special date tags in new AI text</span>
                                 </label>
                                 <p>Open a markdown file from Finder or Pinned using Open in AI. Add only text is selected by default.</p>
                                 <p>Context answers questions without changing the note. Add only text preserves all existing lines and inserts new text. Add and subtract lines allows rewriting and removing lines. Review the proposal, then Save or Discard.</p>
+                                <p>Save verifies your note and AI history in Drive, resets AI, then opens the saved note in Preview at the first change. Find messages, responses and attached note snapshots in Settings → AI → AI history. Discard keeps your note unchanged.</p>
+                                <p>New and rewritten AI text is marked with {{ai}} in Raw and a small purple AI badge in Preview. Existing text keeps its provenance. Blank lines and formatting delimiters are not tagged.</p>
                                 <details id="ai-prompt-details" class="ai-prompt-details">
                                     <summary>Full API prompt preview</summary>
                                     <p>Next request, including the full system instructions and note content. Authentication credentials are excluded. Previewing does not call the AI.</p>
@@ -576,6 +579,17 @@
                     </div>
                     <div id="settings-panel-ai" hidden>
                         <div class="settings-prefs">
+                            <div class="ai-history-heading">
+                                <h3 class="settings-subheading">AI history</h3>
+                                <button type="button" id="ai-history-refresh" class="btn btn-ghost btn-small">Refresh</button>
+                            </div>
+                            <p class="settings-prefs-lede">Messages, AI responses and note snapshots from saved sessions. Stored privately in Drive and available across devices. History starts with your next AI Save.</p>
+                            <p id="ai-history-status" class="settings-prefs-lede" role="status" aria-live="polite"></p>
+                            <button type="button" id="ai-history-connect" class="btn btn-ghost" hidden>Connect history</button>
+                            <div id="ai-history-list" class="ai-history-list"></div>
+                            <button type="button" id="ai-history-more" class="btn btn-ghost" hidden>Load more sessions</button>
+                        </div>
+                        <div class="settings-prefs">
                             <h3 class="settings-subheading">AI usage</h3>
                             <p class="settings-prefs-lede">Estimated USD costs from token counts reported on this device. Totals include Gemini and OpenAI. The week starts on Monday.</p>
                             <div class="ai-usage-totals">
@@ -600,7 +614,7 @@
                             </div>
                             <p id="ai-usage-empty" class="settings-prefs-lede">No AI calls yet.</p>
                             <ul id="ai-usage-list" class="ai-usage-list"></ul>
-                            <button type="button" id="ai-usage-clear" class="btn btn-ghost" hidden>Clear history</button>
+                            <button type="button" id="ai-usage-clear" class="btn btn-ghost" hidden>Clear cost history on this device</button>
                         </div>
                     </div>
                 </div>
@@ -721,6 +735,18 @@
             <input id="ai-reset-slider" class="ai-reset-slider" type="range" min="0" max="100" value="0" aria-label="Slide to reset AI session">
             <p class="dialog-hint">Release at the end to confirm. With a keyboard, press End.</p>
             <div class="dialog-actions"><button type="button" id="ai-reset-cancel" class="btn btn-ghost">Cancel</button></div>
+        </div>
+    </dialog>
+
+    <dialog id="ai-switch-note-dialog" class="dialog" aria-labelledby="ai-switch-note-title" aria-describedby="ai-switch-note-message">
+        <div class="dialog-body">
+            <h2 id="ai-switch-note-title">Save previous AI edits?</h2>
+            <p id="ai-switch-note-message" data-ai-switch-message></p>
+            <p data-ai-switch-status class="ai-status" role="status" aria-live="polite" hidden></p>
+            <div class="dialog-actions dialog-actions--pair">
+                <button type="button" data-ai-switch-cancel class="btn btn-ghost" autofocus>Cancel</button>
+                <button type="button" data-ai-switch-save class="btn btn-primary">Save and reset</button>
+            </div>
         </div>
     </dialog>
 
@@ -1135,7 +1161,7 @@
         </form>
     </dialog>
 
-    <script type="module" src="app.js?v=140"></script>
+    <script type="module" src="app.js?v=146"></script>
 </body>
 
 </html>

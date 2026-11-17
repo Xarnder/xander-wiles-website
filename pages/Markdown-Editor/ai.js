@@ -5,6 +5,8 @@
  */
 
 import { insertAdditions } from './ai-insertions.js';
+import { stampAiAuthorship, stripAiTags } from './ai-tags.js';
+import { compactAiBulletSpacing } from './ai-spacing.js';
 import { parseDocument } from './lists.js';
 
 export const AI_TASKS = Object.freeze(['expand', 'header', 'summarize', 'revise']);
@@ -164,6 +166,16 @@ export function diffLines(before, after) {
         j += 1;
     }
     return ops;
+}
+
+/** Offset of the first changed line in the new text; deletions point at the surviving neighbour. */
+export function firstAiChangeOffset(before, after) {
+    const oldText = String(before ?? '').replace(/\r\n?/g, '\n');
+    const newText = String(after ?? '').replace(/\r\n?/g, '\n');
+    if (oldText === newText) return null;
+    let offset = 0;
+    while (offset < oldText.length && offset < newText.length && oldText[offset] === newText[offset]) offset += 1;
+    return offset === 0 ? 0 : newText.lastIndexOf('\n', offset - 1) + 1;
 }
 
 /**
@@ -393,7 +405,7 @@ function splitOpeningHeader(source) {
 function insertSummary(original, summarySection) {
     const section = summarySection.trim();
     const lines = String(original ?? '').replace(/^\uFEFF/, '').split('\n');
-    const start = lines.findIndex((line) => /^## Summary\s*$/.test(line.trim()));
+    const start = lines.findIndex((line) => /^## Summary\s*$/.test(stripAiTags(line).trim()));
     if (start >= 0) {
         let end = start + 1;
         while (end < lines.length) {
@@ -427,10 +439,12 @@ export function stampAiDateTags(markdown, now = new Date()) {
 }
 
 export function applyAiProposal(input) {
+    const compactBullets = input?.compactBullets !== false;
     if (input?.addOnly) {
         try {
             const original = String(input.original || '');
-            const markdown = insertAdditions(original, input.additions, stampAiDateTags);
+            const markdown = insertAdditions(original, input.additions,
+                text => stampAiDateTags(stampAiAuthorship(text)), { compactBullets });
             const error = fenceSafetyError(original, markdown);
             return error ? { ok: false, error } : { ok: true, markdown };
         } catch (err) {
@@ -439,7 +453,8 @@ export function applyAiProposal(input) {
     }
     const result = applyAiProposalContent(input);
     if (!result.ok) return result;
-    return { ...result, markdown: stampAiDateTags(result.markdown) };
+    const markdown = compactBullets ? compactAiBulletSpacing(result.markdown) : result.markdown;
+    return { ...result, markdown: stampAiDateTags(stampAiAuthorship(markdown, input.original)) };
 }
 
 function applyAiProposalContent(input) {

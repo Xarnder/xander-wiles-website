@@ -350,9 +350,10 @@ export async function getFileMetadata(fileId) {
     return response.json();
 }
 
-export async function getFileContent(fileId) {
+export async function getFileContent(fileId, options = {}) {
     const response = await driveFetch(
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+        options
     );
     return response.text();
 }

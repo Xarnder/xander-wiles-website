@@ -15,7 +15,7 @@ test('an AI error opens collapsed help and scrolls the message into view', () =>
 test('a proposal can populate a blank note', () => {
     const result = applyAiProposal({ task: 'revise', original: '', proposal: '# New note\n\nHello.' });
     assert.equal(result.ok, true);
-    assert.equal(result.markdown, '# New note\n\nHello.\n');
+    assert.equal(result.markdown, '# New note {{ai}}\n\nHello. {{ai}}\n');
 });
 
 import { assertAiSaveConfirmed } from './editor.js';

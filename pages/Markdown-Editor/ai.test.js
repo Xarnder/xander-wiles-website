@@ -91,7 +91,7 @@ test('summarize extracts section if model returned whole document', () => {
         proposal: fullProposal,
     });
     assert.equal(result.ok, true);
-    assert.match(result.markdown, /## Summary\s*\* Key decision/);
+    assert.match(result.markdown, /## Summary \{\{ai\}\}\s*\* Key decision/);
     assert.equal(result.markdown.match(/## Summary/g)?.length, 1);
 });
 
@@ -105,7 +105,7 @@ test('expand handles full-note proposal without duplicating prefix or suffix', (
         proposal: fullProposal,
     });
     assert.equal(result.ok, true);
-    assert.equal(result.markdown, fullProposal);
+    assert.equal(result.markdown, fullProposal.replace('Expanded target passage with extra detail.', 'Expanded target passage with extra detail. {{ai}}'));
     assert.equal(result.markdown.match(/First paragraph\./g)?.length, 1);
     assert.equal(result.markdown.match(/Last paragraph\./g)?.length, 1);
 });
