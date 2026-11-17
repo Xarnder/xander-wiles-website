@@ -1,7 +1,7 @@
 # Forest Drift — Find a Biome: Brief
 
 **Feature cycle:** 2026-11-16
-**Status:** **Approved (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Phase 0 is built: [record](../phase-0/implementation.md).
+**Status:** **Approved (2026-11-16).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md). Complete (2026-11-17): [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md).
 **Related:** [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`02-technical-plan.md`](02-technical-plan.md) · builds on the [Biome Minimap](../../Biome-Minimap/feature-plan/02-technical-plan.md) and [Fast Travel](../../Fast-Travel/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.

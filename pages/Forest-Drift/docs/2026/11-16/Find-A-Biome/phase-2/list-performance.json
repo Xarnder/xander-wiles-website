@@ -1,0 +1,96 @@
+{
+	"cpu1x": [
+		{
+			"idle": {
+				"frames": 89,
+				"medianMs": 16.7,
+				"p95Ms": 16.8,
+				"longestMs": 16.8
+			},
+			"scanning": {
+				"frames": 47,
+				"medianMs": 16.7,
+				"p95Ms": 16.7,
+				"longestMs": 16.7
+			},
+			"listMs": 794
+		},
+		{
+			"idle": {
+				"frames": 90,
+				"medianMs": 16.7,
+				"p95Ms": 16.7,
+				"longestMs": 16.8
+			},
+			"scanning": {
+				"frames": 46,
+				"medianMs": 16.7,
+				"p95Ms": 16.7,
+				"longestMs": 16.7
+			},
+			"listMs": 784
+		},
+		{
+			"idle": {
+				"frames": 90,
+				"medianMs": 16.7,
+				"p95Ms": 16.8,
+				"longestMs": 16.8
+			},
+			"scanning": {
+				"frames": 47,
+				"medianMs": 16.7,
+				"p95Ms": 16.7,
+				"longestMs": 16.8
+			},
+			"listMs": 796
+		}
+	],
+	"cpu4x": [
+		{
+			"idle": {
+				"frames": 86,
+				"medianMs": 16.7,
+				"p95Ms": 33.3,
+				"longestMs": 33.4
+			},
+			"scanning": {
+				"frames": 56,
+				"medianMs": 16.7,
+				"p95Ms": 16.7,
+				"longestMs": 16.8
+			},
+			"listMs": 919
+		},
+		{
+			"idle": {
+				"frames": 75,
+				"medianMs": 16.7,
+				"p95Ms": 33.3,
+				"longestMs": 33.4
+			},
+			"scanning": {
+				"frames": 28,
+				"medianMs": 16.7,
+				"p95Ms": 16.8,
+				"longestMs": 33.3
+			},
+			"listMs": 461
+		},
+		{
+			"idle": {
+				"frames": 88,
+				"medianMs": 16.7,
+				"p95Ms": 33.3,
+				"longestMs": 33.4
+			},
+			"scanning": {
+				"frames": 28,
+				"medianMs": 16.7,
+				"p95Ms": 16.8,
+				"longestMs": 16.8
+			},
+			"listMs": 437
+		}
+	]
+}

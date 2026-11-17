@@ -1,7 +1,7 @@
 # Forest Drift — Find a Biome: Technical Plan
 
 **Feature cycle:** 2026-11-16
-**Status:** **Revision 2 (2026-11-16): approved; Phases 0–1 built** ([Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md)). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
+**Status:** **Revision 2: complete (2026-11-17).** All phases built: [Phase 0](../phase-0/implementation.md), [Phase 1](../phase-1/implementation.md), [Phase 2](../phase-2/implementation.md). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
 **Related:** [`00-brief.md`](00-brief.md) · [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [Biome Minimap plan](../../Biome-Minimap/feature-plan/02-technical-plan.md) · [Fast Travel plan](../../Fast-Travel/feature-plan/02-technical-plan.md)
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -161,12 +161,12 @@ Patches are at most a few thousand cells, so this takes a few milliseconds in th
 
 ## 11. Definition of done
 
-- [ ] The Biomes list on the full map with colours, groups, distances, "Here" and "None within 16 km".
-- [ ] Picking pins a spot well inside the nearest patch, ready for Travel here; Next nearest up to five.
-- [ ] `B`, `N`, arrows, `Enter`, `Esc` order; screen-reader names and announcements; touch.
-- [ ] Budgets in §8 met and measured.
-- [ ] Tests in §9 pass in three browsers.
-- [ ] Docs (`docs/biomes.md`, the Controls guide) and phase records with screenshots.
+- [x] The Biomes list on the full map with colours, groups, distances, "Here" and "None within 16 km".
+- [x] Picking pins a spot well inside the nearest patch, ready for Travel here; Next nearest up to five.
+- [x] `B`, `N`, arrows, `Enter`, `Esc` order; screen-reader names and announcements; touch.
+- [x] Budgets in §8 met and measured at full speed (a slower machine's worker couldn't be measured: see Phase 2).
+- [x] Tests in §9 pass in three browsers.
+- [x] Docs (`docs/biomes.md`, the multiplayer guide, the Controls guide) and phase records with screenshots.
 
 ## 12. Assumptions (to confirm in Phase 0)
 

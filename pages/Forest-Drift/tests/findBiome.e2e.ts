@@ -228,19 +228,56 @@ test('a biome with none in range says so', async ({ page }) => {
 	await page.goto('/');
 	await createAndEnterWorld(page, { name: 'Find none', seed: SEED });
 	await expect(page.getByTestId('biome-minimap')).toBeVisible({ timeout: 15_000 });
+	// With default settings every biome is within 16 km of a spawn (checked in 14 worlds). Rare
+	// biome share 0 (a world setting) turns the six variants off, so they're nowhere.
+	await sceneValue(page, (s) => {
+		s.biomeSettings.variantRarity = 0;
+		s.regenerateBiomes();
+	});
 	await openMap(page);
 	await page.keyboard.press('b');
 	const list = await rows(page);
-	const none = list.find((r) => r.text === 'None within 16 km');
+	const none = list.filter((r) => r.text === 'None within 16 km').map((r) => r.id);
+	expect(none.sort()).toEqual(
+		[
+			'bambooJungle',
+			'cherryGrove',
+			'flowerForest',
+			'oldGrowthBirch',
+			'silverwood',
+			'sunflowerPlains'
+		].sort()
+	);
 	const here = list.find((r) => r.text === 'Here')!;
-	if (none) {
-		await expect(page.getByTestId(`biome-row-${none.id}`)).toHaveClass(/none/);
-		await page.getByTestId(`biome-row-${none.id}`).click();
-		await expect(page.getByTestId('biome-full-map-find-message')).toHaveText(
-			`No ${none.name} within 16 km`
-		);
-		await expect(page.getByTestId('biome-full-map-found')).toBeHidden();
-	}
+	// Greyed out, last in their groups, still focusable and pickable.
+	const cherry = page.getByTestId('biome-row-cherryGrove');
+	await expect(cherry).toHaveClass(/none/);
+	await expect(cherry).toHaveAttribute('aria-label', 'Cherry Grove, None within 16 km');
+	const temperate = list.filter((r) =>
+		[
+			'forest',
+			'flowerForest',
+			'birchForest',
+			'oldGrowthBirch',
+			'darkForest',
+			'silverwood',
+			'sunlitWood',
+			'meadow',
+			'cherryGrove',
+			'plains',
+			'sunflowerPlains'
+		].includes(r.id)
+	);
+	expect(temperate.slice(-4).every((r) => r.text === 'None within 16 km')).toBe(true);
+	await cherry.click();
+	await expect(page.getByTestId('biome-full-map-find-message')).toHaveText(
+		'No Cherry Grove within 16 km'
+	);
+	await expect(page.getByTestId('biome-full-map-found')).toBeHidden();
+	await expect(page.getByTestId('biome-full-map').getByRole('status')).toHaveText(
+		'No Cherry Grove within 16 km'
+	);
+	if (shots) await page.screenshot({ path: `${shots}/none-in-range.jpg`, quality: 85 });
 	// Picking the biome you're in pins another patch of it, not the one underfoot (Q10).
 	await page.getByTestId(`biome-row-${here.id}`).click();
 	const found = page.getByTestId('biome-full-map-found');

@@ -341,3 +341,44 @@ test('a ride arrives with its rider', async ({ browser }) => {
 		)
 		.toBe(true);
 });
+
+test('Find a biome online: both players get the same answers, and the world carries on', async ({
+	browser
+}) => {
+	test.setTimeout(420_000);
+	const { owner, visitor } = await ownerAndVisitor(browser);
+	for (const page of [owner, visitor]) {
+		await page.keyboard.press('Backquote');
+		await expect(page.getByTestId('biome-full-map')).toBeVisible();
+	}
+	// The same point scanned in both browsers: the same distances and the same pins.
+	const answers = await Promise.all(
+		[owner, visitor].map((page) =>
+			sceneValue(page, async (s) => {
+				const client = s.biomeMap.tileClient;
+				const scan = await client.scan(1500, -2500);
+				const desert = await client.find(20);
+				return { nearest: scan.nearest, here: scan.here, desert };
+			})
+		)
+	);
+	expect(answers[0].nearest).toHaveLength(26);
+	expect(answers[1]).toEqual(answers[0]);
+	// The visitor uses the list while the owner's world keeps going.
+	await visitor.keyboard.press('b');
+	await expect(visitor.getByTestId('biome-list-status')).toHaveText('Nearest within 16 km', {
+		timeout: 30_000
+	});
+	const row = visitor.locator(
+		'[data-testid="biome-list"] button[data-biome]:not(.here):not(.none)'
+	);
+	const name = (await row.first().locator('.name').textContent())!;
+	await row.first().click();
+	await expect(visitor.getByTestId('biome-full-map-found')).toHaveText(
+		new RegExp(`^Nearest ${name} · 1 of \\d$`)
+	);
+	await expect(visitor.getByTestId('biome-full-map-travel')).toHaveText('Travel here');
+	// Nothing reaches the owner: their map shows no pin.
+	await expect(owner.getByTestId('biome-full-map-found')).toBeHidden();
+	await expect(owner.getByTestId('biome-full-map-travel')).toBeHidden();
+});
