@@ -5,6 +5,7 @@ import { RoofManager } from '../RoofManager';
 import { SlabManager } from '../SlabManager';
 import { StairManager } from '../StairManager';
 import { WorldSurfaceSampler } from '../WorldSurfaceSampler';
+import { basementSlabPlans } from '../basementMath';
 
 const SPACING = 2;
 const BUILDING_GRID_SIZE = 0.5;
@@ -302,5 +303,139 @@ describe('WorldSurfaceSampler.getSupportingSurfaceY — stair step-up tolerance'
 		// beside the pad (local X -2m → world X -2).
 		const surfaceY = sampler.getSupportingSurfaceY(-1.9, 1.5, 0);
 		expect(surfaceY).toBeCloseTo(0.25);
+	});
+});
+
+describe('WorldSurfaceSampler — basements', () => {
+	// A 20 × 20 m foundation, top at Y = 0, two 3 m storeys below: lowest floor at −6, a floor at −3.
+	// The natural ground under it is 0.5 m below the top (it's never above the top).
+	const GROUND = -0.5;
+
+	function basementSetup(withFloors = true) {
+		const foundationManager = new FoundationManager(() => SPACING);
+		const slabManager = new SlabManager({
+			getFoundation: (id) => foundationManager.getFoundation(id),
+			getVertexSpacing: () => SPACING,
+			getBuildingGridSize: () => BUILDING_GRID_SIZE
+		});
+		const stairManager = new StairManager({
+			getFoundation: (id) => foundationManager.getFoundation(id),
+			getVertexSpacing: () => SPACING
+		});
+		const roofManager = new RoofManager({
+			getFoundation: (id) => foundationManager.getFoundation(id),
+			getVertexSpacing: () => SPACING,
+			getBuildingGridSize: () => BUILDING_GRID_SIZE
+		});
+		const sampler = new WorldSurfaceSampler(
+			{ sample: () => GROUND } as never,
+			foundationManager,
+			slabManager,
+			stairManager,
+			roofManager,
+			() => MAX_STEP_HEIGHT
+		);
+		const foundation = makeFoundation({ basement: { storeys: 2, storeyHeight: 3 } });
+		foundationManager.addFoundation(foundation);
+		if (withFloors)
+			basementSlabPlans(foundation, SPACING, BUILDING_GRID_SIZE, 0.2).forEach((plan, i) =>
+				slabManager.addSlab({
+					id: `basement-slab-${i}`,
+					foundationId: foundation.id,
+					...plan,
+					openings:
+						plan.role === 'deck'
+							? // A stair hole in the deck at x 8 … 10, z 8 … 12.
+								[
+									{
+										id: 'hole',
+										type: 'stairs',
+										minGridX: 16,
+										maxGridX: 20,
+										minGridZ: 16,
+										maxGridZ: 24
+									}
+								]
+							: []
+				})
+			);
+		return { foundationManager, sampler };
+	}
+
+	it('stands a player on the deck from above, exactly like a solid foundation top', () => {
+		const { sampler } = basementSetup();
+		expect(sampler.getSupportingSurfaceY(5, 5, 0)).toBe(0);
+		expect(sampler.getSupportingSurfaceY(5, 5, Infinity)).toBe(0);
+	});
+
+	it('stands a player in the basement on its floors, never on the ground or the deck', () => {
+		const { sampler } = basementSetup();
+		// On the floor between storeys (level −1).
+		expect(sampler.getSupportingSurfaceY(5, 5, -3)).toBe(-3);
+		// On the lowest floor (level −2).
+		expect(sampler.getSupportingSurfaceY(5, 5, -6)).toBe(-6);
+	});
+
+	it('drops a player through the stair hole in the deck', () => {
+		const { sampler } = basementSetup();
+		expect(sampler.getSupportingSurfaceY(9, 10, 0)).toBe(-3);
+	});
+
+	it('falls to the lowest floor when a basement floor is removed', () => {
+		const { sampler } = basementSetup(false);
+		expect(sampler.getSupportingSurfaceY(5, 5, -3)).toBe(-6);
+	});
+
+	it('keeps the stone rim as solid foundation top, so walking up from lower ground steps onto it', () => {
+		const { sampler } = basementSetup();
+		// On the ring of walls (0.3 m thick) from below: snapped up, as onto any foundation.
+		expect(sampler.getSupportingSurfaceY(0.1, 5, GROUND)).toBe(0);
+		// Then on into the interior at deck height.
+		expect(sampler.getSupportingSurfaceY(1, 5, 0)).toBe(0);
+	});
+
+	it('gives the camera the basement floor as its ground inside, terrain elsewhere', () => {
+		const { sampler } = basementSetup();
+		expect(sampler.getGroundY(5, 5)).toBe(-6);
+		expect(sampler.getGroundY(0.1, 5)).toBe(GROUND);
+		expect(sampler.getGroundY(-3, 5)).toBe(GROUND);
+	});
+
+	it('walls a player into the basement, but never one on the deck or outside', () => {
+		const { foundationManager } = basementSetup();
+		expect(foundationManager.getBasementContainmentRects(5, 5, -6)).toHaveLength(4);
+		expect(foundationManager.getBasementContainmentRects(5, 5, -3)).toHaveLength(4);
+		expect(foundationManager.getBasementContainmentRects(5, 5, 0)).toEqual([]);
+		expect(foundationManager.getBasementContainmentRects(5, 5, -0.27)).toEqual([]);
+		expect(foundationManager.getBasementContainmentRects(-1, 5, -6)).toEqual([]);
+		expect(foundationManager.getBasementContainmentRects(0.1, 5, -6)).toEqual([]);
+	});
+
+	it('leaves a solid foundation exactly as before', () => {
+		const { foundationManager, sampler } = setup();
+		foundationManager.addFoundation(makeFoundation({ topY: 2 }));
+		expect(sampler.getSupportingSurfaceY(5, 5, -10)).toBe(2);
+		expect(sampler.getGroundY(5, 5)).toBe(0);
+		expect(foundationManager.getBasementContainmentRects(5, 5, -10)).toEqual([]);
+		expect(foundationManager.getBasementFloorAt(5, 5)).toBeNull();
+	});
+
+	it('reports basement footprints as terrain holes, before the terrain edit, only when they change', () => {
+		const foundationManager = new FoundationManager(() => SPACING);
+		const events: string[] = [];
+		foundationManager.setTerrainHolesHandler((rects) => events.push(`holes:${rects.length}`));
+		foundationManager.setTerrainEditHandler(() => events.push('edit'));
+		foundationManager.addFoundation(makeFoundation({ id: 'solid' }));
+		foundationManager.addFoundation(
+			makeFoundation({
+				id: 'cellar',
+				minGridX: 20,
+				maxGridX: 25,
+				basement: { storeys: 1, storeyHeight: 3 }
+			})
+		);
+		foundationManager.removeFoundation('cellar');
+		expect(events).toEqual(['holes:0', 'edit', 'holes:1', 'edit', 'holes:0', 'edit']);
+		expect(foundationManager.getBasementHoleRects()).toEqual([]);
 	});
 });

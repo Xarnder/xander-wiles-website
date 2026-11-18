@@ -22,8 +22,10 @@ const SUPPORT_EPSILON = 0.05;
  *
  * Terrain and foundation tops are always included regardless of `referenceY` — both are
  * unconditional "ground level" surfaces, never something a player can legitimately be standing
- * *underneath* the way a room sits under a roof or upper floor (there are no basements yet; a
- * foundation is a raised platform, not a ceiling). A foundation's top is very often several metres
+ * *underneath* the way a room sits under a roof or upper floor. The one exception is a basement's
+ * interior (basementMath.ts): there the terrain is cut away, the basement's lowest floor is the
+ * unconditional ground instead, and the foundation top is a deck slab like any upper floor; the
+ * ring of stone walls round it stays solid foundation top. A foundation's top is very often several metres
  * above the terrain right at its edge (it levels out to the site's *highest* point, so on sloped
  * ground the edge can be a real step up) — restricting it the same way slabs are restricted meant
  * walking up to a foundation from lower ground could fail to register at all, leaving the player
@@ -54,11 +56,12 @@ export class WorldSurfaceSampler {
 	 */
 	getSupportingSurfaceY(worldX: number, worldZ: number, referenceY: number): number {
 		const limit = referenceY + SUPPORT_EPSILON;
-		let best = this.terrainHeightSampler.sample(worldX, worldZ);
+		let best = this.getGroundY(worldX, worldZ);
 
 		// Unconditional, like terrain — see the class doc comment on why foundations don't need the
-		// "not above referenceY" guard slabs do.
-		const foundationTopY = this.foundationManager.getTopYAt(worldX, worldZ);
+		// "not above referenceY" guard slabs do. A basement's interior has no solid top: its deck is
+		// a slab (below), so a player can stand on it or under it.
+		const foundationTopY = this.foundationManager.getSolidTopYAt(worldX, worldZ);
 		if (foundationTopY !== null && foundationTopY > best) {
 			best = foundationTopY;
 		}
@@ -77,6 +80,16 @@ export class WorldSurfaceSampler {
 		}
 
 		return best;
+	}
+
+	/**
+	 * The ground under any building: the terrain, except in a basement's interior, where the terrain
+	 * is cut away and the basement's lowest floor takes its place. Unconditional, like terrain. Also
+	 * what the camera keeps itself above.
+	 */
+	getGroundY(worldX: number, worldZ: number): number {
+		const basementFloor = this.foundationManager.getBasementFloorAt(worldX, worldZ);
+		return basementFloor ?? this.terrainHeightSampler.sample(worldX, worldZ);
 	}
 
 	/**

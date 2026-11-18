@@ -1,5 +1,6 @@
 import type { BuildingGridPoint } from './FoundationLocalMath';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
+import type { BasementSlabRole } from './basementTypes';
 
 export type SlabType = 'ceiling' | 'floor' | 'flat-roof';
 
@@ -70,6 +71,12 @@ export interface SlabDefinition {
 	 * either way, per the README's "Paint Tool" section — there's no separate top/bottom material yet.
 	 */
 	material?: BuildingMaterialDefinition;
+	/**
+	 * Set only on slabs a basement creates (basementTypes.ts): `'deck'` is the floor over it (created
+	 * and removed with the basement, never removed alone); `'basement-floor'` is a floor between its
+	 * storeys, an ordinary slab otherwise. Missing on every slab a player draws.
+	 */
+	role?: BasementSlabRole;
 }
 
 /** `slab.localY - slab.thickness`, i.e. the slab's underside — see SlabDefinition's doc comment. */

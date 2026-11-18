@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { holedChunkIndices, type TerrainHoles } from './terrainHoles';
 import {
 	createBiomeWeights,
 	createHeightSample,
@@ -152,6 +153,18 @@ export class TerrainChunk {
 	private readonly grounds: Float32Array;
 	private readonly shoreTint = { cover: 0, stone: 0, wet: 0 };
 
+	/**
+	 * Basement holes (terrainHoles.ts), shared with the TerrainManager that owns this chunk. Cells
+	 * inside a hole are left out of the index buffer after every populate.
+	 */
+	holes: TerrainHoles | null = null;
+	private readonly fullIndex: THREE.BufferAttribute;
+	private holedIndex: THREE.BufferAttribute | null = null;
+	/** The holes revision and chunk this chunk's index buffer was cut for (`-1`: not cut). */
+	private holesRevision = -1;
+	private holesChunkKey = '';
+	private cutCells = 0;
+
 	private coordSprite: THREE.Sprite | null = null;
 	private coordCanvas: HTMLCanvasElement | null = null;
 	private coordTexture: THREE.CanvasTexture | null = null;
@@ -175,7 +188,8 @@ export class TerrainChunk {
 		this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.uvs, 2));
 		this.geometry.setAttribute('aShore', new THREE.BufferAttribute(this.shores, 3));
 		this.geometry.setAttribute('aGround', new THREE.BufferAttribute(this.grounds, 4));
-		this.geometry.setIndex(new THREE.BufferAttribute(getSharedIndices(resolution), 1));
+		this.fullIndex = new THREE.BufferAttribute(getSharedIndices(resolution), 1);
+		this.geometry.setIndex(this.fullIndex);
 
 		this.mesh = new THREE.Mesh(this.geometry, terrainMaterial);
 		// Terrain receives shadows from trees/buildings (grounding contact) but deliberately never
@@ -359,7 +373,49 @@ export class TerrainChunk {
 		this.geometry.computeBoundingBox();
 		this.geometry.computeBoundingSphere();
 
+		this.applyHoles(chunkSize, true);
 		this.updateBorderOutline(chunkSize);
+	}
+
+	/** Terrain cells this chunk currently leaves out for basements. */
+	get holedCellCount(): number {
+		return this.cutCells;
+	}
+
+	/**
+	 * Cuts (or restores) the cells under basements from the index buffer. Cheap when nothing changed:
+	 * the holes' revision and the chunk position are remembered. `force` re-cuts after a populate.
+	 */
+	applyHoles(chunkSize: number, force = false): void {
+		const key = `${this.chunkX},${this.chunkZ},${chunkSize}`;
+		const revision = this.holes?.revision ?? 0;
+		if (!force && revision === this.holesRevision && key === this.holesChunkKey) return;
+		this.holesRevision = revision;
+		this.holesChunkKey = key;
+		const originX = this.chunkX * chunkSize;
+		const originZ = this.chunkZ * chunkSize;
+		const overlapping =
+			this.holes?.overlapping(originX, originX + chunkSize, originZ, originZ + chunkSize) ?? [];
+		const cut = holedChunkIndices(
+			this.resolution,
+			originX,
+			originZ,
+			chunkSize / this.resolution,
+			overlapping,
+			this.holedIndex?.array as Uint32Array | undefined
+		);
+		if (!cut) {
+			this.cutCells = 0;
+			if (this.geometry.index !== this.fullIndex) this.geometry.setIndex(this.fullIndex);
+			this.geometry.setDrawRange(0, Infinity);
+			return;
+		}
+		this.cutCells = this.resolution * this.resolution - cut.count / 6;
+		if (!this.holedIndex || this.holedIndex.array !== cut.indices)
+			this.holedIndex = new THREE.BufferAttribute(cut.indices, 1);
+		this.holedIndex.needsUpdate = true;
+		if (this.geometry.index !== this.holedIndex) this.geometry.setIndex(this.holedIndex);
+		this.geometry.setDrawRange(0, cut.count);
 	}
 
 	private updateBorderOutline(chunkSize: number): void {

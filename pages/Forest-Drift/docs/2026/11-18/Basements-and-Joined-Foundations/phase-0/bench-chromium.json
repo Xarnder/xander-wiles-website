@@ -1,0 +1,69 @@
+{
+  "engine": "chromium",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.4 Safari/537.36",
+  "runs": [
+    {
+      "terrain": {
+        "resolution": 48,
+        "populateMs": 8.4,
+        "populateHoledMs": 8.340000000596046,
+        "cutMs": 0.005,
+        "cutCells": 400
+      },
+      "walking": {
+        "solidUs": 0.8449999995529651,
+        "basementUs": 0.9100000001490116,
+        "extraUs": 0.06500000059604649
+      },
+      "joins": {
+        "buildingsMs": 0.09999999403953552,
+        "buildings": 25,
+        "outlineUs": 8.666666666666666,
+        "polygonInsideUs": 2.5333333214124045,
+        "segmentInsideUs": 0.399999996026357
+      }
+    },
+    {
+      "terrain": {
+        "resolution": 48,
+        "populateMs": 8.42000000178814,
+        "populateHoledMs": 8.380000001192093,
+        "cutMs": 0.005,
+        "cutCells": 400
+      },
+      "walking": {
+        "solidUs": 0.8399999998509884,
+        "basementUs": 0.9049999997019768,
+        "extraUs": 0.06499999985098837
+      },
+      "joins": {
+        "buildingsMs": 0,
+        "buildings": 25,
+        "outlineUs": 9.466666678587595,
+        "polygonInsideUs": 2.399999996026357,
+        "segmentInsideUs": 0.26666667064030963
+      }
+    },
+    {
+      "terrain": {
+        "resolution": 48,
+        "populateMs": 8.32000000178814,
+        "populateHoledMs": 8.359999999403954,
+        "cutMs": 0.005,
+        "cutCells": 400
+      },
+      "walking": {
+        "solidUs": 0.8549999997019768,
+        "basementUs": 0.9,
+        "extraUs": 0.0450000002980232
+      },
+      "joins": {
+        "buildingsMs": 0,
+        "buildings": 25,
+        "outlineUs": 9.73333332935969,
+        "polygonInsideUs": 2.26666667064031,
+        "segmentInsideUs": 0.399999996026357
+      }
+    }
+  ]
+}

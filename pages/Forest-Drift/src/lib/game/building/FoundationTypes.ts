@@ -7,6 +7,7 @@ import type { WindowShutterMode } from './windowShutterMath';
  */
 
 import { createDefaultBarrierDraftSettings, type BarrierDraftSettings } from './BarrierTypes';
+import type { BasementDefinition } from './basementTypes';
 import type { BeamOrientation } from './beamMath';
 import { createDefaultSkirtingDraftSettings, type SkirtingDraftSettings } from './skirtingRunMath';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
@@ -53,6 +54,13 @@ export interface FoundationDefinition {
 	topY: number;
 	bottomY: number;
 	material?: BuildingMaterialDefinition;
+	/** Storeys below `topY` (see basementTypes.ts). Missing means a solid foundation, as before. */
+	basement?: BasementDefinition;
+	/**
+	 * Foundations sharing a joinId that touch along an edge at the same `topY` form one building
+	 * (see foundationJoinMath.ts). The value is the anchor foundation's id. Missing = not joined.
+	 */
+	joinId?: string;
 }
 
 export type ToolId =

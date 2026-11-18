@@ -70,10 +70,11 @@ export default defineConfig({
 		},
 		// Multiplayer has to work in every engine: the same world from a seed, and the same online
 		// session. These two run only the online checks (the full suite stays Chromium-only, as before).
-		// The biome map's worker, bitmaps and canvas in every engine (biome minimap Phase 0).
+		// The biome map's worker, bitmaps and canvas in every engine (biome minimap Phase 0), and the
+		// basements and joins Phase 0 measurements (terrain holes, walking, join maths).
 		{
 			name: 'webkit-map',
-			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*)\.e2e\.ts$/,
+			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*|basements\w*)\.e2e\.ts$/,
 			use: { ...devices['Desktop Safari'] }
 		},
 		{
@@ -102,7 +103,7 @@ export default defineConfig({
 		},
 		{
 			name: 'firefox-map',
-			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*)\.e2e\.ts$/,
+			testMatch: /(biome(Map|Minimap)|fastTravelMap|findBiome\w*|basements\w*)\.e2e\.ts$/,
 			use: {
 				...devices['Desktop Firefox'],
 				launchOptions: firefoxHome

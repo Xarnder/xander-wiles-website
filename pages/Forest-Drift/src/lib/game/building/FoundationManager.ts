@@ -10,9 +10,21 @@ import type { BuildingSettings, FoundationDefinition } from './FoundationTypes';
 import { createDefaultBuildingSettings } from './FoundationTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import { buildFoundationFrame, disposeWallFrame } from './WallFrameBuilder';
+import {
+	basementDeckUndersideY,
+	basementLowestFloorY,
+	basementRegionAt,
+	basementRetainingWallRects,
+	foundationWorldRect
+} from './basementMath';
+import type { WallCollisionRect } from './wallCollision';
+import type { TerrainHoleRect } from '../terrain/terrainHoles';
 
 /** World-unit tolerance on the containment test, so the player never flickers between terrain and foundation height right at an edge. */
 const EDGE_TOLERANCE = 0.001;
+
+/** Feet this close below a deck's underside still count as on the deck, not in the basement. */
+const BASEMENT_FEET_EPSILON = 0.05;
 
 interface FoundationEntry {
 	definition: FoundationDefinition;
@@ -50,8 +62,29 @@ export class FoundationManager {
 		this.earthField.constrainManual(x, z, base, height);
 	sampleEarthHeight = (x: number, z: number, base: number): number =>
 		this.earthField.sample(x, z, base);
+	private onHolesChanged: ((rects: TerrainHoleRect[]) => void) | null = null;
+	private holesKey = '';
+	/**
+	 * Called with every basement footprint whenever they change (TerrainManager cuts those cells out
+	 * of the terrain mesh). Fires before the terrain-edit handler, so the chunks rebuilt for that
+	 * edit are already cut.
+	 */
+	setTerrainHolesHandler(handler: (rects: TerrainHoleRect[]) => void): void {
+		this.onHolesChanged = handler;
+		this.holesKey = '';
+		this.publishHoles();
+	}
+	private publishHoles(): void {
+		if (!this.onHolesChanged) return;
+		const rects = this.getBasementHoleRects();
+		const key = JSON.stringify(rects);
+		if (key === this.holesKey) return;
+		this.holesKey = key;
+		this.onHolesChanged(rects);
+	}
 	private refreshEarth(definition: FoundationDefinition): void {
 		this.earthField.rebuild(this.getFoundations(), this.getVertexSpacing());
+		this.publishHoles();
 		this.onTerrainEdit?.(earthFoundationBounds(definition, this.getVertexSpacing()));
 	}
 	private showBounds = false;
@@ -257,6 +290,75 @@ export class FoundationManager {
 			if (best === null || definition.topY > best) best = definition.topY;
 		}
 		return best;
+	}
+
+	/**
+	 * Like `getTopYAt`, but a basement's interior has no solid top: there the deck is an ordinary
+	 * slab and the ground is the basement's lowest floor (`getBasementFloorAt`). The ring of stone
+	 * walls round a basement still counts, so walking up to a house from lower ground steps onto it
+	 * exactly as onto a solid foundation. Used for walking (WorldSurfaceSampler).
+	 */
+	getSolidTopYAt(worldX: number, worldZ: number): number | null {
+		const spacing = this.getVertexSpacing();
+		let best: number | null = null;
+		for (const { definition } of this.foundations.values()) {
+			const region = basementRegionAt(definition, spacing, worldX, worldZ);
+			if (region === 'interior') continue;
+			if (region === null && !this.covers(definition, spacing, worldX, worldZ)) continue;
+			if (best === null || definition.topY > best) best = definition.topY;
+		}
+		return best;
+	}
+
+	/** The lowest floor of the basement whose interior covers (worldX, worldZ), or null. */
+	getBasementFloorAt(worldX: number, worldZ: number): number | null {
+		const spacing = this.getVertexSpacing();
+		let best: number | null = null;
+		for (const { definition } of this.foundations.values()) {
+			if (basementRegionAt(definition, spacing, worldX, worldZ) !== 'interior') continue;
+			const floor = basementLowestFloorY(definition)!;
+			if (best === null || floor > best) best = floor;
+		}
+		return best;
+	}
+
+	/**
+	 * The stone walls of the basement a player is standing in: only while their current position is
+	 * in its interior and their feet are below its deck. A player outside never meets these walls,
+	 * so they step up onto a house over its rim as before; a player inside can't walk out through
+	 * them onto the rim (which would lift them through the deck).
+	 */
+	getBasementContainmentRects(fromX: number, fromZ: number, feetY: number): WallCollisionRect[] {
+		const spacing = this.getVertexSpacing();
+		for (const { definition } of this.foundations.values()) {
+			if (basementRegionAt(definition, spacing, fromX, fromZ) !== 'interior') continue;
+			if (feetY >= basementDeckUndersideY(definition) - BASEMENT_FEET_EPSILON) continue;
+			return basementRetainingWallRects(definition, spacing);
+		}
+		return [];
+	}
+
+	/** Every basement foundation's footprint, in world metres: the terrain under them is cut away. */
+	getBasementHoleRects(): TerrainHoleRect[] {
+		const spacing = this.getVertexSpacing();
+		const rects: TerrainHoleRect[] = [];
+		for (const { definition } of this.foundations.values())
+			if (definition.basement) rects.push(foundationWorldRect(definition, spacing));
+		return rects.sort((a, b) => a.minX - b.minX || a.minZ - b.minZ);
+	}
+
+	private covers(
+		d: FoundationDefinition,
+		spacing: number,
+		worldX: number,
+		worldZ: number
+	): boolean {
+		return (
+			worldX >= d.minGridX * spacing - EDGE_TOLERANCE &&
+			worldX <= d.maxGridX * spacing + EDGE_TOLERANCE &&
+			worldZ >= d.minGridZ * spacing - EDGE_TOLERANCE &&
+			worldZ <= d.maxGridZ * spacing + EDGE_TOLERANCE
+		);
 	}
 
 	/**

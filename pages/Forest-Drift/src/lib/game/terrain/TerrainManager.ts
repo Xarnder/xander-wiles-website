@@ -7,6 +7,7 @@ import {
 	type TerrainGroundTint
 } from './TerrainChunk';
 import { TerrainGenerationQueue, type ChunkJob } from './TerrainGenerationQueue';
+import { TerrainHoles } from './terrainHoles';
 import { TerrainHeightSampler } from './TerrainHeightSampler';
 import type { TerrainSettings } from './TerrainSettings';
 import type { TerrainSurfaceLattice } from './terrainSurfaceLattice';
@@ -47,6 +48,8 @@ export class TerrainManager {
 
 	private revision = 0;
 	private resolutionAtLastRebuild: number;
+	/** Basement holes, shared with every chunk (terrainHoles.ts). */
+	readonly holes = new TerrainHoles();
 
 	private lastPlayerChunkX = Number.NaN;
 	private lastPlayerChunkZ = Number.NaN;
@@ -269,6 +272,22 @@ export class TerrainManager {
 			else if (chunk.revision === previous) chunk.revision = this.revision;
 			else this.queue.enqueue(chunk.chunkX, chunk.chunkZ, this.revision);
 		}
+	}
+
+	/**
+	 * The basement holes changed (`holes.set`). Re-cuts the index buffers of the chunks already built;
+	 * chunks still waiting to generate are cut when they're populated. No vertex is recomputed.
+	 */
+	notifyHolesChanged(): void {
+		const size = this.settings.chunkSize;
+		for (const chunk of this.active.values()) chunk.applyHoles(size);
+	}
+
+	/** Terrain cells currently left out under basements, across the chunks in view. */
+	getHoledCellCount(): number {
+		let cells = 0;
+		for (const chunk of this.active.values()) cells += chunk.holedCellCount;
+		return cells;
 	}
 
 	/** Seed text changed: rebuild the noise generators, then regenerate like any other settings change. */
@@ -495,6 +514,8 @@ export class TerrainManager {
 	private acquireChunk(): TerrainChunk {
 		const pooled = this.pool.pop();
 		if (pooled) return pooled;
-		return new TerrainChunk(this.resolutionAtLastRebuild);
+		const chunk = new TerrainChunk(this.resolutionAtLastRebuild);
+		chunk.holes = this.holes;
+		return chunk;
 	}
 }

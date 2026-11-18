@@ -7,6 +7,7 @@ import { validateFurniture } from '../building/FurnitureTypes';
 import { validateSkirtingRun } from '../building/skirtingRunMath';
 import { validateMiniBuildWorldState } from '../miniBuild/MiniBuildValidation';
 import type { FoundationDefinition } from '../building/FoundationTypes';
+import { isValidBasement } from '../building/basementTypes';
 import type { BuildingMaterialDefinition } from '../building/MaterialTypes';
 import {
 	ROOF_FACE_SIDES,
@@ -297,6 +298,8 @@ function validateSlab(value: unknown, where: string): ValidationResult<SlabDefin
 			return fail(`${where}: slab point must have finite gridX/gridZ`);
 		}
 	}
+	if (value.role !== undefined && value.role !== 'deck' && value.role !== 'basement-floor')
+		return fail(`${where}: unknown slab role`);
 	const openings = value.openings ?? [];
 	if (!Array.isArray(openings)) return fail(`${where}: slab openings must be an array`);
 	if (openings.length > IMPORT_LIMITS.openingsPerSlab)
@@ -464,6 +467,13 @@ function validateFoundation(value: unknown, where: string): ValidationResult<Fou
 	}
 	const material = validateMaterial(value.material, where);
 	if (!material.ok) return material;
+	if (value.basement !== undefined && !isValidBasement(value.basement))
+		return fail(`${where}: invalid foundation basement`);
+	if (
+		value.joinId !== undefined &&
+		(!isNonEmptyString(value.joinId) || (value.joinId as string).length > 128)
+	)
+		return fail(`${where}: invalid foundation joinId`);
 	return { ok: true, value: value as unknown as FoundationDefinition };
 }
 

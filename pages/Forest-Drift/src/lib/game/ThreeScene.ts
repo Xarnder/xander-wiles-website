@@ -1100,6 +1100,12 @@ export class ThreeScene implements WorldRuntime {
 				this.terrainEdits.sample(x, z, automatic, this.sampleTerrainWithoutShovel)
 			);
 		});
+		// Basements: the terrain under them is cut out of the mesh (terrainHoles.ts). Set before the
+		// terrain-edit handler, so the chunks an edit rebuilds are cut with the new holes.
+		this.foundationManager.setTerrainHolesHandler((rects) => {
+			this.terrainManager.holes.set(rects);
+			this.terrainManager.notifyHolesChanged();
+		});
 		this.foundationManager.setTerrainEditHandler((bounds) => {
 			this.terrainManager.notifyTerrainEdited(bounds);
 			this.foundationManager.refreshTerrainSupport(bounds, (x, z) =>
@@ -1444,7 +1450,8 @@ export class ThreeScene implements WorldRuntime {
 					...this.slabManager.getMeshesForRaycast(),
 					...this.roofManager.getMeshesForRaycast()
 				],
-				terrain: (x, z) => this.terrainManager.getHeightSampler().sample(x, z),
+				// Terrain, or a basement's floor where the terrain is cut away under it.
+				terrain: (x, z) => this.worldSurfaceSampler.getGroundY(x, z),
 				bodies: this.rideCameraBodies()
 			}),
 			domElement: this.renderer.domElement,
@@ -1462,6 +1469,12 @@ export class ThreeScene implements WorldRuntime {
 			// their hitboxes for K).
 			resolveHorizontalCollision: (x, z, feetY, headY) =>
 				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
+					// A basement's stone walls, only while the player is standing in it.
+					...this.foundationManager.getBasementContainmentRects(
+						this.controller?.worldPosition.x ?? x,
+						this.controller?.worldPosition.z ?? z,
+						feetY
+					),
 					...this.wallManager.getAllCollisionRects(),
 					...this.wallPathManager.getAllCollisionRects(),
 					...this.stairManager.getAllCollisionRects(),
