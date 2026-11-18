@@ -202,10 +202,10 @@ export function basementRegionAt(
 }
 
 /**
- * The four retaining walls as player collision rects, from the lowest floor to the deck's
- * underside. Only used for a player who is already inside the basement (see
- * `FoundationManager.getBasementContainmentRects`): a player outside never meets them, and steps up
- * onto the house over the ring as onto any foundation.
+ * The four retaining walls as rects, from the lowest floor to the deck's underside: drawn as the
+ * basement's stone, and kept out of by the camera. A player standing in the basement is kept in by
+ * `FoundationManager.containInBasement` instead (a clamp can't be stepped through at a low frame
+ * rate); a player outside never meets them, and steps up onto the house over the ring.
  */
 export function basementRetainingWallRects(
 	foundation: FoundationDefinition,
@@ -237,4 +237,33 @@ export function basementRetainingWallRects(
 		along(r.minX + half, midZ, depth / 2, 0),
 		along(r.maxX - half, midZ, depth / 2, 0)
 	];
+}
+
+/** A little below the foundation top, so pieces on the Ground Floor never count as in the basement. */
+const BELOW_TOP = -1e-3;
+
+/**
+ * How many pieces stand in a foundation's basement: anything whose base is below the foundation
+ * top (stairs: on a basement storey), except the deck and basement floors the basement came with. A basement can only be removed
+ * when this is 0 ("Empty the basement first").
+ */
+export function basementOccupantCount(building: {
+	walls: readonly { baseY: number }[];
+	wallPaths: readonly { baseY: number }[];
+	slabs: readonly { localY: number; role?: BasementSlabRole }[];
+	stairs: readonly { levelIndex: number }[];
+	roofs: readonly { baseY: number }[];
+	floorDetails?: readonly { hostY: number }[];
+	skirtingRuns?: readonly { baseY: number }[];
+}): number {
+	let count = 0;
+	for (const w of building.walls) if (w.baseY < BELOW_TOP) count++;
+	for (const p of building.wallPaths) if (p.baseY < BELOW_TOP) count++;
+	for (const s of building.slabs) if (!s.role && s.localY < BELOW_TOP) count++;
+	// By storey, not height: an approach stair beside the house starts below its top on the Ground Floor.
+	for (const s of building.stairs) if (s.levelIndex < 0) count++;
+	for (const r of building.roofs) if (r.baseY < BELOW_TOP) count++;
+	for (const d of building.floorDetails ?? []) if (d.hostY < BELOW_TOP) count++;
+	for (const r of building.skirtingRuns ?? []) if (r.baseY < BELOW_TOP) count++;
+	return count;
 }

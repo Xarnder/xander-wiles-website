@@ -258,7 +258,8 @@ import {
 	type HydrologySettings,
 	type HydrologyVisualSettings
 } from './hydrology/HydrologyTypes';
-import { foundationOverlapsWater } from './hydrology/foundationWater';
+import { basementBelowWater, foundationOverlapsWater } from './hydrology/foundationWater';
+import { DECK_THICKNESS } from './building/basementTypes';
 import { UnderwaterTint } from './hydrology/underwater';
 import { WaterRenderer, type WaterRenderStats } from './hydrology/WaterRenderer';
 import { ParticleEffectManager } from './particles/ParticleEffectManager';
@@ -1148,7 +1149,11 @@ export class ThreeScene implements WorldRuntime {
 		});
 		this.scene.add(this.wallPathManager.group);
 
-		this.levelManager = new BuildingLevelManager(buildingSettings);
+		// A basement's storeys (−1 … −3) exist exactly while its foundation has one.
+		this.levelManager = new BuildingLevelManager(
+			buildingSettings,
+			(id) => this.foundationManager.getFoundation(id)?.basement
+		);
 
 		this.slabManager = new SlabManager({
 			getFoundation: (id) => this.foundationManager.getFoundation(id),
@@ -1437,6 +1442,7 @@ export class ThreeScene implements WorldRuntime {
 		this.controller = new FirstPersonController({
 			getCameraObstacles: () => ({
 				walls: [
+					...this.foundationManager.getAllBasementWallRects(),
 					...this.wallManager.getAllCollisionRects(),
 					...this.wallPathManager.getAllCollisionRects(),
 					...this.stairManager.getAllCollisionRects(),
@@ -1467,22 +1473,34 @@ export class ThreeScene implements WorldRuntime {
 			isMoveBlocked: (x, z) => this.hydrology.walkBlockedByWater(x, z),
 			// Creatures never block the player: walk straight through them (they're still picked by
 			// their hitboxes for K).
-			resolveHorizontalCollision: (x, z, feetY, headY) =>
-				resolvePlayerPositionAgainstWalls(x, z, feetY, headY, PLAYER_COLLISION_RADIUS, [
-					// A basement's stone walls, only while the player is standing in it.
-					...this.foundationManager.getBasementContainmentRects(
-						this.controller?.worldPosition.x ?? x,
-						this.controller?.worldPosition.z ?? z,
-						feetY
-					),
-					...this.wallManager.getAllCollisionRects(),
-					...this.wallPathManager.getAllCollisionRects(),
-					...this.stairManager.getAllCollisionRects(),
-					...(this.doorInteraction?.getCollisionRects() ?? []),
-					...this.furnitureManager.getCollisionRects(),
-					...this.barrierManager.getCollisionRects(),
-					...this.miniBuilds.instances.getNearbyCollisionRects()
-				])
+			resolveHorizontalCollision: (x, z, feetY, headY) => {
+				const walled = resolvePlayerPositionAgainstWalls(
+					x,
+					z,
+					feetY,
+					headY,
+					PLAYER_COLLISION_RADIUS,
+					[
+						...this.wallManager.getAllCollisionRects(),
+						...this.wallPathManager.getAllCollisionRects(),
+						...this.stairManager.getAllCollisionRects(),
+						...(this.doorInteraction?.getCollisionRects() ?? []),
+						...this.furnitureManager.getCollisionRects(),
+						...this.barrierManager.getCollisionRects(),
+						...this.miniBuilds.instances.getNearbyCollisionRects()
+					]
+				);
+				// A player standing in a basement stays inside its stone walls.
+				const from = this.controller?.worldPosition;
+				return this.foundationManager.containInBasement(
+					from?.x ?? x,
+					from?.z ?? z,
+					feetY,
+					walled.x,
+					walled.z,
+					PLAYER_COLLISION_RADIUS
+				);
+			}
 		});
 
 		this.health = this.createLocalHealth(undefined);
@@ -1542,7 +1560,43 @@ export class ThreeScene implements WorldRuntime {
 					maxX,
 					minZ,
 					maxZ
-				)
+				),
+			basements: {
+				add: (id, basement) =>
+					this.buildingManager.addBasement(id, basement, buildingSettings.floorThickness),
+				// Furniture, Mini Builds and fences down there count too: the basement must be empty.
+				remove: (id) => {
+					const foundation = this.foundationManager.getFoundation(id);
+					const below = (foundation?.topY ?? 0) - DECK_THICKNESS;
+					const others =
+						this.furnitureManager.getAll().filter((f) => f.foundationId === id && f.y < below)
+							.length +
+						this.miniBuilds.instances
+							.getAll()
+							.filter((m) => m.foundationId === id && m.position.y < below).length +
+						this.barrierManager
+							.getAll()
+							.filter((b) => b.foundationId === id && (b.levelIndex ?? 0) < 0).length;
+					return this.buildingManager.removeBasement(id, others);
+				},
+				record: (undo, redo) => this.undoManager.record({ kind: 'basement', undo, redo }),
+				belowWater: (minX, maxX, minZ, maxZ, floorY) => {
+					const sample = createHydrologySample();
+					return basementBelowWater(
+						(x, z) => {
+							this.hydrology.sampleWaterInto(x, z, sample);
+							return sample.waterType === 'none' ? Number.NaN : sample.waterSurfaceY;
+						},
+						minX,
+						maxX,
+						minZ,
+						maxZ,
+						floorY
+					);
+				},
+				buildingGridSize: () => buildingSettings.buildingGridSize,
+				floorThickness: () => buildingSettings.floorThickness
+			}
 		});
 
 		this.wallTool = new WallTool({

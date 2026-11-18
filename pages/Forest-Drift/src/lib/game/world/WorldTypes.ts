@@ -19,16 +19,18 @@ import type { VegetationSettings } from '../vegetation/VegetationTypes';
  * comment. Deliberately separate from the *application* version (APPLICATION_VERSION below): a game
  * release doesn't imply a schema change, and a schema change doesn't imply a release.
  */
-export const CURRENT_WORLD_SCHEMA_VERSION = 10;
+export const CURRENT_WORLD_SCHEMA_VERSION = 11;
 
 /**
  * Schema versions an ONLINE world may have been published with and still be opened by this build.
  * A published world is stored at the schema it was published with and is migrated on download, so
  * an older version is only safe here when its migration can't make two players generate different
- * worlds. 9 → 10 only adds `environment.biomes` switched off, so it generates identically. Review
- * each future bump before adding it; never widen this to "anything older".
+ * worlds. 9 → 10 only adds `environment.biomes` switched off, so it generates identically.
+ * 10 → 11 adds optional basement and join fields and changes no generation. (Basements and Joined
+ * Foundations Phase 3 decides whether rooms keep taking v10 clients.) Review each future bump
+ * before adding it; never widen this to "anything older".
  */
-export const ONLINE_COMPATIBLE_SCHEMA_VERSIONS: readonly number[] = [9, 10];
+export const ONLINE_COMPATIBLE_SCHEMA_VERSIONS: readonly number[] = [9, 10, 11];
 
 /** Written into export packages purely as provenance ("which build wrote this file") — never used to decide whether a world can be loaded; that's `schemaVersion`'s job alone. */
 export const APPLICATION_VERSION = '0.1.0';

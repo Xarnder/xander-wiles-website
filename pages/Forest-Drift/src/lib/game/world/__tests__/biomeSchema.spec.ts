@@ -15,8 +15,8 @@ function schema9World(): Record<string, unknown> {
 }
 
 describe('biome settings in the world schema (v10)', () => {
-	it('is schema 10', () => {
-		expect(CURRENT_WORLD_SCHEMA_VERSION).toBe(10);
+	it('is at least schema 10 (11 adds basements and joins)', () => {
+		expect(CURRENT_WORLD_SCHEMA_VERSION).toBeGreaterThanOrEqual(10);
 	});
 
 	it('migrates a schema-9 world with biomes OFF, so it looks exactly as before (Q6)', () => {
@@ -96,6 +96,7 @@ describe('biome settings in the world schema (v10)', () => {
 
 	it('lets online worlds published at schema 9 keep opening, and nothing older or newer', () => {
 		// 9 → 10 only adds biomes switched off: a v10 and a v9 player generate the same world.
-		expect([...ONLINE_COMPATIBLE_SCHEMA_VERSIONS].sort((a, b) => a - b)).toEqual([9, 10]);
+		// 10 → 11 only adds optional basement and join fields.
+		expect([...ONLINE_COMPATIBLE_SCHEMA_VERSIONS].sort((a, b) => a - b)).toEqual([9, 10, 11]);
 	});
 });

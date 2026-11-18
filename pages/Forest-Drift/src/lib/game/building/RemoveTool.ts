@@ -847,6 +847,8 @@ export class RemoveTool implements BuildTool {
 				const slab = this.buildingManager.getSlab(target.slabId);
 				const label = slabTypeLabel(slab?.type);
 				if (!slab) return [label];
+				// The floor over a basement goes with it: Foundation tool, F (BuildingManager.removeSlab).
+				if (slab.role === 'deck') return ['Floor over the basement', 'Goes with the basement'];
 				return [label, `${slab.thickness.toFixed(2)}m thick`];
 			}
 			case 'roof': {
@@ -888,8 +890,10 @@ export class RemoveTool implements BuildTool {
 				return 'Beam';
 			case 'stair':
 				return 'Stairs';
-			case 'slab':
-				return slabTypeLabel(this.buildingManager.getSlab(target.slabId)?.type);
+			case 'slab': {
+				const slab = this.buildingManager.getSlab(target.slabId);
+				return slab?.role === 'deck' ? 'Floor over the basement' : slabTypeLabel(slab?.type);
+			}
 			case 'roof': {
 				const roof = this.buildingManager.getRoof(target.roofId);
 				return roof ? ROOF_TYPE_LABELS[roof.type] : 'Roof';

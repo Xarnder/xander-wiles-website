@@ -401,14 +401,20 @@ describe('WorldSurfaceSampler — basements', () => {
 		expect(sampler.getGroundY(-3, 5)).toBe(GROUND);
 	});
 
-	it('walls a player into the basement, but never one on the deck or outside', () => {
+	it('keeps a player in the basement inside its walls, but never one on the deck or outside', () => {
 		const { foundationManager } = basementSetup();
-		expect(foundationManager.getBasementContainmentRects(5, 5, -6)).toHaveLength(4);
-		expect(foundationManager.getBasementContainmentRects(5, 5, -3)).toHaveLength(4);
-		expect(foundationManager.getBasementContainmentRects(5, 5, 0)).toEqual([]);
-		expect(foundationManager.getBasementContainmentRects(5, 5, -0.27)).toEqual([]);
-		expect(foundationManager.getBasementContainmentRects(-1, 5, -6)).toEqual([]);
-		expect(foundationManager.getBasementContainmentRects(0.1, 5, -6)).toEqual([]);
+		// Interior: x and z 0.3 … 19.7. A step far past the west wall, even 5 m in one frame, is
+		// clamped to the interior, the player's radius in from the stone.
+		expect(foundationManager.containInBasement(5, 5, -6, -5, 5, 0.3)).toEqual({ x: 0.6, z: 5 });
+		expect(foundationManager.containInBasement(5, 5, -3, 25, 30, 0.3)).toEqual({
+			x: 19.4,
+			z: 19.4
+		});
+		// On the deck, outside, or on the rim: untouched.
+		expect(foundationManager.containInBasement(5, 5, 0, -5, 5, 0.3)).toEqual({ x: -5, z: 5 });
+		expect(foundationManager.containInBasement(5, 5, -0.27, -5, 5, 0.3)).toEqual({ x: -5, z: 5 });
+		expect(foundationManager.containInBasement(-1, 5, -6, 3, 5, 0.3)).toEqual({ x: 3, z: 5 });
+		expect(foundationManager.containInBasement(0.1, 5, -6, 3, 5, 0.3)).toEqual({ x: 3, z: 5 });
 	});
 
 	it('leaves a solid foundation exactly as before', () => {
@@ -416,7 +422,7 @@ describe('WorldSurfaceSampler — basements', () => {
 		foundationManager.addFoundation(makeFoundation({ topY: 2 }));
 		expect(sampler.getSupportingSurfaceY(5, 5, -10)).toBe(2);
 		expect(sampler.getGroundY(5, 5)).toBe(0);
-		expect(foundationManager.getBasementContainmentRects(5, 5, -10)).toEqual([]);
+		expect(foundationManager.containInBasement(5, 5, -10, -5, 5, 0.3)).toEqual({ x: -5, z: 5 });
 		expect(foundationManager.getBasementFloorAt(5, 5)).toBeNull();
 	});
 

@@ -175,7 +175,7 @@ function benchWalking(calls: number): BasementBenchReport['walking'] {
 				const z = (i * 3.77) % 96;
 				const feet = i % 2 === 0 ? 10 : 4;
 				sink += sampler.getSupportingSurfaceY(x, z, feet);
-				sink += foundationManager.getBasementContainmentRects(x, z, feet).length;
+				sink += foundationManager.containInBasement(x, z, feet, x + 0.5, z, 0.3).x;
 			}
 			return ((now() - t) * 1000) / calls;
 		};

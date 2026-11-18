@@ -7,7 +7,7 @@ import type { WindowShutterMode } from './windowShutterMath';
  */
 
 import { createDefaultBarrierDraftSettings, type BarrierDraftSettings } from './BarrierTypes';
-import type { BasementDefinition } from './basementTypes';
+import { DEFAULT_BASEMENT_STOREY_HEIGHT, type BasementDefinition } from './basementTypes';
 import type { BeamOrientation } from './beamMath';
 import { createDefaultSkirtingDraftSettings, type SkirtingDraftSettings } from './skirtingRunMath';
 import type { BuildingLevelUiState } from './BuildingLevelTypes';
@@ -326,6 +326,10 @@ export interface BuildingSettings {
 	maxFoundationCells: number;
 	foundationUndergroundDepth: number;
 	foundationStyle: 'stone' | 'earth';
+	/** Basement storeys for the next stone foundation (0 = none, up to MAX_BASEMENT_STOREYS), and for `F`. */
+	basementStoreys: number;
+	/** Metres per basement storey, MIN/MAX_BASEMENT_STOREY_HEIGHT. */
+	basementStoreyHeight: number;
 	showFoundationHighestPoint: boolean;
 	showFoundationBounds: boolean;
 	previewOpacity: number;
@@ -614,6 +618,8 @@ export function createDefaultBuildingSettings(): BuildingSettings {
 		maxFoundationCells: 64,
 		foundationUndergroundDepth: 1,
 		foundationStyle: 'stone',
+		basementStoreys: 0,
+		basementStoreyHeight: DEFAULT_BASEMENT_STOREY_HEIGHT,
 		showFoundationHighestPoint: true,
 		showFoundationBounds: false,
 		previewOpacity: 0.45,

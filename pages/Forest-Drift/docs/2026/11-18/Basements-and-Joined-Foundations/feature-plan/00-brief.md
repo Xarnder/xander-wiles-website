@@ -1,7 +1,7 @@
 # Forest Drift — Basements and Joined Foundations: Brief
 
 **Feature cycle:** 2026-11-18
-**Status:** **Approved (2026-11-18).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): up to three basement storeys (Q1), the rest as recommended. In progress: [Phase 0](../phase-0/implementation.md) complete (2026-11-18).
+**Status:** **Approved (2026-11-18).** Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md): up to three basement storeys (Q1), the rest as recommended. In progress: [Phase 0](../phase-0/implementation.md) and [Phase 1](../phase-1/implementation.md) complete (2026-11-18).
 **Related:** [`01-questions-and-decisions.md`](01-questions-and-decisions.md) · [`02-technical-plan.md`](02-technical-plan.md) · builds on [Corner Walls](../../../11-09/corner-walls.md) and the README's "Building system" and "Building levels" sections
 
 Paths are relative to `pages/Forest-Drift/`.
@@ -62,7 +62,7 @@ Today a foundation is a solid stone (or earth) block, levelled to the highest gr
 - **Foundation tool, `E`:** a new **Basement** section:
   - **Storeys:** _None_, 1, 2 or 3;
   - **Storey height:** 2.5–4.5 m, default 3 m, the same for each basement storey.
-- **Adding one later:** aim the Foundation tool at an existing foundation and press `F` to add a basement with the `E` panel's settings. The hint says "F: Add basement (2 storeys, 6 m)". Pressing `F` again removes the basement, but only while nothing is built down there.
+- **Adding one later:** aim the Foundation tool at an existing foundation and press `B` to add a basement with the `E` panel's settings. The hint says "B: Add basement (2 storeys, 6 m)". Pressing `B` again removes the basement, but only while nothing is built down there.
 - **Inside:**
   - stone walls on all four sides, a stone floor at the bottom and the underside of the floor above;
   - with two or three storeys, a floor between each, already built. They're ordinary floors: remove one for a double-height cellar hall;
@@ -91,7 +91,7 @@ Today a foundation is a solid stone (or earth) block, levelled to the highest gr
 | Phase | What                                                                                                                                                                                                      | You can see                                                              |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | 0     | Groundwork: the save format; terrain with holes under basements; walking and collision below a foundation's top; the pure maths for joins (shared edges, the building's outline, inside tests). Measured. | A dev page showing a hole-cut terrain chunk and joined outlines; numbers |
-| 1     | Basements: the Foundation tool choice and `F`, one to three storeys, the stone walls and floors, the basement storeys in the floor selector, stairs down, undo, save and load.                            | Build a cellar and walk into it                                          |
+| 1     | Basements: the Foundation tool choice and `B`, one to three storeys, the stone walls and floors, the basement storeys in the floor selector, stairs down, undo, save and load.                            | Build a cellar and walk into it                                          |
 | 2     | Joining: lining up and joining on placement, `L`, raising to match, shared storeys, every tool across the join, the clean seam, joined basements, removing.                                               | Build an L-shaped house with one roof                                    |
 | 3     | Online and release: shared rows, the room's checks (a server deploy, when you say), three browsers, touch, a slower machine, docs and the final record.                                                   | Phase records with screenshots and numbers                               |
 

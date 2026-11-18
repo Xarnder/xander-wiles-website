@@ -32,3 +32,29 @@ export function foundationOverlapsWater(
 	}
 	return wet >= 2;
 }
+
+/**
+ * Whether a lake or river surface anywhere over a footprint is above `floorY` — a basement whose
+ * lowest floor is that deep would sit below the water (Basements and Joined Foundations, E5).
+ * `surfaceAt` gives the water surface's height, or NaN where there is no water. Sampled every 2 m.
+ */
+export function basementBelowWater(
+	surfaceAt: (worldX: number, worldZ: number) => number,
+	minX: number,
+	maxX: number,
+	minZ: number,
+	maxZ: number,
+	floorY: number
+): boolean {
+	const stepsX = Math.max(1, Math.ceil((maxX - minX) / 2));
+	const stepsZ = Math.max(1, Math.ceil((maxZ - minZ) / 2));
+	for (let i = 0; i <= stepsX; i++)
+		for (let j = 0; j <= stepsZ; j++) {
+			const surface = surfaceAt(
+				minX + ((maxX - minX) * i) / stepsX,
+				minZ + ((maxZ - minZ) * j) / stepsZ
+			);
+			if (Number.isFinite(surface) && surface > floorY) return true;
+		}
+	return false;
+}

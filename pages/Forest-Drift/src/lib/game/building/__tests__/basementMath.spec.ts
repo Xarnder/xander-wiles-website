@@ -7,6 +7,7 @@ import {
 	basementLevel,
 	basementLevelName,
 	basementLowestFloorY,
+	basementOccupantCount,
 	basementRegionAt,
 	basementRetainingWallRects,
 	basementSlabPlans
@@ -230,5 +231,31 @@ describe('basementRetainingWallRects', () => {
 
 	it('is empty without a basement', () => {
 		expect(basementRetainingWallRects(foundation({ basement: undefined }), SPACING)).toEqual([]);
+	});
+});
+
+describe('basementOccupantCount', () => {
+	const empty = { walls: [], wallPaths: [], slabs: [], stairs: [], roofs: [] };
+	it('counts pieces below the top, but not the basement’s own slabs or approach stairs', () => {
+		expect(
+			basementOccupantCount({
+				...empty,
+				slabs: [{ localY: 0, role: 'deck' }, { localY: -3, role: 'basement-floor' }, { localY: 3 }],
+				// An approach stair beside the house: below the top, on the Ground Floor.
+				stairs: [{ levelIndex: 0 }],
+				walls: [{ baseY: 0 }]
+			})
+		).toBe(0);
+		expect(
+			basementOccupantCount({
+				walls: [{ baseY: -3 }],
+				wallPaths: [{ baseY: -6 }],
+				slabs: [{ localY: -1 }],
+				stairs: [{ levelIndex: -1 }],
+				roofs: [{ baseY: -2 }],
+				floorDetails: [{ hostY: -3 }],
+				skirtingRuns: [{ baseY: -3 }]
+			})
+		).toBe(7);
 	});
 });

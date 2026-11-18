@@ -477,6 +477,15 @@ export const KEY_ACTIONS = [
 		keys: [key('KeyB')]
 	}),
 	action({
+		id: 'foundation.basement',
+		label: 'Foundation: add or remove a basement',
+		description:
+			'Aim at a stone foundation: add a basement with the E panel’s storeys, or remove an empty one.',
+		category: 'buildTools',
+		contexts: ['tool:foundation'],
+		keys: [key('KeyB')]
+	}),
+	action({
 		id: 'tool.rotate',
 		label: 'Rotate',
 		description: 'Furniture, Place Object, Move and roofs. Hold Shift to turn the other way.',

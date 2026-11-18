@@ -6,6 +6,8 @@ const MAX_HISTORY = 5;
 
 export type BuildAction =
 	| { kind: 'terrain'; undo: () => boolean | void; redo: () => boolean | void }
+	/** Adding or removing a basement (Foundation tool, F): undone and redone by its own closures. */
+	| { kind: 'basement'; undo: () => boolean | void; redo: () => boolean | void }
 	| { kind: 'wall'; wallId: string }
 	| { kind: 'wallPath'; pathId: string }
 	| { kind: 'opening'; wallId: string; openingId: string }
@@ -87,6 +89,7 @@ export class BuildUndoManager {
 
 		switch (action.kind) {
 			case 'terrain':
+			case 'basement':
 				if (action.undo() === false) {
 					this.history.push(action);
 					return false;
@@ -123,7 +126,7 @@ export class BuildUndoManager {
 	redo(): boolean {
 		if (!this.canEdit()) return false;
 		const action = this.future.pop();
-		if (!action || action.kind !== 'terrain') return false;
+		if (!action || (action.kind !== 'terrain' && action.kind !== 'basement')) return false;
 		if (action.redo() === false) {
 			this.future.push(action);
 			return false;

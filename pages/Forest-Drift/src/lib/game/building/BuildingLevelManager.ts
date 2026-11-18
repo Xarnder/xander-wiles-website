@@ -2,6 +2,8 @@ import type { BuildingLevelDefinition, BuildingLevelUiState } from './BuildingLe
 import { matchesAction } from '../input/KeyInput';
 import { levelDisplayName } from './BuildingLevelTypes';
 import type { BuildingSettings } from './FoundationTypes';
+import { basementLevel } from './basementMath';
+import type { BasementDefinition } from './basementTypes';
 import type { FoundationBuildingDefinition } from './WallTypes';
 
 /** How close (world units) two inferred elevations must be to count as the same level — see `discoverLevelsFromBuilding`. */
@@ -58,9 +60,23 @@ export class BuildingLevelManager {
 		}
 	};
 
-	constructor(buildingSettings: BuildingSettings) {
+	/**
+	 * `getBasement` reads a foundation's basement live (FoundationManager), so its storeys −1 … −n
+	 * exist exactly while it has one. Without it (tests, tools that don't care), no basements.
+	 */
+	constructor(
+		buildingSettings: BuildingSettings,
+		private readonly getBasement: (foundationId: string) => BasementDefinition | undefined = () =>
+			undefined
+	) {
 		this.buildingSettings = buildingSettings;
 		window.addEventListener('keydown', this.handleKeyDown);
+	}
+
+	/** The lowest storey index a foundation has: −storeys with a basement, otherwise 0. */
+	getLowestLevelIndex(foundationId: string): number {
+		const storeys = this.getBasement(foundationId)?.storeys ?? 0;
+		return storeys > 0 ? -storeys : 0;
 	}
 
 	getRevision(): number {
@@ -142,13 +158,20 @@ export class BuildingLevelManager {
 			: 0;
 	}
 
+	/** Clamped to the foundation's lowest storey, so a basement that went away takes its storeys with it. */
 	getCurrentLevelIndex(foundationId: string): number {
-		return this.currentIndexByFoundation.get(foundationId) ?? 0;
+		return Math.max(
+			this.getLowestLevelIndex(foundationId),
+			this.currentIndexByFoundation.get(foundationId) ?? 0
+		);
 	}
 
 	setCurrentLevelIndex(foundationId: string, index: number): void {
 		this.revision++;
-		this.currentIndexByFoundation.set(foundationId, Math.max(0, Math.round(index)));
+		this.currentIndexByFoundation.set(
+			foundationId,
+			Math.max(this.getLowestLevelIndex(foundationId), Math.round(index))
+		);
 		if (foundationId === this.activeFoundationId) this.syncSettingsMirror();
 	}
 
@@ -175,14 +198,14 @@ export class BuildingLevelManager {
 		this.setCurrentLevelIndex(foundationId, nextIndex);
 	}
 
-	/** Moves the active foundation's current level down one step; never below Ground Floor (index 0), and a no-op there. Does nothing if no foundation is currently active. */
+	/** Moves the active foundation's current level down one step; never below its lowest storey (Ground Floor, or the bottom of its basement), and a no-op there. Does nothing if no foundation is currently active. */
 	moveDown(): void {
 		this.revision++;
 		const foundationId = this.activeFoundationId;
 		if (!foundationId) return;
 
 		const index = this.getCurrentLevelIndex(foundationId);
-		if (index <= 0) return;
+		if (index <= this.getLowestLevelIndex(foundationId)) return;
 		this.setCurrentLevelIndex(foundationId, index - 1);
 	}
 
@@ -195,7 +218,7 @@ export class BuildingLevelManager {
 			baseY: level.baseY,
 			wallHeight: level.wallHeight,
 			displayName: levelDisplayName(index),
-			canMoveDown: index > 0,
+			canMoveDown: index > this.getLowestLevelIndex(foundationId),
 			canMoveUp:
 				this.getLevel(foundationId, index + 1) !== undefined ||
 				this.getLevelsForFoundation(foundationId).length < this.buildingSettings.maxBuildingLevels
@@ -203,6 +226,7 @@ export class BuildingLevelManager {
 	}
 
 	getLevel(foundationId: string, index: number): BuildingLevelDefinition | undefined {
+		if (index < 0) return this.basementLevel(foundationId, index);
 		return this.levels.get(foundationId)?.find((level) => level.index === index);
 	}
 
@@ -217,7 +241,11 @@ export class BuildingLevelManager {
 	 * its `wallHeight` is the *current* `defaultStoreyHeight` setting, captured once.
 	 */
 	getOrCreateLevel(foundationId: string, index: number): BuildingLevelDefinition {
-		if (index < 0) throw new Error('Building levels cannot be negative');
+		if (index < 0) {
+			const basementLevel = this.basementLevel(foundationId, index);
+			if (!basementLevel) throw new Error('No basement storey at that level');
+			return basementLevel;
+		}
 
 		// Only creating a level changes the world — this is read every frame by targeting and HUDs,
 		// and counting reads as changes kept the autosave permanently "unsaved" while aiming.
@@ -239,6 +267,17 @@ export class BuildingLevelManager {
 		list.push(level);
 		list.sort((a, b) => a.index - b.index);
 		return level;
+	}
+
+	/**
+	 * A basement storey, made from the foundation's basement every time (basementMath.basementLevel):
+	 * never stored, never created from `defaultStoreyHeight`, gone when the basement goes.
+	 */
+	private basementLevel(foundationId: string, index: number): BuildingLevelDefinition | undefined {
+		const basement = this.getBasement(foundationId);
+		const level = basement ? basementLevel(basement, index) : null;
+		if (!level) return undefined;
+		return { id: `${foundationId}:basement:${index}`, foundationId, index, ...level };
 	}
 
 	removeLevelsForFoundation(foundationId: string): void {
@@ -273,7 +312,9 @@ export class BuildingLevelManager {
 		for (const slab of building.slabs) rawYs.push(slab.localY);
 		for (const stair of building.stairs) rawYs.push(stair.baseY);
 
-		const sortedYs = [...rawYs].sort((a, b) => a - b);
+		// Only the Ground Floor and up: basement storeys come from the basement (and approach stairs
+		// beside the house start below its top without being a storey).
+		const sortedYs = rawYs.filter((y) => y >= -LEVEL_DISCOVERY_EPSILON).sort((a, b) => a - b);
 		const distinctYs: number[] = [];
 		for (const y of sortedYs) {
 			const last = distinctYs[distinctYs.length - 1];

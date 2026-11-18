@@ -21,9 +21,14 @@ import type { Point2D } from './wallPathMath';
 
 const boundsMaterial = new THREE.LineBasicMaterial({ color: 0xffa64d });
 
-/** Ceilings and floors share one look; only a flat roof looks different — see MaterialTypes.ts's MaterialKind doc comment. */
-function materialKindFor(type: SlabDefinition['type']): MaterialKind {
-	return type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
+/**
+ * Ceilings and floors share one look; only a flat roof looks different — see MaterialTypes.ts's
+ * MaterialKind doc comment. The deck over a basement is the foundation's top, so it looks like one:
+ * a house with a basement looks the same from outside as one without.
+ */
+export function slabMaterialKind(slab: Pick<SlabDefinition, 'type' | 'role'>): MaterialKind {
+	if (slab.role === 'deck') return 'foundation-top';
+	return slab.type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
 }
 
 interface SlabEntry {
@@ -97,7 +102,7 @@ export class SlabManager {
 		const geometry = buildSlabGeometry(localPolygon, definition.localY, bottomLocalY, localHoles);
 
 		const material = this.materialManager.getMaterial(
-			materialKindFor(definition.type),
+			slabMaterialKind(definition),
 			definition.material
 		);
 		let mesh = existing?.mesh;
@@ -203,7 +208,8 @@ export class SlabManager {
 			const entry = this.slabs.get(slab.id)!;
 			if (entry.overhangFrame) disposeSlabOpeningFrame(entry.overhangFrame);
 			entry.overhangFrame = null;
-			if (slab.type === 'flat-roof') continue;
+			// A basement's slabs rest on its stone walls; the foundation's own frame trims the deck.
+			if (slab.type === 'flat-roof' || slab.role) continue;
 			const bottom = slabBottomY(slab);
 			const supports: SlabEdgeSupport[] = walls
 				.filter((wall) => wall.baseY < bottom + 1e-6 && wall.baseY + wall.height >= bottom - 0.01)

@@ -12,6 +12,7 @@ import type { BuildingMaterialDefinition } from './MaterialTypes';
 import { buildFoundationFrame, disposeWallFrame } from './WallFrameBuilder';
 import {
 	basementDeckUndersideY,
+	basementInteriorRect,
 	basementLowestFloorY,
 	basementRegionAt,
 	basementRetainingWallRects,
@@ -113,17 +114,58 @@ export class FoundationManager {
 
 	addFoundation(definition: FoundationDefinition): void {
 		this.revision++;
-		const materials =
-			definition.style === 'earth'
-				? this.earthProxyMaterial
-				: this.materialManager.getFoundationMaterials(definition.material);
-		const mesh = new FoundationMesh(definition, this.getVertexSpacing(), materials);
+		this.foundations.set(definition.id, this.createEntry(definition));
+		this.refreshEarth(definition);
+	}
+
+	/** An earth pad is drawn by the terrain itself, unless it has a basement (stone walls, footing). */
+	private materialsFor(definition: FoundationDefinition): THREE.Material | THREE.Material[] {
+		return definition.style === 'earth' && !definition.basement
+			? this.earthProxyMaterial
+			: this.materialManager.getFoundationMaterials(definition.material);
+	}
+
+	private createEntry(definition: FoundationDefinition): FoundationEntry {
+		const mesh = new FoundationMesh(
+			definition,
+			this.getVertexSpacing(),
+			this.materialsFor(definition)
+		);
 		mesh.setBoundsVisible(this.showBounds);
 		this.group.add(mesh.object);
 		const entry: FoundationEntry = { definition, mesh, frame: null };
 		this.rebuildFrame(entry);
-		this.foundations.set(definition.id, entry);
+		return entry;
+	}
+
+	private disposeEntry(entry: FoundationEntry): void {
+		if (entry.frame) disposeWallFrame(entry.frame);
+		this.group.remove(entry.mesh.object);
+		entry.mesh.dispose();
+	}
+
+	/**
+	 * Replaces a foundation's definition in place (adding or removing a basement, for example) and
+	 * rebuilds its mesh and frame. Its id stays, so everything built on it stays with it. Returns
+	 * `false` if no such foundation exists.
+	 */
+	updateFoundation(definition: FoundationDefinition): boolean {
+		const existing = this.foundations.get(definition.id);
+		if (!existing) return false;
+		this.revision++;
+		this.disposeEntry(existing);
+		this.foundations.set(definition.id, this.createEntry(definition));
 		this.refreshEarth(definition);
+		return true;
+	}
+
+	/** Every basement's stone walls as collision rects: the camera keeps itself out of them. */
+	getAllBasementWallRects(): WallCollisionRect[] {
+		const spacing = this.getVertexSpacing();
+		const rects: WallCollisionRect[] = [];
+		for (const { definition } of this.foundations.values())
+			if (definition.basement) rects.push(...basementRetainingWallRects(definition, spacing));
+		return rects;
 	}
 
 	/** Sets (or, given `undefined`, clears) a foundation's material override — visual only, never touching its grid footprint, `topY`/`bottomY`, or collision. A no-op returning `false` if the foundation isn't found. */
@@ -132,11 +174,7 @@ export class FoundationManager {
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
 		entry.definition = { ...entry.definition, material };
-		entry.mesh.setMaterial(
-			entry.definition.style === 'earth'
-				? this.earthProxyMaterial
-				: this.materialManager.getFoundationMaterials(material)
-		);
+		entry.mesh.setMaterial(this.materialsFor(entry.definition));
 		return true;
 	}
 
@@ -144,9 +182,7 @@ export class FoundationManager {
 		this.revision++;
 		const entry = this.foundations.get(id);
 		if (!entry) return false;
-		if (entry.frame) disposeWallFrame(entry.frame);
-		this.group.remove(entry.mesh.object);
-		entry.mesh.dispose();
+		this.disposeEntry(entry);
 		this.foundations.delete(id);
 		this.refreshEarth(entry.definition);
 		return true;
@@ -157,7 +193,7 @@ export class FoundationManager {
 		const s = this.getVertexSpacing();
 		for (const entry of this.foundations.values()) {
 			const d = entry.definition;
-			if (d.style === 'earth') continue;
+			if (d.style === 'earth' && !d.basement) continue;
 			const minX = d.minGridX * s,
 				maxX = d.maxGridX * s,
 				minZ = d.minGridZ * s,
@@ -323,19 +359,34 @@ export class FoundationManager {
 	}
 
 	/**
-	 * The stone walls of the basement a player is standing in: only while their current position is
-	 * in its interior and their feet are below its deck. A player outside never meets these walls,
-	 * so they step up onto a house over its rim as before; a player inside can't walk out through
-	 * them onto the rim (which would lift them through the deck).
+	 * Keeps a player who is standing in a basement inside it: when their current position (`fromX`,
+	 * `fromZ`) is in a basement's interior with their feet below its deck, the proposed position is
+	 * clamped to the interior, `radius` in from the stone walls. A clamp rather than wall collision,
+	 * so a long step at a low frame rate can't carry them through 0.3 m of stone onto the rim (which
+	 * would lift them through the deck). A player outside, or on the deck, is never affected, so they
+	 * step up onto the house over its rim as onto any foundation.
 	 */
-	getBasementContainmentRects(fromX: number, fromZ: number, feetY: number): WallCollisionRect[] {
+	containInBasement(
+		fromX: number,
+		fromZ: number,
+		feetY: number,
+		x: number,
+		z: number,
+		radius: number
+	): { x: number; z: number } {
 		const spacing = this.getVertexSpacing();
 		for (const { definition } of this.foundations.values()) {
 			if (basementRegionAt(definition, spacing, fromX, fromZ) !== 'interior') continue;
 			if (feetY >= basementDeckUndersideY(definition) - BASEMENT_FEET_EPSILON) continue;
-			return basementRetainingWallRects(definition, spacing);
+			const i = basementInteriorRect(definition, spacing);
+			const clamp = (v: number, min: number, max: number) =>
+				min > max ? (min + max) / 2 : Math.min(max, Math.max(min, v));
+			return {
+				x: clamp(x, i.minX + radius, i.maxX - radius),
+				z: clamp(z, i.minZ + radius, i.maxZ - radius)
+			};
 		}
-		return [];
+		return { x, z };
 	}
 
 	/** Every basement foundation's footprint, in world metres: the terrain under them is cut away. */

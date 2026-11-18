@@ -1,3 +1,5 @@
+import { basementLevelName } from './basementMath';
+
 /**
  * A logical storey within one foundation's local 3D building space. Levels are convenient
  * *groupings* of an authored `baseY` — they never introduce a separate coordinate system: every
@@ -50,8 +52,10 @@ const LEVEL_DISPLAY_NAMES = [
 	'Tenth Floor'
 ];
 
-/** "Ground Floor" / "First Floor" / ... for the first `LEVEL_DISPLAY_NAMES.length` storeys, falling back to "Level N" beyond that (or for a negative index, which should never actually occur). */
+/** "Ground Floor" / "First Floor" / ... for the first `LEVEL_DISPLAY_NAMES.length` storeys, falling back to "Level N" beyond that ("Basement", "Lower Basement", "Deep Basement" below the Ground Floor). */
 export function levelDisplayName(index: number): string {
 	if (index >= 0 && index < LEVEL_DISPLAY_NAMES.length) return LEVEL_DISPLAY_NAMES[index];
+	const basement = basementLevelName(index);
+	if (basement) return basement;
 	return `Level ${index}`;
 }

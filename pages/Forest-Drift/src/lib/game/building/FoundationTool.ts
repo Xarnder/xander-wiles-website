@@ -12,6 +12,25 @@ import type {
 import type { TerrainHeightSampler } from '../terrain/TerrainHeightSampler';
 import type { TerrainSettings } from '../terrain/TerrainSettings';
 import type { BuildTool } from './BuildToolManager';
+import { matchesAction } from '../input/KeyInput';
+import { basementDepth, basementSlabPlans } from './basementMath';
+import { FOOTING_DEPTH, MAX_BASEMENT_STOREYS, type BasementDefinition } from './basementTypes';
+
+/**
+ * What the Foundation tool needs to give foundations basements (Basements and Joined Foundations
+ * Phase 1). BuildingManager does the work; the scene wires undo and the water check.
+ */
+export interface FoundationBasementHooks {
+	add(foundationId: string, basement: BasementDefinition): { valid: boolean; reason?: string };
+	remove(foundationId: string): { valid: boolean; reason?: string };
+	/** Records an added or removed basement for undo (`-`) and redo (`=`). */
+	record(undo: () => boolean, redo: () => boolean): void;
+	/** Whether water over the footprint is higher than `floorY` (the basement's lowest floor). */
+	belowWater(minX: number, maxX: number, minZ: number, maxZ: number, floorY: number): boolean;
+	/** The building grid (basement floors must fit it exactly). */
+	buildingGridSize(): number;
+	floorThickness(): number;
+}
 
 /** Preallocated capacity for the hover-grid overlay — foundationGridDisplayRadius is clamped to this in the GUI. */
 const MAX_GRID_DISPLAY_RADIUS = 10;
@@ -49,6 +68,8 @@ export interface FoundationToolOptions {
 	onHudChange?: (hud: BuildUiState | null) => void;
 	/** Returns true when a footprint overlaps a river or lake deeply enough to reject it. */
 	waterBlocksFoundation?: (minX: number, maxX: number, minZ: number, maxZ: number) => boolean;
+	/** Basements: placing with one, and `B` on an existing foundation. Absent means no basements. */
+	basements?: FoundationBasementHooks;
 }
 
 /**
@@ -108,6 +129,17 @@ export class FoundationTool implements BuildTool {
 	private lastHoveredGridZ: number | null = null;
 	private currentHoverPoint: TerrainGridPoint | null = null;
 	private firstCorner: TerrainGridPoint | null = null;
+	/** The existing foundation under the crosshair while idle, for `B`. */
+	private aimedFoundationId: string | null = null;
+	/** The last `B` result, shown until the crosshair moves to another foundation. */
+	private basementMessage: string | null = null;
+	private readonly basements?: FoundationBasementHooks;
+	private readonly handleKeyDown = (event: KeyboardEvent) => {
+		if (!this.active || this.state !== 'idle' || !this.basements) return;
+		const target = event.target as HTMLElement | null;
+		if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
+		if (matchesAction(event, 'foundation.basement')) this.toggleAimedBasement();
+	};
 
 	constructor(options: FoundationToolOptions) {
 		this.scene = options.scene;
@@ -119,6 +151,7 @@ export class FoundationTool implements BuildTool {
 		this.buildingSettings = options.buildingSettings;
 		this.onHudChange = options.onHudChange;
 		this.waterBlocksFoundation = options.waterBlocksFoundation;
+		this.basements = options.basements;
 
 		this.gridGeometry.setAttribute('position', new THREE.BufferAttribute(this.gridPositions, 3));
 		this.gridGeometry.setAttribute('color', new THREE.BufferAttribute(this.gridColors, 3));
@@ -166,7 +199,10 @@ export class FoundationTool implements BuildTool {
 		this.lastHoveredGridX = null;
 		this.lastHoveredGridZ = null;
 		this.hasTarget = false;
+		this.aimedFoundationId = null;
+		this.basementMessage = null;
 		this.scene.add(this.overlayGroup);
+		window.addEventListener('keydown', this.handleKeyDown);
 	}
 
 	deactivate(): void {
@@ -175,6 +211,7 @@ export class FoundationTool implements BuildTool {
 		this.firstCorner = null;
 		this.hideAllVisuals();
 		this.scene.remove(this.overlayGroup);
+		window.removeEventListener('keydown', this.handleKeyDown);
 		this.onHudChange?.(null);
 	}
 
@@ -182,6 +219,13 @@ export class FoundationTool implements BuildTool {
 		if (!this.active) return;
 
 		const hit = this.raycastTerrain();
+		const aimed = this.state === 'idle' ? this.raycastFoundationId(hit) : null;
+		if (aimed !== this.aimedFoundationId) {
+			this.aimedFoundationId = aimed;
+			this.basementMessage = null;
+			this.refreshVisuals();
+		}
+
 		if (!hit) {
 			if (this.hasTarget) {
 				this.hasTarget = false;
@@ -253,6 +297,99 @@ export class FoundationTool implements BuildTool {
 		);
 	}
 
+	/** The foundation under the crosshair, when it's nearer than the terrain behind it. */
+	private raycastFoundationId(terrain: THREE.Intersection | null): string | null {
+		// raycastTerrain has just set the ray from the camera.
+		const hit = this.raycaster.intersectObjects(this.foundationManager.getMeshes(), false)[0];
+		if (!hit) return null;
+		if (terrain && terrain.distance < hit.distance - 0.01) return null;
+		return (hit.object.userData.foundationId as string | undefined) ?? null;
+	}
+
+	/** The basement a new foundation gets from the `E` panel, or null (none, or an earth pad). */
+	private newBasement(): BasementDefinition | null {
+		const storeys = Math.round(this.buildingSettings.basementStoreys ?? 0);
+		if (!this.basements || storeys < 1 || this.buildingSettings.foundationStyle === 'earth')
+			return null;
+		return {
+			storeys: Math.min(MAX_BASEMENT_STOREYS, storeys),
+			storeyHeight: this.buildingSettings.basementStoreyHeight
+		};
+	}
+
+	/** The basement `B` adds: the panel's storeys, at least one. */
+	private addedBasement(): BasementDefinition {
+		return {
+			storeys: Math.min(
+				MAX_BASEMENT_STOREYS,
+				Math.max(1, Math.round(this.buildingSettings.basementStoreys ?? 0))
+			),
+			storeyHeight: this.buildingSettings.basementStoreyHeight
+		};
+	}
+
+	/** Why a basement can't go under this footprint (water, grid), or null. */
+	private basementProblem(
+		footprint: {
+			minGridX: number;
+			maxGridX: number;
+			minGridZ: number;
+			maxGridZ: number;
+			topY: number;
+		},
+		basement: BasementDefinition
+	): string | null {
+		if (!this.basements) return 'No basements here';
+		const spacing = this.vertexSpacing();
+		const plans = basementSlabPlans(
+			{ id: 'check', bottomY: footprint.topY, ...footprint, basement },
+			spacing,
+			this.basements.buildingGridSize(),
+			this.basements.floorThickness()
+		);
+		if (plans.length === 0) return "This world's grid doesn't fit a basement";
+		if (
+			this.basements.belowWater(
+				footprint.minGridX * spacing,
+				footprint.maxGridX * spacing,
+				footprint.minGridZ * spacing,
+				footprint.maxGridZ * spacing,
+				footprint.topY - basementDepth(basement)
+			)
+		)
+			return 'Too close to water for a basement';
+		return null;
+	}
+
+	/** `B` on an existing foundation: add a basement, or remove an empty one. One undo step. */
+	private toggleAimedBasement(): void {
+		const hooks = this.basements;
+		const id = this.aimedFoundationId;
+		const foundation = id ? this.foundationManager.getFoundation(id) : undefined;
+		if (!hooks || !id || !foundation) return;
+		if (foundation.basement) {
+			const removed = foundation.basement;
+			const result = hooks.remove(id);
+			this.basementMessage = result.valid ? 'Basement removed' : (result.reason ?? null);
+			if (result.valid)
+				hooks.record(
+					() => hooks.add(id, removed).valid,
+					() => hooks.remove(id).valid
+				);
+		} else {
+			const basement = this.addedBasement();
+			const problem = this.basementProblem(foundation, basement);
+			const result = problem ? { valid: false, reason: problem } : hooks.add(id, basement);
+			this.basementMessage = result.valid ? 'Basement added' : (result.reason ?? null);
+			if (result.valid)
+				hooks.record(
+					() => hooks.remove(id).valid,
+					() => hooks.add(id, basement).valid
+				);
+		}
+		this.refreshVisuals();
+	}
+
 	private raycastTerrain(): THREE.Intersection | null {
 		this.raycaster.setFromCamera(this.screenCenter, this.camera);
 		const meshes = this.getTerrainMeshes();
@@ -274,6 +411,12 @@ export class FoundationTool implements BuildTool {
 			this.buildingSettings.foundationUndergroundDepth
 		);
 		if (!result.valid || this.footprintInWater(result)) return;
+		const basement = this.newBasement();
+		const basementProblem = basement ? this.basementProblem(result, basement) : null;
+		if (basementProblem) {
+			this.onHudChange?.(this.buildInvalidHud(basementProblem));
+			return;
+		}
 		const conflict = this.foundationManager.placementConflict({
 			...result,
 			id: 'preview',
@@ -284,8 +427,9 @@ export class FoundationTool implements BuildTool {
 			return;
 		}
 
+		const id = crypto.randomUUID();
 		this.foundationManager.addFoundation({
-			id: crypto.randomUUID(),
+			id,
 			minGridX: result.minGridX,
 			maxGridX: result.maxGridX,
 			minGridZ: result.minGridZ,
@@ -297,6 +441,8 @@ export class FoundationTool implements BuildTool {
 				? { blendWidth: Math.max(6, this.vertexSpacing() * 3, (result.topY - result.bottomY) * 2) }
 				: {})
 		});
+		// Placing a foundation isn't an undo step, so neither is the basement it's placed with.
+		if (basement) this.basements?.add(id, basement);
 
 		this.state = 'idle';
 		this.firstCorner = null;
@@ -348,17 +494,24 @@ export class FoundationTool implements BuildTool {
 				})
 			: null;
 		const inWater = result.valid && this.footprintInWater(result);
+		const basement = this.newBasement();
+		const basementProblem =
+			result.valid && !inWater && !conflict && basement
+				? this.basementProblem(result, basement)
+				: null;
 		this.updateTargetMarker(
 			this.currentHoverPoint,
-			result.valid && !inWater && !conflict ? VALID_COLOR : INVALID_COLOR
+			result.valid && !inWater && !conflict && !basementProblem ? VALID_COLOR : INVALID_COLOR
 		);
 
-		if (!result.valid || inWater || conflict) {
+		if (!result.valid || inWater || conflict || basementProblem) {
 			this.hidePreview();
 			this.highestPointMarker.visible = false;
 			this.onHudChange?.(
 				this.buildInvalidHud(
-					conflict ?? (inWater ? 'Overlaps deep water' : (result.reason ?? 'Invalid selection'))
+					conflict ??
+						basementProblem ??
+						(inWater ? 'Overlaps deep water' : (result.reason ?? 'Invalid selection'))
 				)
 			);
 			return;
@@ -423,14 +576,19 @@ export class FoundationTool implements BuildTool {
 		const maxZ = result.maxGridZ * spacing;
 		const width = maxX - minX;
 		const depth = maxZ - minZ;
-		const height = result.topY - result.bottomY;
+		// With a basement, the preview reaches down to its footing, so its depth shows.
+		const basement = this.newBasement();
+		const bottomY = basement
+			? Math.min(result.bottomY, result.topY - basementDepth(basement) - FOOTING_DEPTH)
+			: result.bottomY;
+		const height = result.topY - bottomY;
 
 		this.previewGeometry?.dispose();
 		this.previewGeometry = new THREE.BoxGeometry(width, height, depth);
 		this.previewMesh.geometry = this.previewGeometry;
 		this.previewMesh.position.set(
 			(minX + maxX) / 2,
-			(result.topY + result.bottomY) / 2,
+			(result.topY + bottomY) / 2,
 			(minZ + maxZ) / 2
 		);
 		this.previewMaterial.color.setHex(VALID_COLOR);
@@ -487,6 +645,25 @@ export class FoundationTool implements BuildTool {
 	}
 
 	private buildIdleHud(): BuildUiState {
+		const aimed = this.aimedFoundationId
+			? this.foundationManager.getFoundation(this.aimedFoundationId)
+			: undefined;
+		if (aimed && this.basements) {
+			const key = keyName('foundation.basement');
+			const b = this.addedBasement();
+			const lines = aimed.basement
+				? [`Basement: ${storeysText(aimed.basement.storeys)}`, `${key}: Remove basement`]
+				: aimed.style === 'earth'
+					? ['Basements need a stone foundation']
+					: [`${key}: Add basement (${storeysText(b.storeys)}, ${formatMetres(basementDepth(b))})`];
+			return {
+				toolId: 'foundation',
+				crosshair: 'valid',
+				hintLines: ['FOUNDATION', '', ...lines, `${keyName('build.customise')}: Foundation style`],
+				...(this.basementMessage ? { notice: this.basementMessage } : {})
+			};
+		}
+		const basement = this.newBasement();
 		return {
 			toolId: 'foundation',
 			crosshair: this.hasTarget ? 'valid' : 'default',
@@ -495,6 +672,7 @@ export class FoundationTool implements BuildTool {
 				'',
 				'Look at terrain',
 				'Left click: Select corner',
+				...(basement ? [`With a basement: ${basementText(basement)}`] : []),
 				`${keyName('build.customise')}: Foundation style`
 			]
 		};
@@ -518,6 +696,7 @@ export class FoundationTool implements BuildTool {
 
 	private buildValidHud(result: ReturnType<typeof computeFoundationSelection>): BuildUiState {
 		const spacing = this.vertexSpacing();
+		const basement = this.newBasement();
 		const volume =
 			result.cellsX * spacing * (result.cellsZ * spacing) * (result.topY - result.bottomY);
 		return {
@@ -530,6 +709,7 @@ export class FoundationTool implements BuildTool {
 				`${result.cellsX} × ${result.cellsZ} cells`,
 				`Top: ${result.topY.toFixed(2)}m`,
 				`Vol: ${Math.round(volume)}m³`,
+				...(basement ? [`Basement: ${basementText(basement)}`] : []),
 				'',
 				'Left click: Build',
 				'Right click: Cancel'
@@ -549,4 +729,16 @@ export class FoundationTool implements BuildTool {
 		this.outlineGeometry.dispose();
 		this.outlineMaterial.dispose();
 	}
+}
+
+function formatMetres(m: number): string {
+	return `${Number.isInteger(m) ? m : m.toFixed(1)} m`;
+}
+
+function storeysText(storeys: number): string {
+	return `${storeys} ${storeys === 1 ? 'storey' : 'storeys'}`;
+}
+
+function basementText(basement: BasementDefinition): string {
+	return `${storeysText(basement.storeys)} of ${formatMetres(basement.storeyHeight)}`;
 }

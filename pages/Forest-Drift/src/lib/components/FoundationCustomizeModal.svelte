@@ -1,11 +1,27 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { BuildingSettings } from '#lib/game/building/FoundationTypes';
+	import {
+		MAX_BASEMENT_STOREYS,
+		MAX_BASEMENT_STOREY_HEIGHT,
+		MIN_BASEMENT_STOREY_HEIGHT
+	} from '#lib/game/building/basementTypes';
 	let { settings, onClose }: { settings: BuildingSettings; onClose: () => void } = $props();
 	let selected = $state(untrack(() => settings.foundationStyle ?? 'stone'));
+	let storeys = $state(untrack(() => settings.basementStoreys ?? 0));
+	let storeyHeight = $state(untrack(() => settings.basementStoreyHeight));
+	const storeyChoices = Array.from({ length: MAX_BASEMENT_STOREYS + 1 }, (_, i) => i);
 	function choose(style: 'stone' | 'earth') {
 		selected = style;
 		settings.foundationStyle = style;
+	}
+	function chooseStoreys(count: number) {
+		storeys = count;
+		settings.basementStoreys = count;
+	}
+	function setHeight(value: number) {
+		storeyHeight = value;
+		settings.basementStoreyHeight = value;
 	}
 </script>
 
@@ -62,6 +78,38 @@
 				>
 			</button>
 		</div>
+		<fieldset class="basement" data-testid="foundation-basement">
+			<legend>Basement</legend>
+			<div class="storeys" role="group" aria-label="Basement storeys">
+				{#each storeyChoices as count (count)}
+					<button
+						class:chosen={storeys === count}
+						aria-pressed={storeys === count}
+						data-testid={`basement-storeys-${count}`}
+						onclick={() => chooseStoreys(count)}>{count === 0 ? 'None' : count}</button
+					>
+				{/each}
+			</div>
+			<label class="height"
+				><span>Storey height <strong>{storeyHeight.toFixed(2)} m</strong></span>
+				<input
+					type="range"
+					min={MIN_BASEMENT_STOREY_HEIGHT}
+					max={MAX_BASEMENT_STOREY_HEIGHT}
+					step="0.25"
+					value={storeyHeight}
+					data-testid="basement-storey-height"
+					oninput={(e) => setHeight(Number((e.currentTarget as HTMLInputElement).value))}
+				/></label
+			>
+			<small
+				>{selected === 'earth'
+					? 'Basements need a stone foundation.'
+					: storeys === 0
+						? 'B on an existing stone foundation adds a one-storey basement.'
+						: `New stone foundations get ${storeys} ${storeys === 1 ? 'storey' : 'storeys'}, ${(storeys * storeyHeight).toFixed(1)} m deep. B on an existing one adds the same.`}</small
+			>
+		</fieldset>
 		<p class="hint">
 			Both use the same two-corner placement and support walls, floors and other building pieces.
 			Grass blades are cleared from the footprint.
@@ -192,6 +240,45 @@
 		background: linear-gradient(#66803c 0 30%, #4e682e 30% 45%, #77603d 45%, #423423);
 		border-radius: 40% 40% 10% 10%;
 		border-top: 6px solid #89a455;
+	}
+	.basement {
+		border: 1px solid #896535;
+		border-radius: 10px;
+		padding: 0.8rem 1rem 1rem;
+		margin: 0 0 1rem;
+	}
+	.basement legend {
+		font-family: Georgia, serif;
+		padding: 0 0.4rem;
+		color: #e0b968;
+	}
+	.storeys {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.5rem;
+	}
+	.storeys button {
+		padding: 0.5rem;
+	}
+	.storeys button.chosen {
+		border-color: #efc466;
+		background: #ad7c2430;
+		box-shadow: inset 0 0 0 1px #efc46655;
+	}
+	.height {
+		display: grid;
+		gap: 0.3rem;
+		margin: 0.8rem 0 0.5rem;
+		font-size: 0.85rem;
+	}
+	.height strong {
+		display: inline;
+		font-family: inherit;
+		font-size: inherit;
+		margin: 0;
+	}
+	.height input {
+		accent-color: #e0b968;
 	}
 	.close {
 		font-size: 1.6rem;

@@ -492,7 +492,10 @@ export class StairTool implements BuildTool {
 			depth,
 			this.buildingSettings.buildingGridSize
 		);
-		return snapStairFootprintToFoundation(raw, cellsX, cellsZ);
+		const placement = snapStairFootprintToFoundation(raw, cellsX, cellsZ);
+		// A basement storey is walled in: no approach flight out to the ground from down there.
+		if (placement?.approach && this.activeLevelIndex < 0) return null;
+		return placement;
 	}
 
 	private normalizedFootprint(): {
@@ -1257,7 +1260,11 @@ export class StairTool implements BuildTool {
 	private findMatchingLevel(topLocalY: number): number | null {
 		if (!this.foundationId) return null;
 		const tolerance = this.buildingSettings.buildingGridSize;
-		for (let index = 0; index <= this.activeLevelIndex + 4; index++) {
+		for (
+			let index = Math.min(0, this.activeLevelIndex);
+			index <= this.activeLevelIndex + 4;
+			index++
+		) {
 			const level = this.levelManager.getLevel(this.foundationId, index);
 			if (level && Math.abs(level.baseY - topLocalY) <= tolerance) return index;
 		}

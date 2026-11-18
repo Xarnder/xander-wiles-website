@@ -38,6 +38,9 @@ type MigrationStep = (world: Record<string, unknown>) => Record<string, unknown>
  * cannot drop a lake under a building that was placed on the old terrain. New worlds opt in.
  */
 const MIGRATIONS: Record<number, MigrationStep> = {
+	// Version 11 adds basements (`foundations[].basement`, `slabs[].role`) and joins
+	// (`foundations[].joinId`), all optional: an older world has none, so it carries over as it is.
+	10: (world) => ({ ...world, schemaVersion: 11 }),
 	9: (world) => {
 		const environment =
 			world.environment && typeof world.environment === 'object'

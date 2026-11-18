@@ -1,7 +1,7 @@
 # Forest Drift — Basements and Joined Foundations: Technical Plan
 
 **Feature cycle:** 2026-11-18
-**Status:** **Revision 2: approved (2026-11-18). [Phase 0](../phase-0/implementation.md) complete;** its record lists where it differs from this plan (the format bump moves to Phase 1; simpler walking rules). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
+**Status:** **Revision 2: approved (2026-11-18). [Phase 0](../phase-0/implementation.md) and [Phase 1](../phase-1/implementation.md) complete;** their records list where they differ from this plan (Phase 0: simpler walking rules; Phase 1: `B` not `F`, containment by clamping, the deck's look, stone only). Decisions are locked in [`01-questions-and-decisions.md`](01-questions-and-decisions.md).
 
 ---
 
@@ -167,12 +167,12 @@ For a foundation with `basement = { storeys: n, storeyHeight: h }`, depth `D = n
 - **`E` panel:** `basementStoreys: 0 | 1 | 2 | 3` and `basementStoreyHeight` in `BuildingSettings`, copied onto the definition when placing.
   - The preview shows the depth as a translucent box below the top, with a line at each storey.
   - Placement is refused where the lowest floor would be below a river or lake's surface within the footprint ("Too close to water for a basement").
-- **`F` on an existing foundation** (new key action `foundation.basement`):
+- **`B` on an existing foundation** (new key action `foundation.basement`; `F` toggles flight on foot, Phase 1):
   - adds a basement with the panel's settings: sets `basement`, lowers `bottomY`, creates the deck and basement-floor slabs, rebuilds terrain holes;
   - removes it when it has one and nothing is on its storeys but the deck and the basement floors ("Empty the basement first").
   - Each is one undo step.
   - Changing the storeys of an existing basement means removing it and adding it again. v1 has no resizing.
-- **Hints:** "F: Add basement (2 storeys, 6 m)", "F: Remove basement".
+- **Hints:** "B: Add basement (2 storeys, 6 m)", "B: Remove basement".
 
 ## 5. Joining: the maths (pure, `building/foundationJoinMath.ts`)
 
@@ -310,7 +310,7 @@ For a foundation with `basement = { storeys: n, storeyHeight: h }`, depth `D = n
 | Unit  | `foundationJoinMath`: shared edges (full, partial, corner-only), union-find with stale ids, the anchor and `joinId` choice (placing, merging, ties, separating, a deleted anchor), the outline (L, T, U, ring with a hole), the inside tests, frame offsets, the 8 limit. |
 | Unit  | `BuildingView` consumers: a wall supported across a seam, skirting under a ceiling across a seam, a stair cutting two slabs, corner snap across members, the one-slab rule.                                                                                               |
 | Unit  | Deletion counts and crossing pieces; splitting a building; schema v11 validation, the deck rule, round trip.                                                                                                                                                              |
-| E2E   | Basement: place a three-storey basement with `E` → walk round it → stairs up from each storey → walk down to Deep Basement and back → `[` / `]` → remove a basement floor for a tall hall → add a one-storey basement under an existing house with `F` → undo → reload.   |
+| E2E   | Basement: place a three-storey basement with `E` → walk round it → stairs up from each storey → walk down to Deep Basement and back → `[` / `]` → remove a basement floor for a tall hall → add a one-storey basement under an existing house with `B` → undo → reload.   |
 | E2E   | Joining: place a foundation against a cottage (heights match, "Joins") → Corner Walls across the seam → ceiling and a roof over both → no seam frame → `L` refuses to separate → remove the barn and count → `Alt` keeps one separate → `R` raises.                       |
 | E2E   | Joined basements become one; online: two browsers, one builds a basement and joins, the other sees it and walks down.                                                                                                                                                     |
 | Perf  | §9, at full speed and 4× slower. Chromium, WebKit, Firefox.                                                                                                                                                                                                               |
@@ -323,7 +323,7 @@ For a foundation with `basement = { storeys: n, storeyHeight: h }`, depth `D = n
 
 ## 12. Definition of done
 
-- [ ] Basements: place with `E`, add and remove with `F`, real underground space, stairs down, Basement in the floor selector.
+- [ ] Basements: place with `E`, add and remove with `B`, real underground space, stairs down, Basement in the floor selector.
 - [ ] Joining: on placement with matching height, `L`, `R` raise, shared storeys, every tool across the seam, clean seam, joined basements, removing and splitting.
 - [ ] Undo, save, load, export and import for all of it.
 - [ ] Online in a v11 room, after a server deploy you approve.
@@ -337,4 +337,4 @@ For a foundation with `basement = { storeys: n, storeyHeight: h }`, depth `D = n
 3. Nothing else (creatures, items, the camera, water drawing) assumes the ground is never below a foundation's top.
 4. `stairReachesSlab` and slab openings work unchanged on a `localY: 0` deck slab.
 5. All the same-foundation checks are the ones listed in §2. A sweep for `foundationId ===` comparisons in `building/` finds the rest.
-6. The new keys (`F`, `L`, `R`, `Alt` in the Foundation tool) don't clash with other actions (`input/conflicts.ts`). `R` is `tool.rotate` elsewhere, but the Foundation tool has no rotation.
+6. The new keys don't clash with other actions (`input/conflicts.ts`). Phase 1: `F` toggles flight on foot, so basements use `B` (only other tools' snapping uses it). `L` is the global graphics-quality key, so Phase 2 picks another for joining. `R` is `tool.rotate` elsewhere, but the Foundation tool has no rotation.

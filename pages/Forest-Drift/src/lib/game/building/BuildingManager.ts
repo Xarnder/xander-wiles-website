@@ -14,7 +14,10 @@ import {
 	isLocalInsideFoundation
 } from './FoundationLocalMath';
 import type { BuildingGridPoint } from './FoundationLocalMath';
+import { basementOccupantCount, basementSlabPlans } from './basementMath';
+import { isValidBasement, type BasementDefinition } from './basementTypes';
 import type { FoundationManager } from './FoundationManager';
+import type { FoundationDefinition } from './FoundationTypes';
 import type { BuildingMaterialDefinition } from './MaterialTypes';
 import { isFootprintCompatibleWithRoofType } from './RoofGeometryBuilder';
 import type { RoofManager } from './RoofManager';
@@ -576,9 +579,108 @@ export class BuildingManager {
 	removeSlab(id: string): boolean {
 		this.revision++;
 		const existing = this.slabManager.getSlab(id);
+		// The floor over a basement is removed only with the basement (removeBasement).
+		if (
+			existing?.role === 'deck' &&
+			this.foundationManager.getFoundation(existing.foundationId)?.basement
+		)
+			return false;
 		const removed = this.slabManager.removeSlab(id);
 		if (removed && existing) this.rebuildSkirtingForFoundation(existing.foundationId);
 		return removed;
+	}
+
+	/**
+	 * Gives a foundation a basement (basementTypes.ts): its definition gains `basement`, so it is drawn
+	 * as a footing and stone walls and the terrain under it is cut away, and the deck over it and the
+	 * floors between its storeys are created as slabs. Nothing already built moves: it is all stored
+	 * relative to the foundation's top, which stays where it is.
+	 */
+	addBasement(
+		foundationId: string,
+		basement: BasementDefinition,
+		floorThickness: number
+	): BuildingMutationResult<FoundationDefinition> {
+		this.revision++;
+		const foundation = this.foundationManager.getFoundation(foundationId);
+		if (!foundation) return { valid: false, reason: 'Foundation not found' };
+		if (foundation.basement) return { valid: false, reason: 'Already has a basement' };
+		if (!isValidBasement(basement)) return { valid: false, reason: 'Invalid basement' };
+		if (foundation.style === 'earth')
+			return { valid: false, reason: 'Basements need a stone foundation' };
+		const withBasement: FoundationDefinition = { ...foundation, basement: { ...basement } };
+		const plans = basementSlabPlans(
+			withBasement,
+			this.getVertexSpacing(),
+			this.getBuildingGridSize(),
+			floorThickness
+		);
+		if (plans.length === 0)
+			return { valid: false, reason: "This world's grid doesn't fit a basement" };
+		const gridSize = this.getBuildingGridSize();
+		for (const plan of plans) {
+			const local = plan.points.map((p) => ({ x: p.gridX * gridSize, z: p.gridZ * gridSize }));
+			if (this.slabManager.findOverlappingSlabAtLevel(foundationId, plan.localY, local))
+				return { valid: false, reason: 'A floor is already at a basement storey’s height' };
+		}
+		this.foundationManager.updateFoundation(withBasement);
+		for (const plan of plans)
+			this.slabManager.addSlab({
+				id: crypto.randomUUID(),
+				foundationId,
+				type: plan.type,
+				role: plan.role,
+				levelIndex: plan.levelIndex,
+				localY: plan.localY,
+				thickness: plan.thickness,
+				points: plan.points,
+				openings: []
+			});
+		this.rebuildSkirtingForFoundation(foundationId);
+		return { valid: true, value: withBasement };
+	}
+
+	/** How many pieces stand in a foundation's basement (see `basementOccupantCount`). */
+	countBasementOccupants(foundationId: string): number {
+		const ofFoundation = <T extends { foundationId: string }>(list: readonly T[]) =>
+			list.filter((item) => item.foundationId === foundationId);
+		return basementOccupantCount({
+			walls: this.wallManager.getWallsForFoundation(foundationId),
+			wallPaths: this.wallPathManager.getPathsForFoundation(foundationId),
+			slabs: this.slabManager.getSlabsForFoundation(foundationId),
+			stairs: this.stairManager.getStairsForFoundation(foundationId),
+			roofs: ofFoundation(this.roofManager.getAllRoofs()),
+			floorDetails: ofFoundation(this.floorDetailManager.getAllDetails()),
+			skirtingRuns: ofFoundation(this.skirtingRunManager?.getAll() ?? [])
+		});
+	}
+
+	/**
+	 * Takes a basement away again: only while it's empty, apart from the deck and floors it came with
+	 * (`otherOccupants` counts things this class doesn't own, such as Mini Builds and furniture down
+	 * there). Those slabs go, and the foundation is solid again.
+	 */
+	removeBasement(
+		foundationId: string,
+		otherOccupants = 0
+	): BuildingMutationResult<FoundationDefinition> {
+		this.revision++;
+		const foundation = this.foundationManager.getFoundation(foundationId);
+		if (!foundation) return { valid: false, reason: 'Foundation not found' };
+		if (!foundation.basement) return { valid: false, reason: 'No basement' };
+		const occupants = this.countBasementOccupants(foundationId) + otherOccupants;
+		if (occupants > 0)
+			return {
+				valid: false,
+				reason: `Empty the basement first (${occupants} ${occupants === 1 ? 'piece' : 'pieces'})`
+			};
+		for (const slab of this.slabManager.getSlabsForFoundation(foundationId))
+			if (slab.role) this.slabManager.removeSlab(slab.id);
+		const solid: FoundationDefinition = { ...foundation };
+		delete solid.basement;
+		this.foundationManager.updateFoundation(solid);
+		this.rebuildSkirtingForFoundation(foundationId);
+		return { valid: true, value: solid };
 	}
 
 	private rebuildSkirtingForFoundation(foundationId: string): void {

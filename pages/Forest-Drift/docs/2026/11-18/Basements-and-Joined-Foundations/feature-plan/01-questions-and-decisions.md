@@ -14,7 +14,7 @@
 | Q2  | Doors and windows in basement walls | Answered              | **Later.** v1 basements are closed; stairs are the way in.                                                                                               |
 | Q3  | How foundations join                | Answered              | **Automatically when placed against one**, matching its height; `L` on a seam joins or separates existing ones.                                          |
 | Q4  | Neighbours at different heights     | Answered              | **Raise to match:** a new foundation rises to meet a higher neighbour; a lower neighbour is raised only when you press `R`. No split-level joins.        |
-| Q5  | Making a basement                   | `Recommended default` | Chosen in the Foundation tool's `E` panel, or added to an existing foundation with `F`.                                                                  |
+| Q5  | Making a basement                   | `Recommended default` | Chosen in the Foundation tool's `E` panel, or added to an existing foundation with `B`.                                                                  |
 | Q6  | What can cross a join               | `Recommended default` | Everything the build tools make: walls, wall paths, ceilings, floors, roofs, stairs, floor detailing, skirting, fences. Mini Builds already go anywhere. |
 | Q7  | Buildings with a gap between them   | `Recommended default` | Fill the gap with a foundation that joins both. No bridges in v1.                                                                                        |
 | Q8  | Removing a joined foundation        | `Recommended default` | Deletes what crosses onto it too, and the confirmation counts it.                                                                                        |
@@ -75,7 +75,7 @@ A stone foundation can't sit below the ground under it, because the ground would
 ## Q5: Making a basement
 
 - **Default:** the Foundation tool's `E` panel has **Basement storeys: None / 1 / 2 / 3** and a storey height slider.
-  - Aiming the Foundation tool at an existing foundation shows "F: Add basement (2 storeys, 6 m)" with the panel's settings, or "F: Remove basement" when it has one and it's empty (nothing but the floors it came with).
+  - Aiming the Foundation tool at an existing foundation shows "B: Add basement (2 storeys, 6 m)" with the panel's settings, or "B: Remove basement" when it has one and it's empty (nothing but the floors it came with).
   - Adding a basement under a built house is fine: nothing on the Ground Floor moves.
 - **Alternative:** only when placing.
 

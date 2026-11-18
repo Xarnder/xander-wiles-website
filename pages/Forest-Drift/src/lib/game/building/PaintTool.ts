@@ -8,6 +8,7 @@ import type { BuildTool } from './BuildToolManager';
 import type { BuildingSettings, BuildUiState, ToolId } from './FoundationTypes';
 import { MaterialPresetStore } from './MaterialPresetStore';
 import type { BuildingMaterialDefinition, MaterialKind, MaterialPreset } from './MaterialTypes';
+import { slabMaterialKind } from './SlabManager';
 import type { PaintPickUserData, PaintTarget } from './PaintTypes';
 import { paintTargetKey, resolvePaintTarget } from './PaintTypes';
 import { ROOF_TYPE_LABELS } from './RoofTypes';
@@ -313,7 +314,7 @@ export class PaintTool implements BuildTool {
 		if (target.type === 'foundation') return 'foundation';
 		if (target.type === 'slab') {
 			const slab = this.buildingManager.getSlab(target.slabId);
-			return slab?.type === 'flat-roof' ? 'slab-roof' : 'slab-floor';
+			return slab ? slabMaterialKind(slab) : 'slab-floor';
 		}
 		if (target.type === 'roof') return 'slab-roof';
 		if (target.type === 'skirting-run') return 'skirting';
