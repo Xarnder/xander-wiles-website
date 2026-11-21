@@ -16,7 +16,7 @@
   function updateOpen(value: boolean) { open = value; if (!value) shop.panel = null; }
   const close = () => shop.panel = null;
 </script>
-<Dialog bind:open={() => open, updateOpen} {title} drawer={shop.panel === 'cart' || shop.panel === 'wishlist' || shop.panel === 'menu'}>
+<Dialog bind:open={() => open, updateOpen} {title} drawer={shop.panel === 'cart' || shop.panel === 'wishlist' || shop.panel === 'menu'} side={shop.panel === 'menu' ? 'left' : 'right'}>
   {#if shop.panel === 'cart'}
     {#if shop.cart.length}
       <p class="subtle">{shop.unitCount} considered {shop.unitCount === 1 ? 'piece' : 'pieces'} for your home.</p>
