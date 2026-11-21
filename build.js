@@ -24,6 +24,7 @@ const gifMakerSrc = path.join(rootDir, 'pages', 'GIF-Maker');
 const breathingAppSrc = path.join(rootDir, 'pages', 'Tidal-Breathing-Exercise');
 const forestDriftSrc = path.join(rootDir, 'pages', 'Forest-Drift');
 const silenceCutterSrc = path.join(rootDir, 'pages', 'Silence-Cutter');
+const aldescaSrc = path.join(rootDir, 'pages', 'ALDESCA');
 
 /** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
 const nestedBuildEnv = {
@@ -32,12 +33,12 @@ const nestedBuildEnv = {
     HUSKY: '0',
 };
 
-function npmInstallAndBuild(appSrc, label) {
+function npmInstallAndBuild(appSrc, label, buildScript = 'build') {
     process.chdir(appSrc);
     // Keep the audited dependency versions and local security overrides reproducible.
     console.log(`  [${label}] npm ci`);
     execSync('npm ci --no-audit --no-fund', { stdio: 'inherit', env: nestedBuildEnv });
-    execSync('npm run build', { stdio: 'inherit', env: nestedBuildEnv });
+    execSync(`npm run ${buildScript}`, { stdio: 'inherit', env: nestedBuildEnv });
 }
 
 // 1. Clean Start
@@ -150,6 +151,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Silence-Cutter') ||
                 rel.startsWith(path.join('pages', 'Silence-Cutter') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'ALDESCA') ||
+                rel.startsWith(path.join('pages', 'ALDESCA') + path.sep)
             ) {
                 return false;
             }
@@ -487,6 +494,23 @@ for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
         fs.copyFileSync(srcIcon, path.join(silenceCutterDest, name));
     }
 }
+
+// Build ALDESCA with the same public subdirectory as the rest of the website.
+console.log('Building ALDESCA storefront...');
+try {
+    npmInstallAndBuild(aldescaSrc, 'ALDESCA', 'build:site');
+} catch (error) {
+    console.error('Failed to build ALDESCA:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+const aldescaDist = path.join(aldescaSrc, 'dist');
+if (!fs.existsSync(path.join(aldescaDist, 'index.html'))) {
+    console.error('ALDESCA dist/index.html not found!');
+    process.exit(1);
+}
+fs.cpSync(aldescaDist, path.join(deployOut, 'pages', 'ALDESCA'), { recursive: true });
 
 // 13. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');

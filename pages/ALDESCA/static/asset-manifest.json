@@ -1,0 +1,535 @@
+{
+  "version": 1,
+  "assets": {
+    "home-hero": {
+      "src": "/images/home-hero.webp",
+      "width": 627,
+      "height": 397,
+      "alt": "Warm dining room with an opal pendant above a travertine table, curved upholstered chairs and an olive branch arrangement.",
+      "intendedUse": "Homepage split hero",
+      "aspectRatio": 1.5793,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 397,
+          "top": 140,
+          "width": 627,
+          "height": 397
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      },
+      "srcSmall": "/images/home-hero-small.webp",
+      "smallWidth": 314
+    },
+    "halo-card": {
+      "src": "/images/halo-card.webp",
+      "width": 232,
+      "height": 219,
+      "alt": "Flattened oval opal-glass Halo pendant, softly glowing below a dark fitting and thin cable.",
+      "intendedUse": "Halo product card",
+      "aspectRatio": 1.0594,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/homepage-ui-removed.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 29,
+          "top": 620,
+          "width": 232,
+          "height": 219
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "halo-main": {
+      "src": "/images/halo-main.webp",
+      "width": 556,
+      "height": 533,
+      "alt": "Large glowing Halo pendant against a warm plaster wall, with olive branches, books and a stone surface below.",
+      "intendedUse": "Halo main gallery and zoom",
+      "aspectRatio": 1.0432,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/product-ui-removed.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 29,
+          "top": 170,
+          "width": 556,
+          "height": 533
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      },
+      "srcSmall": "/images/halo-main-small.webp",
+      "smallWidth": 278
+    },
+    "halo-front-thumbnail": {
+      "src": "/images/halo-front-thumbnail.webp",
+      "width": 126,
+      "height": 127,
+      "alt": "Front view of the glowing oval Halo pendant beneath its dark fitting and black cable.",
+      "intendedUse": "Halo first gallery thumbnail",
+      "aspectRatio": 0.9921,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "ALDESCA Halo Pendant Light product page.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 32,
+          "top": 719,
+          "width": 126,
+          "height": 127
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "halo-interior-thumbnail": {
+      "src": "/images/halo-interior-thumbnail.webp",
+      "width": 130,
+      "height": 133,
+      "alt": "Halo pendant above a travertine table beside a tall sunlit window.",
+      "intendedUse": "Halo interior gallery thumbnail",
+      "aspectRatio": 0.9774,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "ALDESCA Halo Pendant Light product page.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 174,
+          "top": 716,
+          "width": 130,
+          "height": 133
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "halo-interior": {
+      "src": "/images/halo-interior.webp",
+      "width": 627,
+      "height": 397,
+      "alt": "Halo pendant illuminating a travertine dining table in a softly lit, neutral interior.",
+      "intendedUse": "Halo interior gallery",
+      "aspectRatio": 1.5793,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 397,
+          "top": 140,
+          "width": 627,
+          "height": 397
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      },
+      "srcSmall": "/images/halo-interior-small.webp",
+      "smallWidth": 314
+    },
+    "halo-fitting-detail": {
+      "src": "/images/halo-fitting-detail.webp",
+      "width": 131,
+      "height": 133,
+      "alt": "Close view of the Halo pendant’s dark cylindrical fitting, black cable and curved opal shade.",
+      "intendedUse": "Halo fitting gallery detail",
+      "aspectRatio": 0.985,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "ALDESCA Halo Pendant Light product page.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 316,
+          "top": 716,
+          "width": 131,
+          "height": 133
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "halo-glass-detail": {
+      "src": "/images/halo-glass-detail.webp",
+      "width": 126,
+      "height": 133,
+      "alt": "Close view of the rounded edge of the warm, illuminated opal-glass Halo shade.",
+      "intendedUse": "Halo glass gallery detail",
+      "aspectRatio": 0.9474,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "ALDESCA Halo Pendant Light product page.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 459,
+          "top": 716,
+          "width": 126,
+          "height": 133
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "arc-table-lamp": {
+      "src": "/images/arc-table-lamp.webp",
+      "width": 231,
+      "height": 219,
+      "alt": "Arc table lamp with a rounded speckled ceramic base and an ivory fabric shade.",
+      "intendedUse": "Arc product card and supporting gallery",
+      "aspectRatio": 1.0548,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/homepage-ui-removed.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 274,
+          "top": 620,
+          "width": 231,
+          "height": 219
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "travertine-coffee-table": {
+      "src": "/images/travertine-coffee-table.webp",
+      "width": 232,
+      "height": 219,
+      "alt": "Low round travertine coffee table with a broad stone top and a substantial cylindrical pedestal.",
+      "intendedUse": "Travertine product card and supporting gallery",
+      "aspectRatio": 1.0594,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/homepage-ui-removed.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 519,
+          "top": 620,
+          "width": 232,
+          "height": 219
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "sculptural-ceramic-vase": {
+      "src": "/images/sculptural-ceramic-vase.webp",
+      "width": 232,
+      "height": 219,
+      "alt": "Organic pale ceramic vase with a narrow opening and softly irregular, chalky surface.",
+      "intendedUse": "Vase product card and supporting gallery",
+      "aspectRatio": 1.0594,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/homepage-ui-removed.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 764,
+          "top": 620,
+          "width": 232,
+          "height": 219
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "category-lighting": {
+      "src": "/images/category-lighting.webp",
+      "width": 233,
+      "height": 188,
+      "alt": "Glowing oval pendant hanging beside olive branches against a warm plaster wall.",
+      "intendedUse": "Lighting category tile",
+      "aspectRatio": 1.2394,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 30,
+          "top": 1003,
+          "width": 233,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "category-tables": {
+      "src": "/images/category-tables.webp",
+      "width": 233,
+      "height": 188,
+      "alt": "Travertine side table with books and a ceramic bowl beside an upholstered chair.",
+      "intendedUse": "Tables category tile",
+      "aspectRatio": 1.2394,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 275,
+          "top": 1003,
+          "width": 233,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "category-furniture": {
+      "src": "/images/category-furniture.webp",
+      "width": 231,
+      "height": 188,
+      "alt": "Curved oatmeal upholstered armchair beside a tall window in soft daylight.",
+      "intendedUse": "Furniture category tile",
+      "aspectRatio": 1.2287,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 521,
+          "top": 1003,
+          "width": 231,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "category-homeware": {
+      "src": "/images/category-homeware.webp",
+      "width": 232,
+      "height": 188,
+      "alt": "Ceramic vase with olive branches, a small bowl, books and a candle on a stone surface.",
+      "intendedUse": "Homeware category tile",
+      "aspectRatio": 1.234,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 765,
+          "top": 1003,
+          "width": 232,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      }
+    },
+    "home-closing-editorial": {
+      "src": "/images/home-closing-editorial.webp",
+      "width": 443,
+      "height": 192,
+      "alt": "Textured ceramic vase, shallow bowl and stacked books arranged on a travertine surface in warm sunlight.",
+      "intendedUse": "Homepage closing editorial",
+      "aspectRatio": 2.3073,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "A considered home by Aldesca.png",
+        "originalSource": "A considered home by Aldesca.png",
+        "crop": {
+          "left": 30,
+          "top": 1263,
+          "width": 443,
+          "height": 192
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      },
+      "srcSmall": "/images/home-closing-editorial-small.webp",
+      "smallWidth": 222
+    },
+    "product-editorial": {
+      "src": "/images/product-editorial.webp",
+      "width": 583,
+      "height": 274,
+      "alt": "Halo pendant above a round travertine dining table, surrounded by curved chairs and softly lit natural materials.",
+      "intendedUse": "Product lighting editorial",
+      "aspectRatio": 2.1277,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot crop",
+        "source": "ALDESCA Halo Pendant Light product page.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 413,
+          "top": 876,
+          "width": 583,
+          "height": 274
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Native-resolution crop and WebP encoding; no retouching, upscaling or generated detail."
+      },
+      "srcSmall": "/images/product-editorial-small.webp",
+      "smallWidth": 292
+    },
+    "arc-related": {
+      "src": "/images/arc-related.webp",
+      "width": 312,
+      "height": 188,
+      "alt": "Arc ceramic table lamp and ivory fabric shade on a softly lit neutral background.",
+      "intendedUse": "Wider related Arc product card",
+      "aspectRatio": 1.6596,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/product-ui-removed.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 29,
+          "top": 1226,
+          "width": 312,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "table-related": {
+      "src": "/images/table-related.webp",
+      "width": 312,
+      "height": 188,
+      "alt": "Broad round travertine coffee table with a low cylindrical pedestal on a neutral background.",
+      "intendedUse": "Wider related travertine product card",
+      "aspectRatio": 1.6596,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/product-ui-removed.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 356,
+          "top": 1226,
+          "width": 312,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    },
+    "vase-related": {
+      "src": "/images/vase-related.webp",
+      "width": 312,
+      "height": 188,
+      "alt": "Sculptural chalky ceramic vase with a gently asymmetric body on a neutral background.",
+      "intendedUse": "Wider related ceramic vase product card",
+      "aspectRatio": 1.6596,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "provenance": {
+        "type": "user-supplied screenshot with generative UI removal",
+        "source": "source-assets/product-ui-removed.png",
+        "originalSource": "ALDESCA Halo Pendant Light product page.png",
+        "crop": {
+          "left": 683,
+          "top": 1226,
+          "width": 312,
+          "height": 188
+        },
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "processing": "Built-in imagegen edit removed baked-in wishlist hearts or zoom overlay. Composition visually checked against the original; slight tonal/texture changes remain. Native-resolution crop and WebP encoding; no upscaling."
+      }
+    }
+  }
+}

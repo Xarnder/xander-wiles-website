@@ -1,0 +1,279 @@
+[
+  {
+    "sample": "heading",
+    "reference": {
+      "width": 241,
+      "height": 37
+    },
+    "results": [
+      {
+        "family": "Georgia",
+        "size": 38,
+        "spacing": -0.5,
+        "score": 0.6542,
+        "width": 242,
+        "height": 37
+      },
+      {
+        "family": "Baskerville",
+        "size": 42,
+        "spacing": -0.5,
+        "score": 0.6452,
+        "width": 241,
+        "height": 39
+      },
+      {
+        "family": "Times New Roman",
+        "size": 41.5,
+        "spacing": -0.5,
+        "score": 0.6356,
+        "width": 243,
+        "height": 38
+      },
+      {
+        "family": "Baskervville",
+        "size": 38.5,
+        "spacing": -0.5,
+        "score": 0.571,
+        "width": 241,
+        "height": 39
+      },
+      {
+        "family": "Aldesca Tinos",
+        "size": 41.5,
+        "spacing": -0.5,
+        "score": 0.5568,
+        "width": 243,
+        "height": 38
+      },
+      {
+        "family": "Libre Caslon Display",
+        "size": 41.5,
+        "spacing": 0.5,
+        "score": 0.4736,
+        "width": 240,
+        "height": 40
+      },
+      {
+        "family": "Aldesca Bodoni",
+        "size": 38,
+        "spacing": 0,
+        "score": 0.2052,
+        "width": 266,
+        "height": 38
+      }
+    ]
+  },
+  {
+    "sample": "product-title",
+    "reference": {
+      "width": 364,
+      "height": 43
+    },
+    "results": [
+      {
+        "family": "Georgia",
+        "size": 43.5,
+        "spacing": -0.5,
+        "score": 0.547,
+        "width": 366,
+        "height": 42
+      },
+      {
+        "family": "Aldesca Tinos",
+        "size": 45.5,
+        "spacing": 0.5,
+        "score": 0.4095,
+        "width": 364,
+        "height": 42
+      },
+      {
+        "family": "Times New Roman",
+        "size": 45.5,
+        "spacing": 0.5,
+        "score": 0.4006,
+        "width": 364,
+        "height": 42
+      },
+      {
+        "family": "Baskervville",
+        "size": 43,
+        "spacing": -0.5,
+        "score": 0.3345,
+        "width": 365,
+        "height": 43
+      },
+      {
+        "family": "Baskerville",
+        "size": 47,
+        "spacing": -0.5,
+        "score": 0.3155,
+        "width": 364,
+        "height": 43
+      },
+      {
+        "family": "Libre Caslon Display",
+        "size": 49.5,
+        "spacing": 0.5,
+        "score": 0.2696,
+        "width": 363,
+        "height": 48
+      },
+      {
+        "family": "Aldesca Bodoni",
+        "size": 43,
+        "spacing": 0.5,
+        "score": 0.2211,
+        "width": 390,
+        "height": 44
+      }
+    ]
+  },
+  {
+    "sample": "wordmark",
+    "reference": {
+      "width": 283,
+      "height": 39
+    },
+    "results": [
+      {
+        "family": "Times New Roman",
+        "size": 58,
+        "spacing": 3,
+        "score": 0.6591,
+        "width": 285,
+        "height": 41
+      },
+      {
+        "family": "Baskerville",
+        "size": 58.5,
+        "spacing": 2,
+        "score": 0.6387,
+        "width": 282,
+        "height": 41
+      },
+      {
+        "family": "Aldesca Tinos",
+        "size": 58,
+        "spacing": 3,
+        "score": 0.6242,
+        "width": 285,
+        "height": 39
+      },
+      {
+        "family": "Baskervville",
+        "size": 53,
+        "spacing": 4,
+        "score": 0.5974,
+        "width": 284,
+        "height": 39
+      },
+      {
+        "family": "Libre Caslon Display",
+        "size": 56.5,
+        "spacing": 5,
+        "score": 0.5569,
+        "width": 284,
+        "height": 41
+      },
+      {
+        "family": "Georgia",
+        "size": 56,
+        "spacing": 4,
+        "score": 0.5454,
+        "width": 281,
+        "height": 41
+      },
+      {
+        "family": "Aldesca Bodoni",
+        "size": 53.5,
+        "spacing": 5,
+        "score": 0.5011,
+        "width": 282,
+        "height": 42
+      }
+    ]
+  },
+  {
+    "sample": "card-name",
+    "reference": {
+      "width": 144,
+      "height": 16
+    },
+    "results": [
+      {
+        "family": "Arimo",
+        "size": 16,
+        "spacing": 0.5,
+        "score": 0.5296,
+        "width": 143,
+        "height": 15
+      },
+      {
+        "family": "Helvetica",
+        "size": 16,
+        "spacing": 0.5,
+        "score": 0.5281,
+        "width": 143,
+        "height": 15
+      },
+      {
+        "family": "Arial",
+        "size": 16,
+        "spacing": 0.5,
+        "score": 0.5154,
+        "width": 143,
+        "height": 15
+      },
+      {
+        "family": "Aldesca Sans",
+        "size": 18,
+        "spacing": -0.5,
+        "score": 0.4389,
+        "width": 146,
+        "height": 17
+      }
+    ]
+  },
+  {
+    "sample": "body-line",
+    "reference": {
+      "width": 276,
+      "height": 15
+    },
+    "results": [
+      {
+        "family": "Arimo",
+        "size": 15,
+        "spacing": 0.5,
+        "score": 0.373,
+        "width": 277,
+        "height": 14
+      },
+      {
+        "family": "Arial",
+        "size": 17.5,
+        "spacing": -0.5,
+        "score": 0.368,
+        "width": 279,
+        "height": 16
+      },
+      {
+        "family": "Helvetica",
+        "size": 15,
+        "spacing": 0.5,
+        "score": 0.3624,
+        "width": 277,
+        "height": 14
+      },
+      {
+        "family": "Aldesca Sans",
+        "size": 15.5,
+        "spacing": 0,
+        "score": 0.3499,
+        "width": 274,
+        "height": 14
+      }
+    ]
+  }
+]

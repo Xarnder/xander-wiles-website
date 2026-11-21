@@ -1,0 +1,42 @@
+{
+  "name": "aldesca-storefront",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.17"
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "build:site": "ALDESCA_BASE=/pages/ALDESCA vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "playwright test",
+    "assets": "node scripts/prepare-assets.mjs"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
+  "dependencies": {
+    "@fontsource/arimo": "^5.3.0",
+    "@fontsource/gelasio": "^5.3.0",
+    "@fontsource/tinos": "^5.3.0"
+  },
+  "devDependencies": {
+    "@fontsource/baskervville": "^5.3.0",
+    "@fontsource/bodoni-moda": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/libre-caslon-display": "^5.3.0",
+    "@playwright/test": "^1.60.0",
+    "@sveltejs/adapter-static": "^4.0.1",
+    "@sveltejs/kit": "^3.4.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^24.0.0",
+    "sharp": "^0.34.5",
+    "svelte": "^5.59.1",
+    "svelte-check": "^4.7.8",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.8"
+  }
+}
