@@ -26,10 +26,12 @@ const forestDriftSrc = path.join(rootDir, 'pages', 'Forest-Drift');
 const silenceCutterSrc = path.join(rootDir, 'pages', 'Silence-Cutter');
 const aldescaSrc = path.join(rootDir, 'pages', 'ALDESCA');
 
-/** Env for nested app installs/builds (skip Playwright browser download on CI/Vercel). */
+/** Env for nested app installs/builds (skip downloads unused by static builds). */
 const nestedBuildEnv = {
     ...process.env,
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+    // ONNX's Linux installer otherwise downloads optional CUDA binaries from GitHub.
+    ONNXRUNTIME_NODE_INSTALL_CUDA: 'skip',
     HUSKY: '0',
 };
 
