@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -42,6 +43,7 @@ async function setup(initialUser = null, fetchTitle) {
         this.open = false;
     };
     const context = dom.getInternalVMContext();
+    w.matchMedia = () => ({ matches: true, addEventListener() {} });
     w.fetch = fetchTitle;
     const snap = () => ({
         docs: records.map((record) => ({ id: record.id, data: () => record })),
@@ -102,9 +104,10 @@ async function setup(initialUser = null, fetchTitle) {
     const module = new vm.SourceTextModule(source, { context });
     const cache = new Map();
     await module.link(async function link(specifier) {
-        if (specifier === './media-editor.mjs') {
+        if (['./media-editor.mjs', './discover-mobile.mjs', './compact-mobile.mjs', './editor-preferences.mjs'].includes(specifier)) {
             if (!cache.has(specifier)) {
-                const shared = new vm.SourceTextModule(await readFile(new URL(specifier, root), 'utf8'), { context });
+                // Cache before yielding so concurrent imports share the same preference state.
+                const shared = new vm.SourceTextModule(readFileSync(new URL(specifier, root), 'utf8'), { context });
                 cache.set(specifier, shared);
                 await shared.link(link);
             }
@@ -202,13 +205,27 @@ test('owner can publish, edit, remove, and loses controls immediately on sign-ou
         assert.equal($('owner-navigation').hidden, false);
         assert.equal($('private-watch-link').hidden, false);
         $('add-recommendation').click();
+        assert.equal($('editor-optional-fields').open, false);
+        assert.equal(form.elements.genre.required, false);
+        assert.equal(form.elements.genre.closest('details'), null);
+        assert.equal(form.elements.trailerUrl.closest('details'), null);
+        assert.equal(form.elements.trailerUrl.required, true);
+        assert.equal(form.querySelector('input'), form.elements.trailerUrl);
         form.elements.namedItem('title').value = 'Published title';
+        assert.equal(form.checkValidity(), false);
+        form.dispatchEvent(new w.Event('submit', { cancelable: true }));
+        await tick();
+        assert.equal(app.writes.length, 0);
+        assert.match($('form-error').textContent, /YouTube trailer link/);
+        form.elements.trailerUrl.value = 'https://youtu.be/abcdefghijk';
+        assert.equal(form.checkValidity(), true);
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
         await tick();
         assert.equal(app.writes[0].op, 'create');
         assert.equal(app.writes[0].ref.name, 'publicRecommendations');
         assert.equal($('recommendation-editor').open, false);
         w.document.querySelector('.edit-pick').click();
+        assert.equal($('editor-optional-fields').open, true);
         form.elements.namedItem('tier').value = 'S';
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
         await tick();
@@ -244,6 +261,7 @@ test('failed save preserves draft and unverified/nonowner accounts stay read-onl
         $('add-recommendation').click();
         const form = $('recommendation-form');
         form.elements.namedItem('title').value = 'Keep this draft';
+        form.elements.trailerUrl.value = 'https://youtu.be/abcdefghijk';
         form.dispatchEvent(new w.Event('submit', { cancelable: true }));
         await tick();
         assert.equal($('recommendation-editor').open, true);
@@ -332,8 +350,9 @@ test('shared private editor adds, edits tiers, preserves drafts, and blocks visi
         const form = w.document.querySelector('form'), dialog = w.document.querySelector('dialog');
         editor.open(null, 'tv');
         assert.equal(form.elements.type.value, 'tv');
-        assert.equal(form.elements.title, w.document.activeElement);
-        assert.deepEqual([...form.querySelectorAll('[name]')].slice(0, 6).map(el => el.name), ['title', 'trailerUrl', 'type', 'tier', 'genre', 'watchStatus']);
+        assert.equal(form.elements.trailerUrl, w.document.activeElement);
+        assert.deepEqual([...form.querySelectorAll('.private-primary-fields [name]')].map(el => el.name), ['trailerUrl', 'title', 'type', 'tier', 'genre']);
+        assert.equal(form.elements.watchStatus.closest('details').id, 'editor-optional-fields');
         assert.equal(form.elements.trailerUrl.required, true);
         assert.equal(form.elements.imdbScore, undefined);
         assert.equal(form.elements.rtScore, undefined);
@@ -409,6 +428,7 @@ test('genre picker lists all collection genres and supports selection, clearing,
         form.elements.genre.value = 'Mystery';
         form.elements.genre.dispatchEvent(new w.Event('input'));
         form.elements.title.value = 'A new title';
+        form.elements.trailerUrl.value = 'https://youtu.be/abcdefghijk';
         form.dispatchEvent(new w.Event('submit', { cancelable: true })); await tick();
         assert.equal(app.writes[0].payload.genre, 'Mystery');
         $('add-recommendation').click();
@@ -416,5 +436,105 @@ test('genre picker lists all collection genres and supports selection, clearing,
         $('close-editor').click();
         w.document.querySelector('[aria-label="Edit A new title"]').click();
         assert.equal($('editor-genres').querySelector('[aria-pressed="true"]').textContent, 'Mystery');
+    } finally { app.close(); }
+});
+
+test('compact Discover filters and settings reuse controls, count real results and restore focus', async () => {
+    const app = await setup();
+    try {
+        const { $, w } = app;
+        app.seed([sample('movie', 'Film'), sample('other', 'Another film'), sample('series', 'Series', 'tv')]);
+        assert.equal($('compact-count').textContent.trim(), '2 titles');
+        assert.equal($('mobile-add-title').hidden, true);
+        assert.equal($('mobile-mode-menu').querySelector('[data-mode="edit"]').hidden, true);
+        $('mobile-filter').click();
+        assert.equal($('search').closest('dialog').id, 'mobile-filter-panel');
+        $('search').value = 'Another'; $('search').dispatchEvent(new w.Event('input'));
+        assert.equal($('compact-count').textContent.trim(), '1 of 2 titles');
+        assert.equal($('mobile-filter').title, 'Filter (active search)');
+        $('mobile-filter-panel').querySelector('.compact-dismiss').click();
+        assert.ok($('search').closest('.collection-toolbar'));
+        assert.equal(w.document.activeElement, $('mobile-filter'));
+        $('mobile-filter').click();
+        assert.equal($('search').value, 'Another');
+        $('mobile-filter-panel').querySelector('.compact-reset').click();
+        assert.equal($('compact-count').textContent.trim(), '2 titles');
+        assert.equal($('mobile-filter').title, 'Filter');
+        $('mobile-filter-panel').querySelector('.compact-dismiss').click();
+        $('media-type-switch').querySelector('[data-type="tv"]').click();
+        assert.equal($('compact-count').textContent.trim(), '1 title');
+        $('mobile-settings').click();
+        assert.equal($('owner-sign-in').closest('dialog').id, 'discover-settings');
+        assert.equal($('owner-sign-in').hidden, false);
+        $('discover-settings').dispatchEvent(new w.Event('cancel', { cancelable: true }));
+        assert.ok($('owner-sign-in').closest('footer'));
+        assert.equal(w.document.activeElement, $('mobile-settings'));
+        assert.ok(app.reads.every(name => name === 'publicRecommendations'));
+    } finally { app.close(); }
+});
+
+test('Discover shares the editor-order preference and applies updates from another page', async () => {
+    const app = await setup({ email: model.OWNER_EMAIL, emailVerified: true });
+    try {
+        const { $, w } = app;
+        const form = $('recommendation-form');
+        $('mobile-add-title').click();
+        assert.equal(form.querySelector('input').name, 'trailerUrl');
+        assert.equal(w.document.activeElement, form.elements.trailerUrl);
+        $('close-editor').click();
+        $('mobile-settings').click();
+        assert.equal($('editor-link-first').closest('.editor-order-setting').hidden, false);
+        $('editor-link-first').click();
+        assert.equal(w.localStorage.getItem('watchLater_linkFirst'), 'false');
+        $('discover-settings').querySelector('.compact-dismiss').click();
+        $('mobile-add-title').click();
+        assert.equal(form.querySelector('input').name, 'title');
+        assert.equal(w.document.activeElement, form.elements.title);
+        form.elements.title.value = 'My draft';
+        w.localStorage.setItem('watchLater_linkFirst', 'true');
+        w.dispatchEvent(new w.StorageEvent('storage', { key: 'watchLater_linkFirst', newValue: 'true' }));
+        assert.equal($('editor-link-first').checked, true);
+        assert.equal(form.elements.title.value, 'My draft');
+        $('close-editor').click(); $('mobile-add-title').click();
+        assert.equal(form.querySelector('input').name, 'trailerUrl');
+        app.setUser(null);
+        assert.equal($('editor-link-first').closest('.editor-order-setting').hidden, true);
+    } finally { app.close(); }
+});
+
+test('Discover poster modes open trailers, preserve notes, edit only as owner and reset on sign-out', async () => {
+    const app = await setup({ email: model.OWNER_EMAIL, emailVerified: true });
+    try {
+        const { $, w } = app, opened = [];
+        w.open = (...args) => opened.push(args);
+        app.seed([{ ...sample('film', 'Film'), trailerUrl: 'https://youtu.be/abcdefghijk', note: '<script>Not HTML</script>' }]);
+        const poster = () => w.document.querySelector('.compact-cover-action');
+        poster().click();
+        assert.equal(opened[0][0], 'https://www.youtube.com/watch?v=abcdefghijk');
+        $('mobile-mode').click();
+        $('mobile-mode-menu').querySelector('[data-mode="details"]').click();
+        assert.equal(w.document.activeElement, $('mobile-mode'));
+        poster().click();
+        assert.equal($('discover-details').open, true);
+        assert.equal($('discover-details').querySelector('.card-note').textContent, '<script>Not HTML</script>');
+        assert.equal($('discover-details').querySelector('script'), null);
+        $('discover-details').querySelector('.compact-dismiss').click();
+        assert.equal(w.document.activeElement, poster());
+        $('mobile-mode').click(); $('mobile-mode-menu').querySelector('[data-mode="edit"]').click();
+        poster().click();
+        assert.equal($('recommendation-editor').open, true);
+        assert.equal($('recommendation-form').elements.title.value, 'Film');
+        $('close-editor').click();
+        $('mobile-add-title').click();
+        assert.equal($('recommendation-editor').open, true);
+        assert.equal($('recommendation-form').elements.title.value, '');
+        app.setUser(null);
+        assert.equal($('recommendation-editor').open, false);
+        assert.equal($('mobile-add-title').hidden, true);
+        assert.equal($('mobile-mode-menu').querySelector('[data-mode="watch"]').getAttribute('aria-checked'), 'true');
+        assert.equal($('mobile-mode-menu').querySelector('[data-mode="edit"]').hidden, true);
+        $('mobile-mode-menu').querySelector('[data-mode="edit"]').click();
+        assert.equal($('recommendation-editor').open, false);
+        assert.equal(app.writes.length, 0);
     } finally { app.close(); }
 });

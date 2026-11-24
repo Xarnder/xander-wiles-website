@@ -70,7 +70,7 @@ export function youtubeId(value) {
 }
 
 // Deliberately build a new public record: never spread a private watch document here.
-export function recommendationPayload(input) {
+export function recommendationPayload(input, { requireTrailer = true } = {}) {
     const title = String(input.title || '').trim();
     const note = String(input.note || '').trim();
     const genre = String(input.genre || '').trim();
@@ -94,7 +94,7 @@ export function recommendationPayload(input) {
         throw new Error('Position must be a whole number from 0 to 9,999.');
     if (imageUrl && (!safeImageUrl(imageUrl) || imageUrl.length > 2048))
         throw new Error('Use a valid HTTPS image URL.');
-    if (trailerUrl && !youtubeId(trailerUrl))
+    if ((!trailerUrl && requireTrailer) || (trailerUrl && !youtubeId(trailerUrl)))
         throw new Error('Use a valid HTTPS YouTube trailer link.');
     return {
         title,

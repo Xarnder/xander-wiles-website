@@ -37,7 +37,7 @@ body.watch-glass {
 @keyframes watch-orbit { from { transform: translate3d(-3%, -2%, 0); } to { transform: translate3d(13%, 9%, 0); } }
 .watch-glass .watch-shell { padding-bottom: 40px; }
 .watch-glass .site-header { min-height: 90px; border-bottom-color: #c6dcff24; }
-.watch-glass .brand-mark { background: var(--light-gradient); color: var(--accent-ink); border: 1px solid #ffffff80; box-shadow: 0 0 30px #94d9ff26; border-radius: 14px; }
+.watch-glass .brand-mark { display: block; object-fit: contain; background: none; border: 0; box-shadow: none; border-radius: 0; }
 .watch-glass .brand small { color: var(--muted); }
 .watch-glass .collection-heading h1, .watch-glass .app-container .app-header h1 { color: var(--text); font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 600; letter-spacing: -.045em; line-height: 1.2; }
 .watch-glass .eyebrow, .watch-glass .watch-eyebrow { color: var(--accent); }

@@ -6,6 +6,7 @@ import { firebaseConfig } from './firebase-config.js';
 import { isOwner, watchLaterRedirect } from './recommendations-model.mjs';
 import { createPrivateEditor } from './private-editor.mjs';
 import { cleanTitle, getVideoData } from './youtube-title.mjs';
+import { mountCompactMobile } from './compact-mobile.mjs';
 
 
 const app = initializeApp(firebaseConfig);
@@ -294,6 +295,7 @@ let peopleFilters = new Set(); // Set of person names
 let genreFilters = new Set(); // Set of genre names
 let watchedFilter = 'false'; // 'false', 'true', 'all'
 let searchQuery = ""; // Track search query
+let compactControls = null;
 
 // Mode Toggle Logic
 toggleBatchBtn.addEventListener('click', (e) => {
@@ -377,6 +379,7 @@ function syncModeIndicator() {
     status.querySelector('span').textContent = modeDescriptions[appMode];
     document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
     document.body.classList.add(`mode-${appMode}`);
+    compactControls?.syncMode();
 }
 modeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -481,11 +484,14 @@ if (deselectAllBtn) {
 }
 
 function renderFilterPeople() {
+    const focused = peopleFilterPillsContainer.contains(document.activeElement) ? document.activeElement.dataset.filterValue : null;
     peopleFilterPillsContainer.innerHTML = "";
     userPeople.forEach(person => {
         const pill = document.createElement('button');
         pill.className = `filter-pill ${peopleFilters.has(person.name) ? 'active' : ''}`;
         pill.innerText = person.name;
+        pill.dataset.filterValue = person.name;
+        pill.setAttribute('aria-pressed', String(peopleFilters.has(person.name)));
         pill.onclick = () => {
             if (peopleFilters.has(person.name)) {
                 peopleFilters.delete(person.name);
@@ -496,11 +502,13 @@ function renderFilterPeople() {
             renderAllCards();
         };
         peopleFilterPillsContainer.appendChild(pill);
+        if (focused === person.name) pill.focus({ preventScroll: true });
     });
 }
 
 function renderFilterGenres() {
     if (!genreFilterPillsContainer) return;
+    const focused = genreFilterPillsContainer.contains(document.activeElement) ? document.activeElement.dataset.filterValue : null;
     genreFilterPillsContainer.innerHTML = "";
 
     // Get unique genres from cachedWatches
@@ -515,6 +523,8 @@ function renderFilterGenres() {
         const pill = document.createElement('button');
         pill.className = `filter-pill ${genreFilters.has(genre) ? 'active' : ''}`;
         pill.innerText = genre;
+        pill.dataset.filterValue = genre;
+        pill.setAttribute('aria-pressed', String(genreFilters.has(genre)));
         pill.onclick = () => {
             if (genreFilters.has(genre)) {
                 genreFilters.delete(genre);
@@ -525,6 +535,7 @@ function renderFilterGenres() {
             renderAllCards();
         };
         genreFilterPillsContainer.appendChild(pill);
+        if (focused === genre) pill.focus({ preventScroll: true });
     });
 }
 
@@ -1193,6 +1204,8 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
 logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
+    compactControls?.closePanels();
+    compactControls?.syncFilters(0, 0, false);
     document.getElementById('owner-navigation').hidden = !isOwner(user);
     document.getElementById('private-add-toolbar').hidden = !isOwner(user);
     document.getElementById('recommendation-editor')?.close();
@@ -1946,6 +1959,8 @@ function renderAllCards() {
 
             if (totalCountEl) totalCountEl.innerText = statsText;
             if (totalCountMobileEl) totalCountMobileEl.innerText = statsText;
+            compactControls?.syncFilters(filtered.length, watchesOfType.length,
+                watchStatusFilter !== 'all' || watchedFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || !!searchQuery);
         }
     }
     
@@ -1959,13 +1974,21 @@ function renderTiers() {
     sortables = [];
 
     tierContainer.innerHTML = "";
-    userTiers.forEach(tier => {
+    const usedTierColors = new Set();
+    userTiers.forEach((tier, index) => {
         const tierDiv = document.createElement('div');
         tierDiv.className = 'tier';
         tierDiv.dataset.tier = tier.id;
 
         const bgColor = tier.color || '#cccccc';
         const textColor = getContrastColor(bgColor);
+        // Keep saved colours; give default/duplicate colours distinct mobile accents.
+        const savedColor = tier.color?.toLowerCase();
+        const accent = savedColor && savedColor !== '#1e1e24' && !usedTierColors.has(savedColor)
+            ? savedColor : hslToHex((260 + index * 137.508) % 360, 70, 74);
+        usedTierColors.add(accent);
+        tierDiv.style.setProperty('--compact-tier-accent', getContrastColor(accent) === '#000000'
+            ? accent : `color-mix(in srgb, ${accent} 40%, #ffffff)`);
 
         tierDiv.innerHTML = `
             <div class="tier-label" style="--private-tier-color:${bgColor}; --private-tier-text:${textColor};"><span class="tier-name">${tier.name}</span></div>
@@ -2044,6 +2067,9 @@ function renderPeopleToggles() {
     userPeople.forEach(person => {
         const pill = document.createElement('div');
         pill.className = `person-pill ${selectedPeople.has(person.name) ? 'active' : ''}`;
+        pill.tabIndex = 0;
+        pill.setAttribute('role', 'button');
+        pill.setAttribute('aria-pressed', String(selectedPeople.has(person.name)));
         pill.innerText = person.name;
         pill.onclick = () => {
             if (selectedPeople.has(person.name)) {
@@ -2052,6 +2078,10 @@ function renderPeopleToggles() {
                 selectedPeople.add(person.name);
             }
             renderPeopleToggles();
+            [...peopleTogglesContainer.children].find(button => button.innerText === person.name)?.focus();
+        };
+        pill.onkeydown = event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pill.click(); }
         };
         peopleTogglesContainer.appendChild(pill);
     });
@@ -2169,6 +2199,8 @@ function renderCard(id, data, autoAppend = true) {
     const card = document.createElement('div');
     card.className = `media-card ${selectedCardIds.has(id) ? 'selected' : ''}`;
     card.dataset.id = id;
+    card.tabIndex = 0;
+    card.setAttribute('aria-label', data.movieTitle || 'Movie');
 
     const displayTitle = data.movieTitle || 'Movie';
 
@@ -2187,9 +2219,10 @@ function renderCard(id, data, autoAppend = true) {
         <div class="card-info">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 5px;">
                 <h4 class="card-title" style="flex: 1;">${displayTitle}</h4>
-                <span style="font-size: 9px; opacity: 0.5; white-space: nowrap; margin-top: 2px;">${timeAgo(data.timestamp)}</span>
+                <span class="card-added-time" style="font-size: 9px; opacity: 0.5; white-space: nowrap; margin-top: 2px;">${timeAgo(data.timestamp)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 4px;">
+            <span class="card-year"></span>
+            <div class="card-secondary-meta" style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 4px;">
                 <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>
                 <span class="card-genre">${data.genre || ''}</span>
             </div>
@@ -2223,6 +2256,13 @@ function renderCard(id, data, autoAppend = true) {
             </button>
         </div>
     `;
+    card.querySelector('.card-year').textContent = data.year || '';
+    card.querySelector('img').alt = `${displayTitle} poster`;
+    card.addEventListener('keydown', event => {
+        if (event.target === card && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault(); card.click();
+        }
+    });
 
     card.onclick = (e) => {
         if (e.target.closest('.card-actions')) return;
@@ -2288,8 +2328,26 @@ const sharedPrivateEditor = createPrivateEditor({
         ? setDoc(doc(db, 'watches', id), { ...data, uid: currentUser.uid, timestamp: Date.now() })
         : updateDoc(doc(db, 'watches', id), data),
     remove: id => deleteDoc(doc(db, 'watches', id)),
+    onBulkImport: () => compactControls.openImport(),
 });
 document.getElementById('open-add-title').onclick = () => sharedPrivateEditor.open(null, typeFilter);
+compactControls = mountCompactMobile({
+    getMode: () => appMode,
+    setMode: mode => [...modeBtns].find(button => button.dataset.mode === mode)?.click(),
+    addTitle: () => sharedPrivateEditor.open(null, typeFilter),
+    prepareImport: () => {
+        if (!isBatchMode) toggleBatchBtn.click();
+        inputSection.classList.remove('collapsed');
+        typeToggle.value = typeFilter;
+    },
+    resetFilters: () => {
+        watchStatusFilter = 'all'; watchedFilter = 'all'; searchQuery = '';
+        peopleFilters.clear(); genreFilters.clear(); searchInput.value = '';
+        statusFilterPills.forEach(pill => pill.classList.toggle('active', pill.dataset.status === 'all'));
+        watchedFilterPills.forEach(pill => pill.classList.toggle('active', pill.dataset.watched === 'all'));
+        renderFilterPeople(); renderAllCards();
+    },
+});
 
 window.openEditModal = function(id, data) {
     if (!isQuickSortMode && !isTitleFixMode) {
@@ -2455,6 +2513,7 @@ window.addEventListener('keydown', (e) => {
     if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
         if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
             e.preventDefault();
+            if (window.matchMedia('(max-width: 768px)').matches) compactControls.openFilters();
             if (searchInput) searchInput.focus();
         }
     }

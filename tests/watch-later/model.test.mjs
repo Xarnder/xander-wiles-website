@@ -17,6 +17,7 @@ const input = {
     note: ' Great ',
     genre: 'Drama',
     year: '2020',
+    trailerUrl: 'https://youtu.be/abcdefghijk',
 };
 test('only the exact verified owner has publishing controls', () => {
     assert.equal(isOwner(null), false);
@@ -56,6 +57,7 @@ test('public projection strips every private field and canonicalizes trailers', 
         ].sort(),
     );
     assert.equal(result.title, 'Example');
+    assert.equal(recommendationPayload({ ...input, trailerUrl: '' }, { requireTrailer: false }).trailerUrl, '');
     assert.equal(
         result.trailerUrl,
         'https://www.youtube.com/watch?v=abcdefghijk',
@@ -72,6 +74,9 @@ test('rejects unsafe links, bad types and malformed ranks', () => {
         { year: '20' },
         { note: 'x'.repeat(1001) },
         { imageUrl: 'javascript:alert(1)' },
+        { trailerUrl: '' },
+        { trailerUrl: '   ' },
+        { trailerUrl: undefined },
         { trailerUrl: 'https://youtube.com.evil.example/watch?v=abcdefghijk' },
     ])
         assert.throws(() => recommendationPayload({ ...input, ...change }));

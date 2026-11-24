@@ -23,9 +23,10 @@ export function mountMediaEditor() {
                     Everything in this form will be public when you publish.
                 </p>
                 <label
-                    >YouTube trailer <span>(optional)</span
+                    >YouTube trailer <span>(required)</span
                     ><input
                         name="trailerUrl"
+                        required
                         aria-describedby="trailer-title-status"
                         type="url"
                         maxlength="2048"
@@ -58,17 +59,6 @@ export function mountMediaEditor() {
                         </select></label
                     >
                 </div>
-                <div class="form-row">
-                    <label
-                        >Release year <span>(optional)</span
-                        ><input
-                            name="year"
-                            inputmode="numeric"
-                            pattern="[0-9]{4}"
-                            maxlength="4"
-                            placeholder="2026" /></label
-                    >
-                </div>
                 <fieldset class="editor-genre-picker">
                     <legend>Genre <span>(optional)</span></legend>
                     <div id="editor-genres" class="editor-genre-options" role="group" aria-label="Existing genres"></div>
@@ -77,42 +67,51 @@ export function mountMediaEditor() {
                     <input id="editor-genre-input" name="genre" maxlength="80" placeholder="Enter a genre…" autocomplete="off">
                     <button type="button" id="clear-editor-genre">Clear genre</button>
                 </fieldset>
-                <label
-                    >Notes <span>(optional)</span
-                    ><textarea
-                        name="note"
-                        rows="3"
-                        maxlength="1000"
-                        placeholder="A few spoiler-free words…"
-                    ></textarea>
-                </label>
-                <label
-                    >Cover image URL <span>(optional)</span
-                    ><input
-                        name="imageUrl"
-                        type="url"
-                        maxlength="2048"
-                        placeholder="https://…"
-                    /><small
-                        >Use an HTTPS image. A trailer thumbnail is used if you
-                        leave this blank.</small
-                    ></label
-                >
-                <label
-                    >Position in tier<input
-                        name="rank"
-                        type="number"
-                        min="0"
-                        max="9999"
-                        step="1"
-                        value="0"
-                        required
-                    /><small
-                        >Lower numbers appear first. Equal positions sort by
-                        title.</small
-                    ></label
-                >
-                <div id="private-editor-fields" hidden></div>
+                <details id="editor-optional-fields" class="editor-optional-fields">
+                    <summary>Optional details</summary>
+                    <div class="editor-optional-content">
+                        <label
+                            >Release year <span>(optional)</span
+                            ><input name="year" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="2026" />
+                        </label>
+                        <label
+                            >Notes <span>(optional)</span
+                            ><textarea
+                                name="note"
+                                rows="3"
+                                maxlength="1000"
+                                placeholder="A few spoiler-free words…"
+                            ></textarea>
+                        </label>
+                        <label
+                            >Cover image URL <span>(optional)</span
+                            ><input
+                                name="imageUrl"
+                                type="url"
+                                maxlength="2048"
+                                placeholder="https://…"
+                            /><small
+                                >Use an HTTPS image. A trailer thumbnail is used if you
+                                leave this blank.</small
+                            ></label
+                        >
+                        <label
+                            >Position in tier<input
+                                name="rank"
+                                type="number"
+                                min="0"
+                                max="9999"
+                                step="1"
+                                value="0"
+                                required
+                            /><small
+                                >Lower numbers appear first. Equal positions sort by
+                                title.</small
+                            ></label
+                        >
+                        <div id="private-editor-fields" hidden></div>
+                    </div>
+                </details>
                 <p
                     id="form-error"
                     class="error-message"
@@ -134,6 +133,11 @@ export function mountMediaEditor() {
             </form>
         </dialog>`);
     const editor = document.getElementById('recommendation-editor');
+    // Reveal invalid optional inputs before native validation tries to focus them.
+    editor.querySelector('form').addEventListener('invalid', event => {
+        const section = event.target.closest('details');
+        if (section) section.open = true;
+    }, true);
     const input = editor.querySelector('[name="genre"]');
     input.addEventListener('input', () => syncGenreSelection(editor));
     editor.querySelector('#clear-editor-genre').addEventListener('click', () => {

@@ -1,0 +1,188 @@
+/* Shared compact collection presentation; desktop keeps its existing layout. */
+.compact-watch .mobile-only, .compact-watch .mobile-nav-label,
+.compact-watch .mobile-filter-label, .compact-watch .mobile-filter-heading, .compact-watch .card-year { display: none; }
+.compact-watch .compact-controls { display: contents; }
+.private-watch .compact-controls > .media-switch { margin-top: 27px; }
+
+.compact-watch dialog.compact-panel {
+    box-sizing: border-box;
+    display: block;
+    position: fixed;
+    inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    width: min(500px, calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right))));
+    height: fit-content;
+    max-width: none;
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
+    margin: auto;
+    padding: 16px;
+    overflow: auto;
+    color: var(--text);
+    border-radius: 24px;
+    background: linear-gradient(135deg, #ffffff0c, #ffffff00), #111a2c;
+    animation: none;
+    transition: none;
+    transform: none;
+    overscroll-behavior: contain;
+}
+.compact-watch dialog.compact-panel *,
+.compact-watch dialog.compact-panel *::before,
+.compact-watch dialog.compact-panel *::after,
+.compact-watch dialog.compact-panel::backdrop { animation: none; transition: none; }
+.compact-watch dialog.compact-panel button:hover { transform: none !important; box-shadow: none; }
+.compact-watch dialog:not([open]) { display: none; }
+.compact-watch dialog.compact-legacy-host { position: fixed; inset: 0; margin: auto; padding: 0; width: min(500px, calc(100% - 24px)); max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow: auto; border: 0; background: transparent; }
+.compact-watch .compact-legacy-host > :is(.modal, .modal-overlay) { position: static; width: 100%; height: auto; background: transparent; }
+.compact-watch .compact-legacy-host .modal-content { width: 100% !important; max-width: none !important; max-height: none; }
+.compact-watch #settings-modal .settings-modal-content { max-width: none !important; padding: 0 !important; gap: 0 !important; }
+.compact-watch #settings-modal .settings-actions button { min-width: 0; width: 100%; height: auto; min-height: 44px; padding: 10px 12px; border-radius: 12px; font-size: .875rem; }
+.compact-watch #settings-modal .settings-group { margin: 0; padding: 12px; border: 1px solid #cadcff20; border-radius: 16px; }
+.compact-watch #settings-modal .settings-group-label { margin-bottom: 10px; color: var(--muted); font: 500 .875rem/1.4 Outfit, sans-serif; }
+.compact-watch #settings-modal #close-settings-modal { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; color: var(--text); background: var(--button-bg); border: 1px solid var(--line); border-radius: 10px; }
+.compact-watch #settings-modal button:hover { box-shadow: none; }
+.compact-watch .editor-order-setting { padding: 12px; border: 1px solid #cadcff20; border-radius: 16px; background: #ffffff06; }
+.compact-watch .compact-panel-body > .editor-order-setting { margin-bottom: 12px; }
+.compact-watch .editor-order-setting .switch-container { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; }
+.compact-watch .editor-order-copy { display: grid; gap: 4px; min-width: 0; font: 500 .875rem/1.4 Outfit, sans-serif; }
+.compact-watch .editor-order-copy small { color: var(--muted); font-size: .75rem; font-weight: 400; }
+.compact-watch .editor-order-setting .switch { position: relative; display: inline-block; flex: 0 0 56px; width: 56px; height: 32px; }
+.compact-watch .editor-order-setting input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.compact-watch .editor-order-setting .slider { position: absolute; inset: 0; cursor: pointer; }
+.compact-watch .editor-order-setting .slider::before { content: ''; position: absolute; border-radius: 50%; }
+.compact-watch:has(dialog[open]) { overflow: hidden; }
+.compact-watch .compact-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.compact-watch .compact-panel-heading h2 { margin: 0; color: var(--text); font-size: 1rem; letter-spacing: normal; }
+.compact-watch .compact-panel button { font: 500 .875rem/1.4 Outfit, system-ui, sans-serif; text-transform: none; letter-spacing: normal; }
+.compact-watch .compact-dismiss { flex: 0 0 44px; width: 44px; min-height: 44px; padding: 0; font-size: 1.5rem !important; background: var(--button-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+.compact-watch .compact-panel-body { min-width: 0; }
+.compact-watch dialog.compact-mode-panel { inset: max(56px, env(safe-area-inset-top)) 12px auto auto; width: min(240px, calc(100% - 24px)); max-height: calc(100dvh - max(56px, env(safe-area-inset-top)) - 12px - env(safe-area-inset-bottom)); margin: 0; padding: 8px; }
+.compact-watch .compact-mode-panel .compact-panel-heading { padding-left: 8px; margin-bottom: 4px; }
+.compact-watch .compact-mode-panel [role="menu"] { display: grid; gap: 4px; }
+.compact-watch .compact-mode-panel [role="menuitemradio"] { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px; text-align: left; background: transparent; border: 1px solid transparent; color: var(--muted); border-radius: 8px; }
+.compact-watch .compact-mode-panel svg { width: 20px; height: 20px; flex-shrink: 0; }
+.compact-watch .compact-mode-panel [aria-checked="true"] { background: #a2edff18; border-color: #a2edff55; color: var(--accent); }
+.compact-watch .mode-check { margin-left: auto; visibility: hidden; }
+.compact-watch [aria-checked="true"] .mode-check { visibility: visible; }
+.compact-watch .compact-reset { width: 100%; min-height: 44px; margin-top: 16px; background: var(--button-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+.compact-watch #mobile-filter-panel .filter-groups-container { display: flex; flex-direction: column; gap: 12px; }
+.compact-watch #mobile-filter-panel .filter-group { box-sizing: border-box; width: 100%; min-width: 0; display: block; margin: 0; padding: 12px; border: 1px solid #cadcff20; border-radius: 16px; }
+.compact-watch #mobile-filter-panel .mobile-filter-label { display: block; margin: 0 0 10px; color: var(--muted); font: 500 .875rem/1.4 Outfit, sans-serif; }
+.compact-watch #mobile-filter-panel .mobile-filter-heading { display: flex; align-items: center; gap: 8px; margin: -4px 0 8px; }
+.compact-watch #mobile-filter-panel .mobile-filter-heading .mobile-filter-label { margin: 0; }
+.compact-watch #mobile-filter-panel .filter-pills { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.compact-watch #mobile-filter-panel .filter-pill { min-height: 44px; max-width: 100%; padding: 10px 12px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere; background: var(--button-bg); border: 1px solid var(--line); color: var(--text); box-shadow: none; }
+.compact-watch #mobile-filter-panel .filter-pill:hover { background: var(--button-hover); border-color: #cadcff65; }
+.compact-watch #mobile-filter-panel .filter-pill.active { background: var(--light-gradient); color: var(--accent-ink); border-color: #e7f9ffb3; box-shadow: inset 0 1px 0 #ffffff55; }
+.compact-watch #mobile-filter-panel #group-people > div { flex-wrap: wrap; }
+.compact-watch #mobile-filter-panel #group-search { padding: 0; border: 0; background: none; }
+.compact-watch #mobile-filter-panel #search-input { max-width: none !important; box-sizing: border-box; min-height: 48px; padding: 12px 14px !important; border-radius: 14px; font-size: 1rem !important; }
+.compact-watch #mobile-filter-panel .search-field { box-sizing: border-box; padding: 12px 14px; border-radius: 16px; }
+.compact-watch #mobile-filter-panel .compact-reset { border-radius: 14px; }
+.compact-watch #mobile-filter-panel .icon-btn { flex: 0 0 44px; width: 44px; height: 44px; }
+.compact-watch #mobile-filter-panel .mobile-filter-heading .icon-btn { border-radius: 12px; }
+.compact-watch #mobile-filter-panel #filter-stats { display: none; }
+.compact-watch #mobile-import-panel #input-section { padding: 0; margin: 0; background: transparent; border: 0; box-shadow: none; }
+.compact-watch #mobile-import-panel .input-header, .compact-watch #mobile-import-panel #toggle-batch { display: none; }
+.compact-watch #mobile-import-panel :is(input, select, textarea) { box-sizing: border-box; min-width: 0 !important; width: 100%; max-width: 100% !important; font-size: 1rem !important; }
+.compact-watch #mobile-import-panel .collapsible-content { max-height: none; overflow: visible; }
+.compact-watch #mobile-import-panel #add-btn { min-height: 44px; width: 100%; }
+.compact-watch #editor-bulk-import { justify-self: start; color: var(--muted); }
+.compact-watch .person-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 768px) {
+    body.compact-watch { background: radial-gradient(ellipse at 0 0, #14213b99, transparent 60%), radial-gradient(ellipse at 100% 30%, #21193655, transparent 65%), var(--bg); }
+    .compact-watch .watch-atmosphere { opacity: .4; }
+    .compact-watch .watch-shell { container-type: inline-size; box-sizing: border-box; width: 100%; min-width: 0; padding: max(4px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .compact-watch .site-header { min-height: 44px; flex-wrap: nowrap; justify-content: flex-start; gap: 12px; padding: 0; margin: 0; }
+    .compact-watch .site-header .brand { flex: 0 0 28px; min-height: 44px; gap: 0; }
+    .compact-watch .brand > span:not(.brand-mark), .compact-watch .desktop-nav-label { display: none; }
+    .compact-watch .brand-mark { flex-basis: 28px; width: 28px; height: 28px; border-radius: 8px; font-size: 16px; box-shadow: none; }
+    .compact-watch .mobile-nav-label { display: inline; }
+    .compact-watch .owner-navigation { flex: 1; flex-wrap: nowrap; align-self: stretch; gap: 14px; min-width: 0; }
+    .compact-watch .owner-navigation a { position: relative; min-width: 0; min-height: 44px; padding: 0 2px; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--muted); font-size: .875rem; font-weight: 600; }
+    .compact-watch .owner-navigation a[aria-current="page"] { color: var(--text); background: none; box-shadow: none; }
+    .compact-watch .owner-navigation a[aria-current="page"]::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; border-radius: 2px; background: #86f4f8; }
+    .compact-watch .mobile-only { display: flex; }
+    .compact-watch .compact-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 4px; min-width: 0; }
+    .compact-watch .compact-controls > .media-switch { flex: 0 1 165px; min-width: 0; display: grid; align-items: stretch; gap: 4px; box-sizing: border-box; margin: 0; padding: 6px; min-height: 48px; border: 0; border-radius: 12px; background: transparent; box-shadow: none; backdrop-filter: none; position: relative; }
+    .compact-watch .compact-controls > .media-switch::before { content: ''; position: absolute; inset: 2px; border: 1px solid #cadcff40; background: #ffffff09; border-radius: 12px; pointer-events: none; }
+    /* Keep the TV text and its optional suffix in one text flow, without legacy flex gaps. */
+    .compact-watch .media-switch button { position: relative; display: block; min-width: 0; min-height: 36px; padding: 6px 4px; border-radius: 8px; font-size: .8125rem; font-weight: 600; line-height: 1.3; text-align: center; color: var(--muted); box-shadow: none; white-space: nowrap; overflow-wrap: normal; }
+    /* The transparent extensions make each segment's target 44px tall. */
+    .compact-watch .media-switch button::after { content: ''; position: absolute; inset: -4px 0; }
+    .compact-watch .media-switch button[aria-pressed="true"] { color: var(--text); background: linear-gradient(115deg, #26384c, #39334d); border-color: #889abc55; box-shadow: none; font-weight: 600; }
+    .compact-watch .compact-actions { flex: 0 0 auto; gap: 2px; }
+    .compact-watch .compact-icon { display: inline-flex; flex: 0 0 44px; align-items: center; justify-content: center; width: 44px; height: 44px; min-height: 44px; padding: 4px; margin: 0; background: transparent; border: 0; box-shadow: none; border-radius: 10px; color: var(--text); }
+    .compact-watch .compact-icon-surface { position: relative; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 1px; width: 36px; height: 36px; border: 1px solid #cadcff40; border-radius: 9px; background: #ffffff09; }
+    .compact-watch .compact-icon svg { width: 20px; height: 20px; flex: 0 0 auto; }
+    .compact-watch #mobile-mode .compact-icon-surface > svg { color: var(--accent); }
+    .compact-watch .compact-icon:hover .compact-icon-surface, .compact-watch .compact-icon[aria-expanded="true"] .compact-icon-surface { background: var(--button-hover); border-color: var(--accent); }
+    .compact-watch #mobile-add-title .compact-icon-surface { color: var(--accent-ink); background: var(--light-gradient); border-color: #e7f9ffb3; box-shadow: 0 0 16px #94d9ff26; }
+    .compact-watch #mobile-add-title:hover .compact-icon-surface { border-color: #fff; box-shadow: 0 0 22px #94d9ff45; }
+    .compact-watch .compact-count { align-items: center; gap: 6px; margin: 0 0 12px; color: #9eacc9; font-size: .8125rem; line-height: 1.55; }
+    .compact-watch .compact-count svg { flex: 0 0 14px; width: 14px; height: 14px; }
+    .compact-watch .app-header, .compact-watch #mode-selector,
+    .compact-watch #private-add-toolbar, .compact-watch .legacy-batch,
+    .compact-watch #filter-bar { display: none; }
+    .compact-watch:has(#login-overlay:not(.hidden)) :is(.compact-controls, .compact-count, #mobile-add-title) { display: none; }
+    .compact-watch #tier-container { gap: 18px; }
+    .compact-watch .app-container .tier { display: flex; gap: 0; min-width: 0; background: none; border: 0; border-radius: 0; box-shadow: none; overflow: visible; backdrop-filter: none; }
+    .compact-watch .app-container .tier::before { display: none; }
+    .compact-watch .app-container .tier-label { gap: 6px; justify-content: flex-start; min-height: 24px; margin-bottom: 8px; padding: 0; text-align: left; border: 0; border-radius: 0; background: none; color: #bca8ef; }
+    .compact-watch .tier-label::after { content: ''; flex: 1; min-width: 16px; height: 1px; margin-left: 6px; background: currentColor; opacity: .55; }
+    .compact-watch .app-container .tier-name { min-width: 0; padding: 0; background: none; color: inherit; font-size: .8125rem; font-weight: 600; line-height: 1.5; letter-spacing: .12em; overflow-wrap: anywhere; }
+    .compact-watch .tier-count { flex-shrink: 0; font-size: .75rem; letter-spacing: normal; color: var(--muted); }
+    /* Each compact heading stays within its tier and yields to the next heading. */
+    .compact-watch .watch-shell .tier-label {
+        position: sticky;
+        top: env(safe-area-inset-top, 0px);
+        z-index: 5;
+        flex-shrink: 0;
+        padding: 0 10px;
+        border-radius: 999px;
+        color: var(--compact-tier-accent, var(--tier-color, #bca8ef));
+        background: #0b1020;
+        background: linear-gradient(90deg, color-mix(in srgb, currentColor 9%, #0b1020), #0b1020);
+        box-shadow: 0 4px 8px #06091780;
+    }
+    .compact-watch.mode-reorder-tiers .watch-shell .tier-label { position: static; }
+    .compact-watch .app-container .tier-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 12px 8px; min-width: 0; min-height: 0; padding: 0; }
+    .compact-watch .app-container .media-card { box-sizing: border-box; width: 100%; min-width: 0; background: none; border: 0; border-radius: 0; box-shadow: none; overflow: visible; backdrop-filter: none; }
+    .compact-watch .app-container .media-card:hover { background: none; box-shadow: none; }
+    .compact-watch .media-card > img { display: block; box-sizing: border-box; aspect-ratio: 2 / 3; width: 100%; object-fit: cover; border: 1px solid #cadcff30; border-radius: 8px; }
+    .compact-watch .media-card > .badge, .compact-watch .watched-at-tag,
+    .compact-watch .card-added-time, .compact-watch .media-card .card-secondary-meta { display: none !important; }
+    .compact-watch .card-info { padding: 4px 2px 0; }
+    .compact-watch .card-title { margin: 0; color: var(--text); font-size: .8125rem; font-weight: 600; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; overflow: visible; }
+    .compact-watch .card-year { display: block; color: #919fbc; font-size: .75rem; line-height: 1.4; margin-top: 2px; }
+    .compact-watch .card-year:empty { display: none; }
+    .compact-watch .media-card .card-actions { display: none; }
+    /* Stretch each row to its longest title, then anchor the actions at the bottom. */
+    .compact-watch.mode-edit .app-container .tier-list { align-items: stretch; }
+    .compact-watch.mode-edit .media-card { display: flex; flex-direction: column; }
+    .compact-watch.mode-edit .media-card > img { flex-shrink: 0; }
+    .compact-watch.mode-edit .media-card .card-actions { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; margin-top: auto; padding: 4px 0 0; flex-shrink: 0; opacity: 1; transform: none; pointer-events: auto; background: none; }
+    .compact-watch.mode-edit .card-actions button { width: 100%; min-height: 44px; border-radius: 8px; }
+    /* Override the legacy 14px inline icon dimensions only in the mobile edit controls. */
+    .compact-watch.mode-edit .card-actions button svg { width: 22px !important; height: 22px !important; flex-shrink: 0; }
+    .compact-watch .media-card.selected > img { border-color: var(--accent); box-shadow: 0 0 0 2px #a2edff55; }
+    .compact-watch .media-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+    .compact-watch .empty-state { grid-column: 1 / -1; min-width: 0; padding: 12px 0; font-size: .8125rem; }
+    .compact-watch #people-manager-section, .compact-watch #tier-manager-section { max-width: 100%; box-sizing: border-box; }
+    /* Reflow when the user's text size makes the available space narrow in ems. */
+    @container (max-width: 16rem) {
+        .compact-watch .owner-navigation { flex-wrap: wrap; gap: 0; }
+        .compact-watch .owner-navigation a { flex: 1 1 100%; justify-content: flex-start; overflow-wrap: anywhere; }
+        .compact-watch .compact-controls > .media-switch { grid-template-columns: 1.35fr .65fr; }
+        .compact-watch .media-switch button { padding-inline: 2px; }
+        .compact-watch .tv-label-suffix { display: none; }
+        .compact-watch .app-container .tier-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+}
+@media (max-width: 350px) {
+    .compact-watch .site-header { gap: 8px; }
+    .compact-watch .owner-navigation { gap: 10px; }
+    .compact-watch .compact-controls { gap: 4px; }
+    .compact-watch .compact-actions { gap: 0; }
+    .compact-watch .tv-label-suffix { display: none; }
+    .compact-watch .compact-controls > .media-switch { flex-basis: 150px; }
+}

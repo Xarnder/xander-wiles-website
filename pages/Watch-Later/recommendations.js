@@ -33,6 +33,8 @@ import {
 } from './recommendations-model.mjs';
 
 import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
+import { mountDiscoverMobile } from './discover-mobile.mjs';
+import { applyEditorFieldOrder } from './editor-preferences.mjs';
 mountMediaEditor();
 
 const app = initializeApp(firebaseConfig);
@@ -56,6 +58,12 @@ let loaded = false;
 let failed = false;
 let saving = false;
 let toastTimer;
+const compact = mountDiscoverMobile({
+    canEdit: () => isOwner(user),
+    addTitle: () => openEditor(),
+    editTitle: item => openEditor(item),
+    resetSearch: () => { search = ''; $('search').value = ''; render(); },
+});
 
 const persistence = setPersistence(auth, browserLocalPersistence).catch(() => {
     $('account-status').textContent =
@@ -123,8 +131,14 @@ function card(item) {
             item.type === 'movie' ? 'MOVIE' : 'TV SHOW',
         ),
     );
+    const open = element('button', 'compact-cover-action mobile-only');
+    open.type = 'button';
+    open.setAttribute('aria-label', `Open ${item.title}`);
+    open.addEventListener('click', () => compact.openTitle(item, open));
+    cover.append(open);
     const body = element('div', 'card-body');
     body.append(element('h3', '', item.title));
+    if (item.year) body.append(element('span', 'card-year', item.year));
     const meta = [item.year, item.genre].filter(Boolean).join(' · ');
     if (meta) body.append(element('p', 'card-meta', meta));
     if (item.note) body.append(element('p', 'card-note', item.note));
@@ -158,6 +172,7 @@ function render() {
     if (!loaded || failed) return;
     const picksOfType = items.filter(item => item.type === type);
     const visible = filterRecommendations(picksOfType, { search });
+    compact.syncCount(visible.length, picksOfType.length, !!search.trim());
     $('collection-count').textContent =
         `${visible.length} ${visible.length === 1 ? 'pick' : 'picks'}${visible.length !== picksOfType.length ? ` / ${picksOfType.length} total` : ''}`;
     $('collection-state').hidden = true;
@@ -221,6 +236,7 @@ function subscribe() {
     board.setAttribute('aria-busy', 'true');
     $('retry').hidden = true;
     $('collection-count').textContent = 'Loading collection…';
+    compact.setStatus('Loading collection…');
     showState(
         'Opening the collection…',
         'The next good watch is worth a moment.',
@@ -234,7 +250,8 @@ function subscribe() {
                 try {
                     return [
                         {
-                            ...recommendationPayload(record.data()),
+                            // Existing recommendations without trailers remain visible.
+                            ...recommendationPayload(record.data(), { requireTrailer: false }),
                             id: record.id,
                         },
                     ];
@@ -254,6 +271,7 @@ function subscribe() {
             board.replaceChildren();
             board.setAttribute('aria-busy', 'false');
             $('collection-count').textContent = 'Collection unavailable';
+            compact.setStatus('Collection unavailable');
             showState(
                 'The collection couldn’t load.',
                 'Please try again in a moment.',
@@ -268,6 +286,7 @@ function openEditor(item = null) {
     editingId = item?.id || doc(collection(db, PUBLIC_COLLECTION)).id;
     editingItem = item;
     form.reset();
+    $('editor-optional-fields').open = !!item;
     $('form-error').hidden = true;
     $('remove-recommendation').hidden = !item;
     $('editor-title').textContent = item
@@ -298,8 +317,9 @@ function openEditor(item = null) {
         form.elements.namedItem(key).value = initial[key] ?? '';
     }
     populateGenrePicker(editor, items.map(item => item.genre));
+    const firstField = applyEditorFieldOrder(editor);
     editor.showModal();
-    form.elements.namedItem(item ? 'title' : 'trailerUrl').focus();
+    (item ? form.elements.namedItem('title') : firstField).focus();
 }
 
 function setSaving(value) {
@@ -455,6 +475,7 @@ onAuthStateChanged(auth, (nextUser) => {
         : user
           ? 'You’re browsing as a visitor. Only Xander can edit this collection.'
           : '';
+    compact.syncOwner();
     if (!owner) {
         editor.close();
         removeDialog.close();

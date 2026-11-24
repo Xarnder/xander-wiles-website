@@ -1,7 +1,8 @@
 import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
 import { isOwner, youtubeId, safeImageUrl } from './recommendations-model.mjs';
+import { applyEditorFieldOrder } from './editor-preferences.mjs';
 
-export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, getScores, save, remove }) {
+export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, getScores, save, remove, onBulkImport }) {
     const dialog = mountMediaEditor();
     const form = dialog.querySelector('form');
     const $ = id => document.getElementById(id);
@@ -9,6 +10,13 @@ export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, ge
     let selectedPeople = new Set();
     dialog.querySelector('.eyebrow').textContent = 'PRIVATE WATCH LIST';
     dialog.querySelector('.form-intro').textContent = 'Saved to your private watch list. Only you can see this.';
+    const bulkImport = document.createElement('button');
+    bulkImport.type = 'button';
+    bulkImport.id = 'editor-bulk-import';
+    bulkImport.textContent = 'Bulk import links';
+    bulkImport.hidden = !onBulkImport;
+    bulkImport.onclick = () => { dialog.close(); onBulkImport?.(); };
+    form.querySelector('.form-actions').after(bulkImport);
     const extra = $('private-editor-fields');
     extra.hidden = false;
     extra.innerHTML = `<label>Watch status<select name="watchStatus"><option value="first-watch">First watch</option><option value="rewatch">Rewatch</option><option value="new-episodes">New episodes coming</option></select></label>
@@ -19,23 +27,21 @@ export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, ge
     const field = name => form.elements.namedItem(name);
     const titleLabel = field('title').closest('label');
     const trailerLabel = field('trailerUrl').closest('label');
-    field('trailerUrl').required = true;
-    trailerLabel.querySelector('span').textContent = '(required)';
     const primaryFields = document.createElement('div');
     primaryFields.className = 'private-primary-fields';
-    form.querySelector('.form-intro').after(primaryFields);
-    primaryFields.append(titleLabel, trailerLabel, $('trailer-title-status'),
+    dialog.querySelector('.form-intro').after(primaryFields);
+    primaryFields.append(trailerLabel, $('trailer-title-status'), titleLabel,
         field('type').closest('label'), field('tier').closest('label'),
-        form.querySelector('.editor-genre-picker'), extra);
+        form.querySelector('.editor-genre-picker'));
     form.querySelectorAll('.form-row').forEach(row => { if (!row.children.length) row.remove(); });
     const watchedLabel = document.createElement('label');
     watchedLabel.className = 'editor-checkbox';
     watchedLabel.innerHTML = '<input name="watched" type="checkbox"> Watched';
-    $('form-error').before(watchedLabel);
+    dialog.querySelector('.editor-optional-content').append(watchedLabel);
     const scoreStatus = document.createElement('small');
     scoreStatus.id = 'editor-score-status';
     scoreStatus.setAttribute('role', 'status');
-    watchedLabel.after(scoreStatus);
+    $('form-error').before(scoreStatus);
     function renderPeople() {
         const names = [...new Set([...getPeople().map(person => person.name), ...selectedPeople].filter(Boolean))]
             .sort((a, b) => a.localeCompare(b));
@@ -111,9 +117,11 @@ export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, ge
         open(data, type = 'movie') {
             if (!isOwner(getUser()) || saving) return;
             item = data; newId = crypto.randomUUID(); form.reset();
+            $('editor-optional-fields').open = !!item;
             $('form-error').hidden = true;
             $('editor-title').textContent = item ? 'Edit title' : 'Add a title';
             $('remove-recommendation').hidden = !item;
+            bulkImport.hidden = !!item || !onBulkImport;
             field('tier').replaceChildren(...getTiers().map(t => new Option(t.name, t.id)));
             const values = { title: item?.movieTitle || '', type: item?.type || type, tier: item?.tier || getTiers().at(-1)?.id,
                 trailerUrl: item?.url || '', imageUrl: item?.imageUrl ?? item?.thumb ?? '', rank: item?.rank || 0 };
@@ -124,7 +132,8 @@ export function createPrivateEditor({ getUser, getItems, getTiers, getPeople, ge
             selectedPeople = new Set((item?.watchWith || '').split(', ').filter(Boolean));
             renderPeople();
             scoreStatus.textContent = '';
-            dialog.showModal(); field('title').focus();
+            const firstField = applyEditorFieldOrder(dialog);
+            dialog.showModal(); (item ? field('title') : firstField).focus();
         },
     };
 }
