@@ -7,9 +7,9 @@ import { JSDOM } from 'jsdom';
 
 const root = new URL('../../pages/Watch-Later/', import.meta.url);
 const settle = () => new Promise(resolve => setTimeout(resolve, 30));
-async function setup({ linkFirst } = {}) {
+async function setup({ linkFirst, posterFailures = false } = {}) {
     const dom = new JSDOM(await readFile(new URL('private.html', root), 'utf8'), {
-        url: 'http://localhost/pages/Watch-Later/private.html', runScripts: 'outside-only', pretendToBeVisual: true,
+        url: 'http://localhost/pages/Watch-Later/private.html' + (posterFailures ? '?posterFailures=1' : ''), runScripts: 'outside-only', pretendToBeVisual: true,
     });
     const w = dom.window, $ = id => w.document.getElementById(id), sortables = [], opened = [];
     if (linkFirst !== undefined) w.localStorage.setItem('watchLater_linkFirst', String(linkFirst));
@@ -37,6 +37,22 @@ async function setup({ linkFirst } = {}) {
     const app = await load('app.js'); await app.evaluate(); await settle();
     return { w, $, sortables, opened, writes: modules.get(new URL('private-fixture.mjs', import.meta.url).href).namespace.writes, close: () => w.close() };
 }
+
+test('Watchlist supplies poster fallbacks for movies and TV without changing saved data', async () => {
+    const app = await setup({ posterFailures: true });
+    try {
+        const { $, w, writes } = app;
+        const images = [...w.document.querySelectorAll('.media-card > img')];
+        assert.ok(images[0].src.endsWith('/assets/thumbnail-placeholder.webp'));
+        for (const image of images.slice(1, 4)) {
+            image.dispatchEvent(new w.Event('error'));
+            assert.ok(image.src.endsWith('/assets/thumbnail-placeholder.webp'));
+        }
+        $('media-type-switch').querySelector('[data-type="tv"]').click();
+        assert.ok(w.document.querySelector('.media-card > img').src.endsWith('/assets/thumbnail-placeholder.webp'));
+        assert.equal(writes.length, 0);
+    } finally { app.close(); }
+});
 
 test('Add title defaults to link first and honours the saved field-order setting and focus', async () => {
     const app = await setup();

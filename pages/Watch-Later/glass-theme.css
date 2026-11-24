@@ -153,3 +153,7 @@ body.watch-glass {
 .watch-glass #filter-bar .filter-pill.active { background: var(--light-gradient); color: var(--accent-ink); border-color: #e7f9ffb3; box-shadow: 0 0 20px #9bd8ff20; }
 .watch-glass .app-container .media-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px #a2edff55, 0 0 24px #9bd8ff20; }
 .watch-glass .settings-modal-content button { min-height: 44px; }
+/* Keep the supplied artwork visible while remote images load, including slow
+   requests and lazy images. The load/error handler replaces failed sources. */
+.watch-glass img.poster-image { background: #10182a url('/pages/Watch-Later/assets/thumbnail-placeholder.webp') center / contain no-repeat; color: transparent; }
+.watch-glass img.poster-image[data-poster-fallback] { object-fit: contain; }

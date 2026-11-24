@@ -4,10 +4,16 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 const root = resolve(import.meta.dirname, '../..');
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 const firebase = ['app', 'auth', 'firestore'].map(name => [`https://www.gstatic.com/firebasejs/10.7.1/firebase-${name}.js`, '/tests/watch-later/private-fixture.mjs']);
 http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
+    if (url.pathname === '/tests/watch-later/corrupt-poster.webp') {
+        response.writeHead(200, { 'Content-Type': 'image/webp' }).end('Not a decodable image'); return;
+    }
+    if (url.pathname === '/tests/watch-later/slow-poster.webp') {
+        setTimeout(() => response.writeHead(504).end(), 30000); return;
+    }
     const path = resolve(root, '.' + decodeURIComponent(url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname));
     if (!path.startsWith(root + '/')) { response.writeHead(403).end(); return; }
     try {

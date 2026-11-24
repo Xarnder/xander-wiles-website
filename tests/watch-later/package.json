@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-vm-modules --test model.test.mjs ui.test.mjs private-ui.test.mjs",
+    "test": "node --experimental-vm-modules --test model.test.mjs ui.test.mjs private-ui.test.mjs poster-images.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project demo-watch-later --config ../../pages/Watch-Later/firebase.json 'node --test rules.test.mjs'"
   },
   "devDependencies": {

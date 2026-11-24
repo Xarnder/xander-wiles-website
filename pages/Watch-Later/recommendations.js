@@ -35,6 +35,7 @@ import {
 import { mountMediaEditor, bindTitleAutofill, populateGenrePicker } from './media-editor.mjs';
 import { mountDiscoverMobile } from './discover-mobile.mjs';
 import { applyEditorFieldOrder } from './editor-preferences.mjs';
+import { setPosterImage } from './poster-images.mjs';
 mountMediaEditor();
 
 const app = initializeApp(firebaseConfig);
@@ -104,26 +105,13 @@ function showState(title, description, loading = false) {
 function card(item) {
     const article = element('article', 'recommendation-card');
     const cover = element('div', 'cover');
-    const fallback = element(
-        'span',
-        'cover-fallback',
-        item.title.slice(0, 2).toUpperCase(),
-    );
-    fallback.setAttribute('aria-hidden', 'true');
-    cover.append(fallback);
     const videoId = youtubeId(item.trailerUrl);
     const imageUrl =
         safeImageUrl(item.imageUrl) ||
         (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
-    if (imageUrl) {
-        const img = element('img');
-        img.alt = '';
-        img.loading = 'lazy';
-        img.referrerPolicy = 'no-referrer';
-        img.src = imageUrl;
-        img.addEventListener('error', () => img.remove(), { once: true });
-        cover.append(img);
-    }
+    const img = element('img');
+    setPosterImage(img, imageUrl);
+    cover.append(img);
     cover.append(
         element(
             'span',
@@ -248,10 +236,13 @@ function subscribe() {
         (snapshot) => {
             items = snapshot.docs.flatMap((record) => {
                 try {
+                    const data = record.data();
+                    const artwork = safeImageUrl(data.imageUrl);
                     return [
                         {
                             // Existing recommendations without trailers remain visible.
-                            ...recommendationPayload(record.data(), { requireTrailer: false }),
+                            // Bad legacy artwork must not hide an otherwise valid title.
+                            ...recommendationPayload({ ...data, imageUrl: artwork.length <= 2048 ? artwork : '' }, { requireTrailer: false }),
                             id: record.id,
                         },
                     ];

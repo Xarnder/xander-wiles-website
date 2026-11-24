@@ -104,7 +104,7 @@ async function setup(initialUser = null, fetchTitle) {
     const module = new vm.SourceTextModule(source, { context });
     const cache = new Map();
     await module.link(async function link(specifier) {
-        if (['./media-editor.mjs', './discover-mobile.mjs', './compact-mobile.mjs', './editor-preferences.mjs'].includes(specifier)) {
+        if (['./media-editor.mjs', './discover-mobile.mjs', './compact-mobile.mjs', './editor-preferences.mjs', './poster-images.mjs'].includes(specifier)) {
             if (!cache.has(specifier)) {
                 // Cache before yielding so concurrent imports share the same preference state.
                 const shared = new vm.SourceTextModule(readFileSync(new URL(specifier, root), 'utf8'), { context });
@@ -196,6 +196,34 @@ test('guest browsing, combined filters, safe text, empty results and retry', asy
         app.close();
     }
 });
+test('Discover keeps movie and TV cards visible when artwork is missing or fails', async () => {
+    const app = await setup();
+    try {
+        const { $, w } = app;
+        app.seed([
+            sample('missing', 'No artwork'),
+            { ...sample('broken', 'Broken artwork'), imageUrl: 'https://example.test/broken.webp' },
+            { ...sample('invalid', 'Invalid artwork'), imageUrl: 'not-a-url' },
+            { ...sample('tv', 'TV artwork', 'tv'), imageUrl: 'https://example.test/broken-tv.webp' },
+        ]);
+        const images = [...w.document.querySelectorAll('.cover img')];
+        assert.equal(images.length, 3);
+        const poster = title => [...w.document.querySelectorAll('.recommendation-card')]
+            .find(card => card.querySelector('h3').textContent === title).querySelector('img');
+        assert.ok(poster('No artwork').src.endsWith('/assets/thumbnail-placeholder.webp'));
+        assert.ok(poster('Invalid artwork').src.endsWith('/assets/thumbnail-placeholder.webp'));
+        poster('Broken artwork').dispatchEvent(new w.Event('error'));
+        assert.ok(poster('Broken artwork').src.endsWith('/assets/thumbnail-placeholder.webp'));
+        assert.equal($('compact-count').textContent.trim(), '3 titles');
+        $('media-type-switch').querySelector('[data-type="tv"]').click();
+        const series = w.document.querySelector('.cover img');
+        series.dispatchEvent(new w.Event('error'));
+        assert.ok(series.src.endsWith('/assets/thumbnail-placeholder.webp'));
+        assert.equal($('compact-count').textContent.trim(), '1 title');
+        assert.equal(app.writes.length, 0);
+    } finally { app.close(); }
+});
+
 test('owner can publish, edit, remove, and loses controls immediately on sign-out', async () => {
     const app = await setup({ email: model.OWNER_EMAIL, emailVerified: true });
     try {

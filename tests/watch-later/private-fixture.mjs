@@ -33,6 +33,16 @@ records.watches.push(
     { ...records.watches[0], id: 'series', movieTitle: 'A series with a longer title', type: 'tv', year: '2023' },
 );
 records.publicRecommendations.push({ ...records.publicRecommendations[0], id: 'public-series', title: 'A series with a longer title', type: 'tv' });
+if (new URLSearchParams(window.location.search).has('posterFailures')) {
+    const sources = ['', '/tests/watch-later/missing-poster.webp', '/tests/watch-later/corrupt-poster.webp', '/tests/watch-later/slow-poster.webp'];
+    records.watches.slice(0, 4).forEach((item, i) => { item.thumb = sources[i]; });
+    records.watches.find(item => item.type === 'tv').thumb = '';
+    records.publicRecommendations.slice(0, 3).forEach((item, i) => {
+        item.imageUrl = ['', 'https://example.invalid/missing-poster.webp', 'not-a-url'][i];
+        item.trailerUrl = '';
+    });
+    Object.assign(records.publicRecommendations.find(item => item.type === 'tv'), { imageUrl: '', trailerUrl: '' });
+}
 [...records.tiers, ...records.people, ...records.watches].forEach(record => { record.uid = owner.uid; });
 const listeners = new Map();
 const snapshot = ref => {

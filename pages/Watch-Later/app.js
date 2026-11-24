@@ -7,6 +7,7 @@ import { isOwner, watchLaterRedirect } from './recommendations-model.mjs';
 import { createPrivateEditor } from './private-editor.mjs';
 import { cleanTitle, getVideoData } from './youtube-title.mjs';
 import { mountCompactMobile } from './compact-mobile.mjs';
+import { POSTER_PLACEHOLDER, setPosterImage } from './poster-images.mjs';
 
 
 const app = initializeApp(firebaseConfig);
@@ -1286,7 +1287,7 @@ function getThumbnail(url) {
         return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
     }
     console.warn("Could not extract Video ID for thumbnail:", url);
-    return 'https://via.placeholder.com/160x90?text=No+Preview';
+    return POSTER_PLACEHOLDER;
 }
 
 // Helper: Extract YouTube Video ID
@@ -2205,7 +2206,7 @@ function renderCard(id, data, autoAppend = true) {
     const displayTitle = data.movieTitle || 'Movie';
 
     card.innerHTML = `
-        <img src="${data.thumb}" alt="thumbnail">
+        <img alt="">
         ${data.watched && data.watchedAt ? `<span class="watched-at-tag">Watched ${timeAgo(data.watchedAt)} ago</span>` : ''}
         <span class="badge">${(data.type || 'movie').toUpperCase()}</span>
         ${data.imdbScore && data.imdbScore !== 'N/A' ? `<span class="badge imdb-badge">IMDb ${data.imdbScore}</span>` : ''}
@@ -2257,7 +2258,7 @@ function renderCard(id, data, autoAppend = true) {
         </div>
     `;
     card.querySelector('.card-year').textContent = data.year || '';
-    card.querySelector('img').alt = `${displayTitle} poster`;
+    setPosterImage(card.querySelector('img'), data.thumb, `${displayTitle} poster`);
     card.addEventListener('keydown', event => {
         if (event.target === card && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault(); card.click();
@@ -2376,7 +2377,7 @@ window.openEditModal = function(id, data) {
     if (watchedToggle) watchedToggle.checked = !!data.watched;
 
     const editThumb = document.getElementById('edit-thumb');
-    if (editThumb) editThumb.src = data.thumb || "";
+    if (editThumb) setPosterImage(editThumb, data.thumb, `${displayTitle || 'Title'} poster`);
 
     if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
     if (editStatusSelect) editStatusSelect.value = data.watchStatus || 'first-watch';
