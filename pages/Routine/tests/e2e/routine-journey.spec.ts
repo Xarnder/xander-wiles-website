@@ -30,20 +30,39 @@ test('core routine journey', async ({ page }) => {
 	await expect(page.getByTestId('later-task')).toBeVisible();
 	await expect(page.getByTestId('not-today-task')).toBeVisible();
 	await expect(page.getByTestId('progress-text')).toHaveText('Task 1 of 3');
+	await expect(page.getByTestId('progress-percent')).toHaveText('0%');
 	await expect(page.getByRole('heading', { name: 'Water' })).toBeVisible();
 
 	await page.getByTestId('complete-task').click();
 	await expect(page.getByRole('heading', { name: 'Stretch' })).toBeVisible();
+	await expect(page.getByTestId('progress-percent')).toHaveText('33%');
 
 	await page.getByTestId('complete-task').click();
 	await expect(page.getByRole('heading', { name: 'Plan day' })).toBeVisible();
+	await expect(page.getByTestId('progress-percent')).toHaveText('67%');
 
 	await page.getByTestId('back-task').click();
 	await expect(page.getByRole('heading', { name: 'Stretch' })).toBeVisible();
+	await expect(page.getByTestId('progress-text')).toHaveText('Task 2 of 3');
+	await expect(page.getByTestId('progress-percent')).toHaveText('33%');
+	await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '33');
+	await expect(page.getByTestId('progress-seg-completed')).toHaveAttribute('style', /width: 33%/);
+	await expect(page.getByTestId('prior-status')).toHaveText('Previously complete');
+
+	await page.getByTestId('back-task').click();
+	await expect(page.getByRole('heading', { name: 'Water' })).toBeVisible();
+	await expect(page.getByTestId('progress-percent')).toHaveText('0%');
+	await expect(page.getByTestId('progress-seg-completed')).toHaveAttribute('style', /width: 0%/);
+	await expect(page.getByTestId('back-task')).toBeDisabled();
+
+	await page.getByTestId('complete-task').click();
+	await expect(page.getByRole('heading', { name: 'Stretch' })).toBeVisible();
+	await expect(page.getByTestId('progress-percent')).toHaveText('33%');
 
 	// Change the previous Complete into Not Today
 	await page.getByTestId('not-today-task').click();
 	await expect(page.getByRole('heading', { name: 'Plan day' })).toBeVisible();
+	await expect(page.getByTestId('progress-percent')).toHaveText('67%');
 
 	await page.getByTestId('complete-task').click();
 	await expect(page.getByTestId('routine-summary')).toBeVisible();

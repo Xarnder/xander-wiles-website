@@ -112,8 +112,13 @@ export function getProgressSegments(session: RunSession): ProgressSegments {
 	let later = 0;
 	let skipped = 0;
 
-	for (const task of session.tasks) {
-		const status = session.statuses[task.id] ?? 'pending';
+	for (const [index, task] of session.tasks.entries()) {
+		// Back preserves prior choices for review, but the current task and
+		// tasks ahead still need to be visited before they count as progress.
+		const status =
+			session.phase === 'running' && index >= session.currentIndex
+				? 'pending'
+				: (session.statuses[task.id] ?? 'pending');
 		if (status === 'completed') completed += 1;
 		else if (status === 'later') later += 1;
 		else if (status === 'skipped') skipped += 1;
@@ -131,7 +136,7 @@ export function getProgressSegments(session: RunSession): ProgressSegments {
 	return buildProgressSegments({ completed, later, skipped, pending }, resolved);
 }
 
-/** Share of tasks no longer pending (0–100). Summary is always 100. */
+/** Share of resolved tasks before the current task (0–100). Nonempty summary is 100. */
 export function getProgressPercent(session: RunSession): number {
 	return getProgressSegments(session).resolvedPercent;
 }

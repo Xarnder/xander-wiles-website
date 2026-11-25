@@ -142,12 +142,15 @@ describe('run-session', () => {
 		session = completeCurrent(session);
 		session = completeCurrent(session);
 		expect(session.phase).toBe('summary');
+		expect(getProgressPercent(session)).toBe(100);
 
 		session = goBack(session);
 		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
+		expect(getProgressPercent(session)).toBe(67);
 		session = goBack(session);
 		session = goBack(session);
 		expect(session.tasks[session.currentIndex]?.id).toBe('t1');
+		expect(getProgressPercent(session)).toBe(0);
 
 		session = completeCurrent(session);
 		expect(session.tasks[session.currentIndex]?.id).toBe('t2');
@@ -155,6 +158,7 @@ describe('run-session', () => {
 		expect(session.tasks[session.currentIndex]?.id).toBe('t3');
 		session = completeCurrent(session);
 		expect(session.phase).toBe('summary');
+		expect(getProgressPercent(session)).toBe(100);
 	});
 
 	it('moves to summary after the final task', () => {
@@ -357,6 +361,48 @@ describe('run-session', () => {
 		expect(distributePercents([0, 0, 0, 3])).toEqual([0, 0, 0, 100]);
 		expect(distributePercents([0, 0, 0, 0])).toEqual([0, 0, 0, 0]);
 		expect(distributePercents([1, 1, 1, 0]).reduce((sum, n) => sum + n, 0)).toBe(100);
+	});
+
+	it('retreats and replays progress across completed, later, and skipped tasks', () => {
+		const longer = [...tasks, { id: 't4', title: 'Four', order: 3 }];
+		let session = createRunSession(makeRoutine(longer));
+		session = completeCurrent(session);
+		session = laterCurrent(session);
+		session = notTodayCurrent(session);
+		const priorStatuses = { ...session.statuses };
+		expect(getProgressPercent(session)).toBe(75);
+
+		for (const expected of [
+			{ completed: 1, later: 1, skipped: 0, pending: 2, resolvedPercent: 50 },
+			{ completed: 1, later: 0, skipped: 0, pending: 3, resolvedPercent: 25 },
+			{ completed: 0, later: 0, skipped: 0, pending: 4, resolvedPercent: 0 }
+		]) {
+			session = goBack(session);
+			const segments = getProgressSegments(session);
+			expect(segments).toMatchObject(expected);
+			expect(segments.percents).toEqual({
+				completed: expected.completed * 25,
+				later: expected.later * 25,
+				skipped: expected.skipped * 25,
+				pending: expected.pending * 25
+			});
+			expect(session.statuses).toEqual(priorStatuses);
+		}
+
+		// Reconfirming the same choices must grow progress again, even though
+		// their saved statuses have not changed.
+		session = completeCurrent(session);
+		expect(getProgressPercent(session)).toBe(25);
+		session = goBack(session);
+		expect(getProgressPercent(session)).toBe(0);
+		session = completeCurrent(session);
+		expect(getProgressPercent(session)).toBe(25);
+		session = laterCurrent(session);
+		expect(getProgressPercent(session)).toBe(50);
+		session = notTodayCurrent(session);
+		expect(getProgressPercent(session)).toBe(75);
+		session = completeCurrent(session);
+		expect(getProgressPercent(session)).toBe(100);
 	});
 
 	it('grows stacked progress segments as statuses change', () => {
