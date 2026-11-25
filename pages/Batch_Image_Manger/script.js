@@ -389,6 +389,26 @@ document.addEventListener('DOMContentLoaded', () => {
     let colourMatchRunToken = 0;
     let colourTransferStats = null;
 
+    const fastSorter = BatchImageSort.mount({
+        getState: () => ({ files: imageFiles, folders: imageFolders, availableFolders }),
+        onChange: state => {
+            imageFolders = state.folders;
+            availableFolders = state.availableFolders;
+            updateFolderDropdown();
+            folderSelect.value = imageFolders[currentIndex];
+        },
+        onClose: updateUIForCurrentIndex,
+        preparePreview: prepareFileForCanvas,
+        download: async ({ files, folders, availableFolders: sortedFolders }) => {
+            const output = createBatchDownload(files.length);
+            sortedFolders.filter(folder => folder !== '(Root)').forEach(folder => output.addFolder(folder));
+            files.forEach((file, index) => {
+                output.addFile(folders[index], file.name, file);
+            });
+            await output.download('sorted_images.zip');
+        }
+    });
+
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
     photoUploadInput.addEventListener('change', handleDirectoryUpload);
@@ -766,11 +786,12 @@ document.addEventListener('DOMContentLoaded', () => {
             ? ` in ${folderCount} subfolder${folderCount === 1 ? '' : 's'}`
             : '';
         const label = svgCount === imageFiles.length
-            ? `Loaded ${imageFiles.length} SVG${imageFiles.length === 1 ? '' : 's'}${folderNote}. Format set to Original (Rename Only) — export to ZIP with new names.`
+            ? `Loaded ${imageFiles.length} SVG${imageFiles.length === 1 ? '' : 's'}${folderNote}. Format set to Original (Rename Only) — ${imageFiles.length === 1 ? 'download directly with a new name' : 'export to ZIP with new names'}.`
             : `Loaded ${imageFiles.length} file${imageFiles.length === 1 ? '' : 's'}${svgCount ? ` (${svgCount} SVG)` : ''}${folderNote}. You can now Upload a CSV or scroll down to customize.`;
         showStatus(uploadStatus, label, false);
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
+        updateDownloadButtonLabels();
         updateFolderDropdown();
         handleControlsChange();
         updateUIForCurrentIndex();
@@ -1978,6 +1999,48 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateDownloadButtonLabels() {
+        const multiple = imageFiles.length > 1;
+        if (!exportBtn.disabled) exportBtn.textContent = multiple ? 'Export All as .ZIP' : 'Download File';
+        if (!downscaleGenerateBtn.disabled) downscaleGenerateBtn.textContent = multiple ? 'Generate & Download ZIP' : 'Generate & Download';
+        if (!upscaleGenerateBtn.disabled) upscaleGenerateBtn.textContent = multiple ? 'Upscale & Download ZIP' : 'Upscale & Download';
+    }
+
+    // Decide from the loaded batch size, even when some files fail to process.
+    // A single file never requires the ZIP library or a folder wrapper.
+    function createBatchDownload(fileCount) {
+        const isZip = fileCount > 1;
+        const usedPaths = new Set();
+        let zip;
+        let singleFile;
+        let addedFiles = 0;
+        function getZip() {
+            if (!zip) {
+                if (typeof JSZip === 'undefined') throw new Error('ZIP library is unavailable. Reload the page and try again.');
+                zip = new JSZip();
+            }
+            return zip;
+        }
+        return {
+            isZip,
+            addFolder(folder) { if (isZip) getZip().folder(folder); },
+            addFile(folder, filename, blob) {
+                if (isZip) getZip().file(BatchImageSort.uniquePath(folder, filename, usedPaths), blob);
+                else singleFile = { filename, blob };
+                addedFiles++;
+            },
+            async download(zipName, onProgress) {
+                if (!addedFiles) throw new Error('No files to download.');
+                if (isZip) {
+                    const blob = await getZip().generateAsync({ type: 'blob', streamFiles: true }, onProgress);
+                    await safeDownload(blob, zipName);
+                } else {
+                    await safeDownload(singleFile.blob, singleFile.filename);
+                }
+            }
+        };
+    }
+
     async function handleExport() {
         if (imageFiles.length === 0) return;
 
@@ -1985,7 +2048,7 @@ document.addEventListener('DOMContentLoaded', () => {
         exportBtn.textContent = 'Processing...';
         showStatus(exportStatus, `Processing ${imageFiles.length} files...`, false, true);
 
-        const zip = new JSZip();
+        const output = createBatchDownload(imageFiles.length);
         const options = getTitleOptionsFromUI();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
@@ -2008,11 +2071,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const ext = getFileExtension(format, file);
                     const finalName = generateFilename(i, imageTitles[i], ext);
 
-                    if (imageFolders[i] !== "(Root)") {
-                        zip.folder(imageFolders[i]).file(finalName, blob);
-                    } else {
-                        zip.file(finalName, blob);
-                    }
+                    output.addFile(imageFolders[i], finalName, blob);
                     successCount++;
 
                     if (!passthrough) {
@@ -2030,13 +2089,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     : 'No files to export.');
             }
 
-            showStatus(exportStatus, `Zipping ${successCount} file${successCount === 1 ? '' : 's'}...`, false);
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(zipBlob);
-            link.download = passthrough ? 'renamed_files.zip' : 'processed_images.zip';
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showStatus(exportStatus, output.isZip ? `Zipping ${successCount} files...` : 'Preparing download...', false);
+            await output.download(passthrough ? 'renamed_files.zip' : 'processed_images.zip');
 
             const skipNote = skippedCount ? ` (${skippedCount} skipped)` : '';
             showStatus(exportStatus, `Download Started!${skipNote}`, false);
@@ -2045,7 +2099,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatus(exportStatus, `Error: ${error.message}`, true);
         } finally {
             exportBtn.disabled = false;
-            exportBtn.textContent = 'Export All as .ZIP';
+            updateDownloadButtonLabels();
         }
     }
 
@@ -2206,6 +2260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleKeyPress(e) {
+        if (fastSorter.isOpen()) return;
         if (editorSection.classList.contains('hidden') || document.activeElement.tagName === 'INPUT' || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden') || !upscalePopup.classList.contains('hidden') || !colourMatchPopup.classList.contains('hidden')) { return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
@@ -2812,7 +2867,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus(downscaleStatus, `Starting batch process...`, false, true);
         downscaleErrorMessage.textContent = '';
 
-        const zip = new JSZip();
+        const output = createBatchDownload(imageFiles.length);
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
 
@@ -2876,18 +2931,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const finalName = `${downscaleExportBase(i, imageTitles[i])}${ext}`;
 
-                if (useSubfolders && imageFolders[i] !== "(Root)") {
-                    zip.folder(imageFolders[i]).file(finalName, blob);
-                } else {
-                    zip.file(finalName, blob);
-                }
+                output.addFile(useSubfolders ? imageFolders[i] : '(Root)', finalName, blob);
             }
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(zipBlob);
-            link.download = 'batch_converted_images.zip';
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            await output.download('batch_converted_images.zip');
             showStatus(downscaleStatus, `Download Started!`, false, false);
 
         } catch (error) {
@@ -2895,7 +2942,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatus(downscaleErrorMessage, error.message, true);
         } finally {
             downscaleGenerateBtn.disabled = false;
-            downscaleGenerateBtn.textContent = 'Generate & Download ZIP';
+            updateDownloadButtonLabels();
         }
     }
 
@@ -3218,7 +3265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setUpscaleImageProgress(0, 'Preparing…');
         showStatus(upscaleStatus, 'Upscaling with bicubic…', false, true);
 
-        const zip = new JSZip();
+        const output = createBatchDownload(imageFiles.length);
         const format = upscaleFormatSelect.value;
         const compression = readCompressionSettings('upscale');
         const ext = getFileExtension(format);
@@ -3286,11 +3333,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     baseName = applySpacing(baseName, upscaleSpacingSelect.value);
                     const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
-                    if (useSubfolders && imageFolders[i] !== '(Root)') {
-                        zip.folder(imageFolders[i]).file(finalName, blob);
-                    } else {
-                        zip.file(finalName, blob);
-                    }
+                    output.addFile(useSubfolders ? imageFolders[i] : '(Root)', finalName, blob);
 
                     processed++;
                     setUpscaleImageProgress(100, `Done — ${target.appliedW} × ${target.appliedH}`);
@@ -3313,31 +3356,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (upscaleCancelRequested) {
                 const ok = processed - failed;
-                showStatus(upscaleStatus, `Cancelled after ${ok} image(s). Partial ZIP not downloaded.`, true);
+                showStatus(upscaleStatus, `Cancelled after ${ok} image(s). No download started.`, true);
                 setUpscaleBatchProgress(
                     (processed / imageFiles.length) * 100,
                     `Cancelled — ${processed}/${imageFiles.length} processed`
                 );
             } else {
-                setUpscaleBatchProgress(100, 'Building ZIP…');
+                setUpscaleBatchProgress(100, output.isZip ? 'Building ZIP…' : 'Preparing download…');
                 setUpscaleImageProgress(100, 'Packaging download…');
                 await yieldToUI();
 
-                const zipBlob = await zip.generateAsync(
-                    { type: 'blob', streamFiles: true },
+                await output.download(
+                    'batch_upscaled_images.zip',
                     (meta) => {
                         const pct = Math.round(meta.percent || 0);
                         setUpscaleImageProgress(pct, `Zipping… ${pct}%`);
                     }
                 );
-
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(zipBlob);
-                link.download = 'batch_upscaled_images.zip';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
 
                 const ok = processed - failed;
                 const msg = failed
@@ -3345,7 +3380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     : `Download started! Upscaled ${ok} image(s).`;
                 showStatus(upscaleStatus, msg, failed > 0, false);
                 setUpscaleBatchProgress(100, 'Complete');
-                setUpscaleImageProgress(100, 'ZIP ready');
+                setUpscaleImageProgress(100, output.isZip ? 'ZIP ready' : 'File ready');
             }
         } catch (error) {
             console.error('DEBUG: Upscale Error', error);
@@ -3359,7 +3394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             upscaleRunning = false;
             upscaleCancelRequested = false;
             upscaleGenerateBtn.disabled = false;
-            upscaleGenerateBtn.textContent = 'Upscale & Download ZIP';
+            updateDownloadButtonLabels();
             upscaleCancelBtn.classList.add('hidden');
             upscaleCancelBtn.disabled = false;
             upscaleCancelBtn.textContent = 'Cancel';

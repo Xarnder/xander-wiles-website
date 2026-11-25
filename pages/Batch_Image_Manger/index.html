@@ -61,7 +61,7 @@
         <section id="upload-section" class="glass-card">
             <h2>1. Upload Images & Data</h2>
             <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                Select a folder of images or SVGs. Subfolders are kept in the UI and in the export ZIP.
+                Select images or SVGs. A single file downloads directly; multiple files download as a ZIP with subfolders preserved.
                 Optionally upload a CSV to auto-categorize.
                 For SVG rename, set Format to Original or SVG so vectors are kept.
             </p>
@@ -102,13 +102,13 @@
                     <div class="control-group-sub">
                         <div class="control-group">
                             <label for="add-title-toggle" class="checkbox-label toggle-switch">
-                                <input type="checkbox" id="add-title-toggle" checked />
+                                <input type="checkbox" id="add-title-toggle" />
                                 <span class="toggle-knob"></span>
                                 Add Title
                             </label>
                         </div>
 
-                        <div id="title-options-wrapper">
+                        <div id="title-options-wrapper" class="disabled">
                             <div class="control-group">
                                 <label for="title-mode-select">Mode</label>
                                 <select id="title-mode-select">
@@ -459,6 +459,7 @@
                         <button id="open-downscale-modal-btn" class="secondary-btn">Batch Downscale</button>
                         <button id="open-upscale-modal-btn" class="secondary-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">Batch Upscale</button>
                         <button id="open-crop-modal-btn" class="secondary-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">Batch Fast Crop</button>
+                        <button id="open-sort-modal-btn" class="secondary-btn sort-launch-btn">Batch Fast Sort</button>
                     </div>
                 </div>
 
@@ -1111,6 +1112,50 @@
         </div>
     </div>
 
+    <!-- Batch Fast Sort Popup -->
+    <div id="sort-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card sort-card" role="dialog" aria-modal="true" aria-labelledby="sort-heading" aria-describedby="sort-help" tabindex="-1">
+            <button type="button" class="popup-close-btn" aria-label="Close image sorter">&times;</button>
+            <h3 id="sort-heading">Batch Fast Sort</h3>
+            <p id="sort-help" class="sort-help">Choose your subfolders, then press a folder’s key to sort the image and advance. Keys run across 1–0, Q–P, A–L, then Z–M.</p>
+            <div class="sort-toolbar">
+                <p id="sort-progress" role="status" aria-live="polite"></p>
+                <button type="button" id="sort-manage-btn" class="secondary-btn hidden">Add / rename folders</button>
+            </div>
+            <div id="sort-folder-panel" class="sort-folder-panel">
+                <form id="sort-folder-form" class="sort-folder-form">
+                    <label for="sort-folder-name" id="sort-folder-label">New subfolder</label>
+                    <div class="sort-folder-fields">
+                        <input id="sort-folder-name" type="text" placeholder="e.g. Keep or Keep/Portraits" autocomplete="off" maxlength="200" required />
+                        <button type="submit" id="sort-save-folder-btn" class="secondary-btn">Add folder</button>
+                        <button type="button" id="sort-cancel-rename-btn" class="secondary-btn hidden">Cancel rename</button>
+                    </div>
+                </form>
+                <p class="sort-help">Existing subfolders are included. Add or rename folders at any time; their shortcut keys stay the same.</p>
+                <button type="button" id="sort-start-btn" class="popup-generate-btn">Start sorting</button>
+            </div>
+            <p id="sort-status" class="sort-status hidden" role="status" aria-live="polite"></p>
+            <div class="sort-image-stage">
+                <img id="sort-image" class="hidden" alt="" />
+                <p id="sort-image-message">Set up your folders to begin.</p>
+            </div>
+            <div class="sort-image-details">
+                <strong id="sort-filename"></strong>
+                <span id="sort-current-folder"></span>
+            </div>
+            <div id="sort-destinations" class="sort-destinations" aria-label="Destination folders"></div>
+            <p class="sort-help">Click a folder or press its key. <kbd>Space</kbd> / <kbd>→</kbd> skip · <kbd>Backspace</kbd> undo · <kbd>Esc</kbd> close. Shortcuts pause while editing folders.</p>
+            <div class="sort-actions">
+                <button type="button" id="sort-undo-btn" class="secondary-btn">Undo last</button>
+                <button type="button" id="sort-skip-btn" class="secondary-btn">Skip image</button>
+                <button type="button" id="sort-restart-btn" class="secondary-btn hidden">Review again</button>
+                <button type="button" id="sort-download-btn" class="popup-generate-btn">Download sorted ZIP</button>
+                <button type="button" id="sort-done-btn" class="secondary-btn">Done</button>
+            </div>
+            <p class="sort-help">One file downloads directly; multiple files download as a ZIP with your folder changes. Downloads keep the current image files and filenames, with no extra edits. Duplicate filenames get a number. Skipped images keep their folders; originals on your device stay untouched.</p>
+        </div>
+    </div>
+
     <!-- Match Overall Colour Popup -->
     <div id="colour-match-popup" class="popup-overlay hidden">
         <div class="popup-card glass-card colour-match-card">
@@ -1264,6 +1309,7 @@
         // Set worker src immediately
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
+    <script src="fast-sort.js" defer></script>
     <script src="script.js" defer></script>
     <script src="/assets/js/nav-loader.js"></script>
 </body>
