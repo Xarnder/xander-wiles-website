@@ -7,7 +7,7 @@
   const shop = useShop();
   let category = $derived(shop.restored ? page.url.searchParams.get('category') || '' : '');
   let title = $derived(category === 'new-in' ? 'New In' : categories.find(c => c.toLowerCase() === category) || 'The collection');
-  let products = $derived(filterProducts(category));
+  let products = $derived(filterProducts(category, '', 'home'));
 </script>
 <svelte:head><title>{title} | ALDESCA</title><meta name="description" content="Explore ALDESCA’s considered collection of lighting, furniture and homeware." /></svelte:head>
 <div class="catalogue container">

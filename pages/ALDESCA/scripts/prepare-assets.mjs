@@ -93,6 +93,6 @@ for (const [name, originalSource, originalCrop, intendedUse, alt] of entries) {
   contact.push({ input: cell, left: (index % 3) * 280, top: Math.floor(index / 3) * 252 });
   contact.push({ input: label, left: (index % 3) * 280, top: Math.floor(index / 3) * 252 + 220 });
 }
-await writeFile(resolve(project, 'static/asset-manifest.json'), JSON.stringify({ version: 1, assets }, null, 2) + '\n');
+await writeFile(resolve(project, 'src/lib/assets/asset-manifest.json'), JSON.stringify({ version: 1, assets }, null, 2) + '\n');
 await sharp({ create: { width: 840, height: Math.ceil(entries.length / 3) * 252, channels: 3, background: '#EFE6D8' } }).composite(contact).png().toFile(resolve(project, 'docs/asset-contact-sheet.png'));
 console.log(`Prepared ${entries.length} photographic assets and their manifest. Originals unchanged.`);

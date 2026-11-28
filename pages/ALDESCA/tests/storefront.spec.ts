@@ -5,7 +5,7 @@ const open = async (page: Page, url: string) => { await page.goto(url); await pa
 const closeDialog = (page: Page) => page.getByRole('button', { name: 'Close dialog' }).click();
 const ready = async (page: Page) => page.evaluate(async () => {
   await document.fonts.ready;
-  await Promise.all(Array.from(document.images).map(image => image.decode().catch(() => {})));
+  await Promise.all(Array.from(document.images).map(image => { image.loading = 'eager'; return image.decode(); }));
 });
 
 test('cart arithmetic, finish identity, quantities, removals and persistence', async ({ page }) => {

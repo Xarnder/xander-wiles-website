@@ -2,7 +2,7 @@
 
 The photographs originate in the two 1024 × 1536 PNG references supplied by the user. Both original references remain unchanged in the project root. Photography is rendered separately from live HTML/Svelte text and controls.
 
-Run `npm run assets` from this project to reproduce the 20 assets in `static/images`, `static/asset-manifest.json`, and `docs/asset-contact-sheet.png`. The `sharp` development dependency encodes native-size WebP images at quality 94. Images wider than 400 pixels also have half-width variants at quality 90. Runtime images are local and require no external service.
+Run `npm run assets` from this project to reproduce the 20 assets in `static/images`, `src/lib/assets/asset-manifest.json`, and `docs/asset-contact-sheet.png`. The `sharp` development dependency encodes native-size WebP images at quality 94. Images wider than 400 pixels also have half-width variants at quality 90. Runtime images are local and require no external service.
 
 The manifest gives each image a stable name, path, dimensions, intended use, alt text, aspect ratio, focal point, fit recommendation, source file and exact crop rectangle. Crop coordinates are integer pixels from the upper-left of the source image.
 

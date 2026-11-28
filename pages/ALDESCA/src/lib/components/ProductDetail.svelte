@@ -14,16 +14,25 @@
   let finish = $state('');
   let selectedFinish = $derived(finish || (shop.restored ? product.finishes.find(f => f.id === page.url.searchParams.get('finish'))?.id : '') || product.finishes[0].id);
   let quantity = $state(1);
+  let clothing = $derived(product.department === 'clothing');
+  let size = $state('');
+  let selectedSize = $derived(size || (product.sizes?.length === 1 ? product.sizes[0] : ''));
+  let sizeError = $state(false);
+  let sizeFieldset: HTMLFieldSetElement | undefined = $state();
+  function addToBag() {
+    if (product.sizes && !selectedSize) { sizeError = true; sizeFieldset?.focus(); return; }
+    shop.add(product.id, selectedFinish, quantity, selectedSize || undefined);
+  }
   let saved = $derived(shop.wishlist.includes(product.id));
-  let related = $derived(products.filter(p => p.id !== product.id));
+  let related = $derived(products.filter(p => p.department === product.department && p.id !== product.id).sort((a, b) => Number(b.category === product.category) - Number(a.category === product.category)).slice(0, 3));
   let sections = $derived([
     { title: 'Product details', body: product.details },
-    { title: 'Dimensions & care', body: 'Dimensions and care instructions have not yet been supplied.' + (product.category === 'Lighting' ? ' Electrical specifications and installation guidance are also awaiting confirmation.' : '') },
+    { title: clothing ? 'Fit & care' : 'Dimensions & care', body: clothing ? 'Sizes shown are illustrative options for this concept collection. Garment measurements, fabric composition and care instructions are awaiting confirmation.' : 'Dimensions and care instructions have not yet been supplied.' + (product.category === 'Lighting' ? ' Electrical specifications and installation guidance are also awaiting confirmation.' : '') },
     { title: 'Delivery & Returns', body: 'Delivery areas, timings, charges and the returns policy are not available yet. Checkout is currently unavailable.' }
   ]);
 </script>
 <div class="product-page container">
-  <nav class="breadcrumb" aria-label="Breadcrumb"><a href={resolve('/')}>Home</a><span>/</span><a href={`${resolve('/shop')}?category=${product.category.toLowerCase()}`}>{product.category}</a><span>/</span><span aria-current="page">{product.name}</span></nav>
+  <nav class="breadcrumb" aria-label="Breadcrumb"><a href={resolve('/')}>Home</a><span>/</span>{#if clothing}<a href={resolve('/clothing')}>Clothing</a><span>/</span>{/if}<a href={`${clothing ? resolve('/clothing') : resolve('/shop')}?category=${product.category.toLowerCase()}${clothing ? '#collection' : ''}`}>{product.category}</a><span>/</span><span aria-current="page">{product.name}</span></nav>
   <div class="product-main">
     <ProductGallery {product} />
     <section class="purchase" aria-labelledby="product-title">
@@ -31,15 +40,23 @@
       <h1 id="product-title">{product.name}</h1>
       <p class="product-price">{money(product.price)}</p>
       <div class="description"><p>{product.description}</p><p>{product.supporting}</p></div>
-      <div class="finish"><FinishSelector finishes={product.finishes} value={selectedFinish} onchange={(value) => finish = value} /></div>
+      <div class="finish"><FinishSelector name={clothing ? 'Colour' : 'Finish'} finishes={product.finishes} value={selectedFinish} onchange={(value) => finish = value} /></div>
+      {#if product.sizes}
+        <fieldset class="sizes" bind:this={sizeFieldset} tabindex="-1" aria-describedby={sizeError ? 'size-error' : undefined}>
+          <legend>{product.id === 'trousers' ? 'Waist size (inches)' : 'Size'}{selectedSize ? `: ${selectedSize}` : ''}</legend>
+          <div class="size-options">{#each product.sizes as option}<label><input type="radio" name="clothing-size" value={option} checked={selectedSize === option} onchange={() => { size = option; sizeError = false; }} /><span>{option}</span></label>{/each}</div>
+          {#if sizeError}<p class="size-error" id="size-error" role="alert">Please select a size before adding to your bag.</p>{/if}
+        </fieldset>
+      {/if}
       <div class="quantity"><p>Quantity</p><QuantitySelector value={quantity} onchange={(value) => quantity = value} /></div>
-      <button class="button full add-to-bag" onclick={() => shop.add(product.id, selectedFinish, quantity)}>Add to bag</button>
+      <button class="button full add-to-bag" onclick={addToBag}>Add to bag</button>
       <button class="wishlist" aria-pressed={saved} onclick={() => shop.toggleWishlist(product.id)}><Icon name="heart" size={23} filled={saved} /><span>{saved ? 'Saved to wishlist' : 'Save to wishlist'}</span></button>
+      {#if clothing}<p class="concept-note">Concept collection · Illustrative product and price.</p>{/if}
       <div class="accordions">{#each sections as section}<details><summary>{section.title}<span class="plus"><Icon name="plus" size={19}/></span><span class="minus"><Icon name="minus" size={19}/></span></summary><p>{section.body}</p></details>{/each}</div>
     </section>
   </div>
-  <div class="product-editorial"><EditorialSplit image="product-editorial" title="A softer kind of light." copy="Sculptural form. A warm, welcoming glow." link="Explore lighting" href={`${resolve('/shop')}?category=lighting`} /></div>
-  <section class="related" aria-labelledby="related-heading"><div class="section-heading"><h2 id="related-heading">Pairs beautifully with</h2><a href={resolve('/shop')}>View all</a></div><ProductGrid products={related} wide /></section>
+  <div class="product-editorial">{#if clothing}<EditorialSplit image="fashion-hero" title="Wear it your way." copy="Quiet tones. Effortless combinations." link="Explore clothing" href={resolve('/clothing')} />{:else}<EditorialSplit image="product-editorial" title="A softer kind of light." copy="Sculptural form. A warm, welcoming glow." link="Explore lighting" href={`${resolve('/shop')}?category=lighting`} />{/if}</div>
+  <section class="related" aria-labelledby="related-heading"><div class="section-heading"><h2 id="related-heading">Pairs beautifully with</h2><a href={clothing ? resolve('/clothing') : resolve('/shop')}>View all</a></div><ProductGrid products={related} wide /></section>
 </div>
 <style>
   .breadcrumb { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:50px; padding-block:10px; font-size:13px; }
@@ -54,6 +71,16 @@
   .description p { margin:0; }
   .description p:first-child { max-width:345px; }
   .finish { margin-bottom:18px; }
+  .sizes { border:0; padding:0; margin:0 0 24px; min-width:0; }
+  .sizes legend { margin-bottom:10px; padding:0; }
+  .size-options { display:flex; flex-wrap:wrap; gap:8px; }
+  .size-options label { position:relative; cursor:pointer; }
+  .size-options input { position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer; }
+  .size-options span { display:flex; align-items:center; justify-content:center; min-width:48px; min-height:44px; padding:10px 12px; border:1px solid var(--rule); }
+  .size-options input:checked + span { background:var(--black); color:var(--ivory); border-color:var(--black); }
+  .size-options input:focus-visible + span { outline:2px solid var(--black); outline-offset:3px; }
+  .size-error { font-size:.875rem; margin:12px 0 0; color:#842f20; }
+  .concept-note { font-size:.875rem; color:#514d46; margin:0 0 16px; }
   .quantity p { margin-bottom:6px; line-height:20px; }
   .quantity { margin-bottom:21px; }
   .add-to-bag { min-height:50px; font-size:22px; font-weight:500; }

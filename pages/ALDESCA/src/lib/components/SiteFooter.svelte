@@ -20,7 +20,7 @@
     <div class="newsletter-field"><input id="newsletter-email" type="email" bind:value={email} placeholder="Your email address" autocomplete="email" required oninvalid={() => message = 'Please enter a valid email address.'} oninput={() => message = ''} aria-describedby={message ? 'newsletter-status' : undefined} /><button aria-label="Submit newsletter email"><Icon name="arrow" size={19} /></button></div>
     {#if message}<p id="newsletter-status" class="newsletter-status" role="status">{message}</p>{/if}
   </form>
-  <nav aria-label="Footer navigation"><a href={resolve('/shop')}>Shop</a><button onclick={() => shop.panel = 'about'}>About Aldesca</button><button onclick={() => shop.panel = 'contact'}>Contact</button><button onclick={() => shop.panel = 'delivery'}>Delivery &amp; Returns</button><a href={resolve('/privacy-policy')} aria-current={page.route.id === '/privacy-policy' ? 'page' : undefined}>Privacy policy</a></nav>
+  <nav aria-label="Footer navigation"><a href={resolve('/shop')}>Home &amp; Living</a><a href={resolve('/clothing')}>Clothing</a><button onclick={() => shop.panel = 'about'}>About Aldesca</button><button onclick={() => shop.panel = 'contact'}>Contact</button><button onclick={() => shop.panel = 'delivery'}>Delivery &amp; Returns</button><a href={resolve('/privacy-policy')} aria-current={page.route.id === '/privacy-policy' ? 'page' : undefined}>Privacy policy</a></nav>
 </footer>
 <style>
   .site-footer { display:grid; grid-template-columns:222px 337px minmax(0,1fr); align-items:center; padding:15px var(--gutter); min-height:80px; max-width:var(--page-width); margin-inline:auto; }

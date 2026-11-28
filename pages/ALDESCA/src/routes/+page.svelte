@@ -1,6 +1,6 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
-  import { products, categories } from '#lib/catalogue.ts';
+  import { homeProducts, categories } from '#lib/catalogue.ts';
   import Photo from '#lib/components/Photo.svelte';
   import ProductGrid from '#lib/components/ProductGrid.svelte';
   import EditorialSplit from '#lib/components/EditorialSplit.svelte';
@@ -13,7 +13,7 @@
   </section>
   <section class="selected container" aria-labelledby="selected-heading">
     <div class="section-heading"><h2 id="selected-heading">Selected pieces</h2><a href={resolve('/shop')}>View all</a></div>
-    <ProductGrid {products} />
+    <ProductGrid products={homeProducts} />
   </section>
   <section class="categories container" id="collections" aria-labelledby="categories-heading">
     <div class="section-heading"><h2 id="categories-heading">Find your finishing touches</h2></div>
@@ -22,8 +22,14 @@
     {/each}</div>
   </section>
   <EditorialSplit image="home-closing-editorial" title="Bring it all together." link="Explore the collection" href={resolve('/shop')} closing />
+  <section class="fashion-introduction"><div class="fashion-photo"><Photo name="fashion-hero" /></div><div class="fashion-copy"><p class="eyebrow">INTRODUCING ALDESCA CLOTHING</p><h2>A considered wardrobe.</h2><p>The same quiet luxury. A new way to wear it.</p><a class="button" href={resolve('/clothing')}>Discover clothing</a></div></section>
 </div>
 <style>
+  .fashion-introduction { display:grid; grid-template-columns:1fr 1fr; margin-top:32px; background:#e2d7c7; }
+  .fashion-photo { min-height:300px; }
+  .fashion-copy { padding:clamp(2rem,4vw,4rem) var(--gutter); align-self:center; }
+  .fashion-copy h2 { font-size:clamp(2rem,4vw,3.75rem); margin-bottom:20px; }
+  @media(max-width:700px) { .fashion-introduction { display:flex; flex-direction:column; } .fashion-photo { min-height:0; aspect-ratio:1.5; } .fashion-copy { align-self:stretch; } }
   .home-page { max-width:var(--page-width); margin:20px auto 0; }
   .hero { display:grid; grid-template-columns:38.77% 61.23%; min-height:clamp(22rem, 38.77vw, 35rem); background:var(--sage); }
   .hero-copy { min-width:0; padding:36px 20px 36px clamp(1.5rem, 5.078vw, 5rem); align-self:center; }
@@ -44,7 +50,12 @@
   @media(max-width:1000px) { .desktop-break { display:none; } }
   @media(max-width:900px) { .hero { grid-template-columns:44% 56%; } .category-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   @media(max-width:700px) {
-    .home-page { margin-top:12px; }
+    .fashion-introduction { display:grid; grid-template-columns:1fr 1fr; margin-top:32px; background:#e2d7c7; }
+  .fashion-photo { min-height:300px; }
+  .fashion-copy { padding:clamp(2rem,4vw,4rem) var(--gutter); align-self:center; }
+  .fashion-copy h2 { font-size:clamp(2rem,4vw,3.75rem); margin-bottom:20px; }
+  @media(max-width:700px) { .fashion-introduction { display:flex; flex-direction:column; } .fashion-photo { min-height:0; aspect-ratio:1.5; } .fashion-copy { align-self:stretch; } }
+  .home-page { margin-top:12px; }
     .hero { display:flex; flex-direction:column; min-height:0; }
     .hero-copy { padding:clamp(1.75rem, 7vw, 2.5rem) var(--gutter); align-self:stretch; }
     h1 { font-size:clamp(2.25rem, 14vw, 4.25rem); max-width:30rem; margin-left:0; }

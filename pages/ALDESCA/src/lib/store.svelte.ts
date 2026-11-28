@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 import { productById } from './catalogue';
 
-export type CartLine = { productId: string; finishId: string; quantity: number };
+export type CartLine = { productId: string; finishId: string; quantity: number; size?: string };
 export type Panel = 'cart' | 'wishlist' | 'search' | 'account' | 'menu' | 'about' | 'contact' | 'delivery' | null;
 const STORE_KEY = Symbol('aldesca-store');
 const STORAGE_KEY = 'aldesca:store:v1';
@@ -26,9 +26,10 @@ export class ShopState {
           if (!line || !validQuantity(line.quantity)) continue;
           const product = productById(line.productId);
           if (!product?.finishes.some((f) => f.id === line.finishId)) continue;
-          const existing = lines.find((entry) => entry.productId === line.productId && entry.finishId === line.finishId);
+          if (product.sizes ? !product.sizes.includes(line.size) : line.size !== undefined) continue;
+          const existing = lines.find((entry) => entry.productId === line.productId && entry.finishId === line.finishId && entry.size === line.size);
           if (existing) existing.quantity = Math.min(999, existing.quantity + line.quantity);
-          else lines.push({ productId: line.productId, finishId: line.finishId, quantity: line.quantity });
+          else lines.push({ productId: line.productId, finishId: line.finishId, quantity: line.quantity, ...(line.size ? { size: line.size } : {}) });
         }
         this.cart = lines;
         this.wishlist = Array.isArray(saved.wishlist) ? [...new Set<string>(saved.wishlist.filter((id: unknown) => typeof id === 'string' && productById(id)))] : [];
@@ -41,25 +42,25 @@ export class ShopState {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, cart: this.cart, wishlist: this.wishlist })); }
     catch { /* Browsing remains available without persistent storage. */ }
   }
-  add(productId: string, finishId: string, quantity: number) {
+  add(productId: string, finishId: string, quantity: number, size?: string) {
     const product = productById(productId);
-    if (!product || !product.finishes.some((f) => f.id === finishId) || !validQuantity(quantity)) return;
-    const existing = this.cart.find((line) => line.productId === productId && line.finishId === finishId);
+    if (!product || !product.finishes.some((f) => f.id === finishId) || !validQuantity(quantity) || (product.sizes ? !product.sizes.includes(size ?? '') : size !== undefined)) return;
+    const existing = this.cart.find((line) => line.productId === productId && line.finishId === finishId && line.size === size);
     if (existing) existing.quantity = Math.min(999, existing.quantity + quantity);
-    else this.cart.push({ productId, finishId, quantity });
+    else this.cart.push({ productId, finishId, quantity, ...(size ? { size } : {}) });
     this.announcement = `${quantity} ${product.name}${quantity > 1 ? 's' : ''} added to your bag.`;
     this.panel = 'cart';
     this.persist();
   }
-  quantity(productId: string, finishId: string, quantity: number) {
+  quantity(productId: string, finishId: string, quantity: number, size?: string) {
     if (!validQuantity(quantity)) return;
-    const line = this.cart.find((l) => l.productId === productId && l.finishId === finishId);
+    const line = this.cart.find((l) => l.productId === productId && l.finishId === finishId && l.size === size);
     if (line) line.quantity = quantity;
     this.announcement = 'Bag quantity updated.';
     this.persist();
   }
-  remove(productId: string, finishId: string) {
-    this.cart = this.cart.filter((l) => l.productId !== productId || l.finishId !== finishId);
+  remove(productId: string, finishId: string, size?: string) {
+    this.cart = this.cart.filter((l) => l.productId !== productId || l.finishId !== finishId || l.size !== size);
     this.announcement = 'Item removed from your bag.';
     this.persist();
   }

@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "assets": {
+    "fashion-hero": {
+      "src": "/images/clothing/fashion-hero.webp",
+      "width": 1200,
+      "height": 800,
+      "alt": "An adult woman in a long camel coat and an adult man in a dark olive overshirt beside minimalist limestone architecture in warm daylight.",
+      "intendedUse": "Clothing editorial hero",
+      "aspectRatio": 1.5,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-hero-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-hero.png",
+        "sourceDimensions": {
+          "width": 1536,
+          "height": 1024
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-coat": {
+      "src": "/images/clothing/fashion-coat.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Long camel tailored coat with notch lapels, dark buttons and side pockets against a pale stone studio background.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-coat-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-coat.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-knit": {
+      "src": "/images/clothing/fashion-knit.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Ivory textured crewneck jumper with ribbed cuffs and hem, photographed against a pale stone backdrop.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-knit-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-knit.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-dress": {
+      "src": "/images/clothing/fashion-dress.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Black flowing sleeveless midi dress with a gently defined waist and soft draped skirt on a neutral studio background.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-dress-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-dress.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-overshirt": {
+      "src": "/images/clothing/fashion-overshirt.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Dark olive relaxed men's overshirt with pointed collar, button front and two chest patch pockets.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-overshirt-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-overshirt.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-trousers": {
+      "src": "/images/clothing/fashion-trousers.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Stone-coloured men's tailored trousers with a straight leg, soft front pleats and clean pressed creases.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-trousers-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-trousers.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-shirt": {
+      "src": "/images/clothing/fashion-shirt.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Ivory relaxed men's shirt with a pointed collar, tonal buttons and long cuffed sleeves.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-shirt-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-shirt.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-bag": {
+      "src": "/images/clothing/fashion-bag.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Minimalist dark chocolate shoulder bag with a softly curved shape and a single broad strap.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-bag-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-bag.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    },
+    "fashion-scarf": {
+      "src": "/images/clothing/fashion-scarf.webp",
+      "width": 1024,
+      "height": 1536,
+      "alt": "Soft sage scarf with fine woven texture and fringed ends, loosely folded against a pale stone backdrop.",
+      "intendedUse": "Clothing product photograph",
+      "aspectRatio": 0.6667,
+      "focalPoint": "50% 50%",
+      "preferredFit": "cover",
+      "srcSmall": "/images/clothing/fashion-scarf-small.webp",
+      "smallWidth": 480,
+      "provenance": {
+        "type": "original AI-generated demonstration photograph",
+        "source": "source-assets/clothing/fashion-scarf.png",
+        "sourceDimensions": {
+          "width": 1024,
+          "height": 1536
+        },
+        "generator": "built-in image_gen.imagegen",
+        "promptRecord": "source-assets/clothing/PROMPTS.md",
+        "processing": "Aspect-ratio-preserving downsize where necessary and WebP encoding; no cropping or upscaling."
+      }
+    }
+  }
+}

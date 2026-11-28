@@ -12,7 +12,7 @@
     <p class="eyebrow">YOUR PRIVACY</p>
     <h1>Privacy policy</h1>
     <p class="introduction">A clear view of how this website uses information.</p>
-    <p class="updated">Last updated <time datetime="2026-11-21">21 November 2026</time></p>
+    <p class="updated">Last updated <time datetime="2026-11-28">28 November 2026</time></p>
   </header>
 
   <article class="policy-body" aria-label="ALDESCA privacy policy">
@@ -23,7 +23,7 @@
 
     <section aria-labelledby="about-heading">
       <h2 id="about-heading">Who we are</h2>
-      <p>ALDESCA is the name of this demonstration storefront for lighting, furniture and homeware. Checkout, account sign-in, customer enquiries and newsletter subscriptions are not currently connected to a service.</p>
+      <p>ALDESCA is the name of this demonstration storefront for clothing, accessories, lighting, furniture and homeware. Checkout, account sign-in, customer enquiries and newsletter subscriptions are not currently connected to a service.</p>
       <dl class="operator-details">
         <div><dt>Legal operator</dt><dd>Awaiting confirmation</dd></div>
         <div><dt>Privacy contact</dt><dd>Awaiting confirmation</dd></div>
@@ -32,7 +32,7 @@
 
     <section aria-labelledby="information-heading">
       <h2 id="information-heading">Information you choose to use</h2>
-      <p>Your bag and wishlist remember the products you select, including finishes and quantities. These choices are saved in your browser on this device. The storefront does not send them to a shopping account or an order service.</p>
+      <p>Your bag and wishlist remember the products you select, including colours or finishes, clothing sizes and quantities. These choices are saved in your browser on this device. The storefront does not send them to a shopping account or an order service.</p>
       <p>Product searches run in your browser. Search text is kept while you browse the site and is cleared when the page is reloaded; it is not saved in the bag or wishlist storage.</p>
       <p>The newsletter field checks an email address in your browser but does not send it, subscribe it or save it through this website. Submitting a valid address clears the field and shows a message explaining that sign-ups are unavailable.</p>
       <p>The current storefront does not request payment details, delivery addresses or account passwords.</p>

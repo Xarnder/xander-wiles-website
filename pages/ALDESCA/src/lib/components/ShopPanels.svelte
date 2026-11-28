@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from '$app/paths';
   import { useShop } from '../store.svelte';
-  import { categories, filterProducts, money, productById } from '../catalogue';
+  import { categories, clothingCategories, filterProducts, money, productById } from '../catalogue';
   import Dialog from './Dialog.svelte';
   import Photo from './Photo.svelte';
   import Icon from './Icon.svelte';
@@ -9,7 +9,7 @@
   const shop = useShop();
   let open = $state(false);
   let checkoutMessage = $state('');
-  const titles = { cart: 'Your bag', wishlist: 'Your wishlist', search: 'Find your finishing touch', account: 'Your account', menu: 'Explore ALDESCA', about: 'About ALDESCA', contact: 'Get in touch', delivery: 'Delivery & Returns' };
+  const titles = { cart: 'Your bag', wishlist: 'Your wishlist', search: 'Find something considered', account: 'Your account', menu: 'Explore ALDESCA', about: 'About ALDESCA', contact: 'Get in touch', delivery: 'Delivery & Returns' };
   let title = $derived(shop.panel ? titles[shop.panel] : 'ALDESCA');
   let results = $derived(filterProducts('', shop.query));
   $effect(() => { open = shop.panel !== null; checkoutMessage = ''; });
@@ -19,18 +19,18 @@
 <Dialog bind:open={() => open, updateOpen} {title} drawer={shop.panel === 'cart' || shop.panel === 'wishlist' || shop.panel === 'menu'} side={shop.panel === 'menu' ? 'left' : 'right'}>
   {#if shop.panel === 'cart'}
     {#if shop.cart.length}
-      <p class="subtle">{shop.unitCount} considered {shop.unitCount === 1 ? 'piece' : 'pieces'} for your home.</p>
+      <p class="subtle">{shop.unitCount} considered {shop.unitCount === 1 ? 'piece' : 'pieces'} for everyday living.</p>
       <div class="line-items">
-        {#each shop.cart as line (`${line.productId}:${line.finishId}`)}
+        {#each shop.cart as line (`${line.productId}:${line.finishId}:${line.size ?? ''}`)}
           {@const product = productById(line.productId)!}
           <article class="bag-line">
-            <a class="line-photo" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><Photo name={product.image} /></a>
+            <a class="line-photo" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><Photo name={product.image} fit={product.department === 'clothing' ? 'contain' : undefined} /></a>
             <div class="line-info">
               <a class="line-name" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}>{product.name}</a>
-              <p class="line-finish">{product.finishes.find(f => f.id === line.finishId)?.name}</p>
+              <p class="line-finish">{product.finishes.find(f => f.id === line.finishId)?.name}{line.size ? ` · ${line.size}` : ''}</p>
               <p>{money(product.price * line.quantity)}</p>
-              <QuantitySelector value={line.quantity} label={`${product.name} quantity`} onchange={(quantity) => shop.quantity(line.productId, line.finishId, quantity)} />
-              <button class="text-link remove" onclick={() => shop.remove(line.productId, line.finishId)} aria-label={`Remove ${product.name} ${line.finishId} from bag`}>Remove</button>
+              <QuantitySelector value={line.quantity} label={`${product.name}${line.size ? ` ${line.size}` : ''} quantity`} onchange={(quantity) => shop.quantity(line.productId, line.finishId, quantity, line.size)} />
+              <button class="text-link remove" onclick={() => shop.remove(line.productId, line.finishId, line.size)} aria-label={`Remove ${product.name} ${line.finishId}${line.size ? ` ${line.size}` : ''} from bag`}>Remove</button>
             </div>
           </article>
         {/each}
@@ -49,21 +49,24 @@
       <div class="line-items">{#each shop.wishlist as id (id)}
         {@const product = productById(id)!}
         <article class="bag-line">
-          <a class="line-photo" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><Photo name={product.image} /></a>
+          <a class="line-photo" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><Photo name={product.image} fit={product.department === 'clothing' ? 'contain' : undefined} /></a>
           <div class="line-info"><a class="line-name" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}>{product.name}</a><p>{money(product.price)}</p><button class="text-link" aria-label={`Remove ${product.name} from wishlist`} onclick={() => shop.toggleWishlist(id)}>Remove</button></div>
         </article>
       {/each}</div>
     {:else}<div class="empty"><Icon name="heart" size={42} /><h3>Keep your favourites close.</h3><p>Save the pieces you love using the heart on any product.</p><a class="button" href={resolve('/shop')} onclick={close}>Discover your favourites</a></div>{/if}
   {:else if shop.panel === 'search'}
     <label class="search-label" for="collection-search">Search by product or category</label>
-    <div class="search-field"><Icon name="search" size={20} /><input id="collection-search" type="search" bind:value={shop.query} placeholder="Try lighting, table or vase" /></div>
+    <div class="search-field"><Icon name="search" size={20} /><input id="collection-search" type="search" bind:value={shop.query} placeholder="Try a coat, knit or lighting" /></div>
     <p class="subtle" aria-live="polite">{results.length} {results.length === 1 ? 'piece' : 'pieces'} found</p>
     {#if results.length}<div class="search-results">{#each results as product}
-      <a class="search-result" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><span class="result-photo"><Photo name={product.image} /></span><span>{product.name}<small>{product.category} · {money(product.price)}</small></span><Icon name="arrow" size={18}/></a>
-    {/each}</div>{:else}<div class="empty"><h3>Nothing here just yet.</h3><p>Try “lighting”, “table” or “vase”, or browse all four pieces.</p><button class="text-link" onclick={() => shop.query = ''}>Show the collection</button></div>{/if}
+      <a class="search-result" href={resolve('/products/[slug]', { slug: product.slug })} onclick={close}><span class="result-photo"><Photo name={product.image} fit={product.department === 'clothing' ? 'contain' : undefined} /></span><span>{product.name}<small>{product.category} · {money(product.price)}</small></span><Icon name="arrow" size={18}/></a>
+    {/each}</div>{:else}<div class="empty"><h3>Nothing here just yet.</h3><p>Try “coat”, “knit” or “lighting”, or browse the collection.</p><button class="text-link" onclick={() => shop.query = ''}>Show the collection</button></div>{/if}
   {:else if shop.panel === 'menu'}
     <nav class="menu-links" aria-label="Mobile navigation">
       <button onclick={() => shop.panel = 'search'}><span>Search the collection</span><Icon name="search" /></button>
+      <a class="department-link" href={resolve('/clothing')} onclick={close}>Clothing</a>
+      {#each clothingCategories as category}<a href={`${resolve('/clothing')}?category=${category.toLowerCase()}#collection`} onclick={close}>{category}</a>{/each}
+      <a class="department-link" href={resolve('/')} onclick={close}>Home &amp; Living</a>
       <a href={`${resolve('/shop')}?category=new-in`} onclick={close}>New In</a>
       {#each categories as category}<a href={`${resolve('/shop')}?category=${category.toLowerCase()}`} onclick={close}>{category}</a>{/each}
       <a href={`${resolve('/')}#collections`} onclick={close}>Collections</a>
@@ -73,7 +76,7 @@
   {:else if shop.panel === 'account'}
     <div class="empty"><Icon name="account" size={40} /><h3>Welcome to ALDESCA.</h3><p>Account sign-in is not available yet. Your bag and wishlist are saved on this device, so you can return to your favourite pieces.</p><button class="button" onclick={() => shop.panel = 'wishlist'}>View your wishlist</button></div>
   {:else if shop.panel === 'about'}
-    <div class="information"><p class="eyebrow">A CONSIDERED HOME</p><h3>Beautiful everyday living.</h3><p>ALDESCA brings together lighting, furniture and objects with sculptural forms, natural textures and a quiet sense of warmth.</p><p>Explore a considered selection of pieces that sit beautifully together, and make a space feel like yours.</p><a class="text-link" href={resolve('/shop')} onclick={close}>Explore the collection</a></div>
+    <div class="information"><p class="eyebrow">A CONSIDERED LIFE</p><h3>Beautiful everyday living.</h3><p>ALDESCA brings together clothing, accessories, lighting, furniture and objects. One considered world, with beautiful textures, a quiet palette and an easy sense of warmth.</p><p>Explore a considered selection of pieces that sit beautifully together, and make everyday living feel like you.</p><a class="text-link" href={resolve('/shop')} onclick={close}>Explore the collection</a></div>
   {:else if shop.panel === 'contact'}
     <div class="information"><h3>We’ll keep it simple.</h3><p>Contact details and customer support are not available yet. No enquiry form is connected at this stage.</p><p>Product dimensions, electrical specifications and delivery information will be added when supplied.</p></div>
   {:else if shop.panel === 'delivery'}
@@ -106,6 +109,7 @@
   .search-result > span { min-width:0; overflow-wrap:anywhere; }
   .menu-links { display:flex; flex-direction:column; }
   .menu-links a, .menu-links button { display:flex; align-items:center; justify-content:space-between; text-align:left; text-decoration:none; padding:16px 0; border-bottom:1px solid var(--rule); }
+  .menu-links .department-link { font-family:var(--font-serif); font-size:1.75rem; margin-top:12px; }
   .information p { line-height:1.6; }
   .information h3 { margin-bottom:20px; }
   @media(max-width:700px) {

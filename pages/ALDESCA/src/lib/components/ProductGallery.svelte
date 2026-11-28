@@ -8,18 +8,19 @@
   let zoom = $state(false);
   let current = $derived(product.gallery[selected] ?? product.gallery[0]);
 </script>
-<div class="gallery">
+<div class="gallery" class:clothing={product.department === 'clothing'}>
   <div class="main-photo"><Photo name={current.image} eager /><button class="icon-button zoom" aria-label={`Zoom ${product.name} image`} onclick={() => zoom = true}><Icon name="search" size={21} /></button></div>
-  <div class="thumbnails" aria-label="Product photographs">{#each product.gallery as photo, index}
+  {#if product.gallery.length > 1}<div class="thumbnails" aria-label="Product photographs">{#each product.gallery as photo, index}
     <button class:active={selected === index} aria-label={photo.label} aria-pressed={selected === index} onclick={() => selected = index}><Photo name={product.id === 'halo' && index === 0 ? 'halo-front-thumbnail' : product.id === 'halo' && index === 1 ? 'halo-interior-thumbnail' : photo.image} eager /></button>
-  {/each}</div>
+  {/each}</div>{/if}
 </div>
 <Dialog bind:open={zoom} title={`${product.name} — ${current.label}`} wide>
   <div class="zoom-photo"><Photo name={current.image} fit="contain" eager /></div>
-  <p class="resolution-note">Reference photograph shown at its available resolution.</p>
+  <p class="resolution-note">{product.department === 'clothing' ? 'Illustrative collection photograph.' : 'Reference photograph shown at its available resolution.'}</p>
 </Dialog>
 <style>
   .main-photo { position:relative; aspect-ratio:556/533; background:var(--oatmeal); }
+  .clothing .main-photo { aspect-ratio:2/3; }
   .zoom { position:absolute; bottom:16px; right:13px; width:32px; height:32px; border-radius:50%; background:var(--ivory); }
   .gallery { min-width:0; }
   .thumbnails { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--grid-gap); margin-top:var(--grid-gap); }
