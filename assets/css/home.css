@@ -148,7 +148,7 @@ body.hx-home {
     display: flex;
     flex-wrap: wrap;
     gap: 0.9rem;
-    margin-bottom: 2.6rem;
+    margin-bottom: 1.75rem;
 }
 
 .hx-btn {
@@ -194,6 +194,66 @@ body.hx-home {
 
 .hx-btn:hover .hx-arrow {
     transform: translateX(3px);
+}
+
+/* Contact controls stay with the introduction on desktop and mobile. */
+
+.hx-contact {
+    max-width: 29rem;
+    margin-bottom: 2rem;
+    padding-left: 1rem;
+    border-left: 2px solid var(--hx-blue);
+}
+
+.hx-contact h2 {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+}
+
+.hx-contact-email {
+    color: #cdd6e6;
+    font-size: 1rem;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.hx-contact-email:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.hx-contact-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin-top: 0.85rem;
+}
+
+.hx-contact-actions .hx-btn {
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.65rem 1rem;
+    font-size: 0.88rem;
+    line-height: 1.2;
+}
+
+.hx-contact-actions svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+}
+
+.hx-contact a:focus-visible,
+.hx-contact button:focus-visible {
+    outline: 2px solid var(--hx-blue);
+    outline-offset: 4px;
+}
+
+.hx-home .hx-contact-status:not(.hx-visually-hidden) {
+    margin-top: 0.65rem;
+    color: #cdd6e6;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
 
 /* Hero feature strip */
